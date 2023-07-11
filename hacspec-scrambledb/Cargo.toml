@@ -1,0 +1,10 @@
+[workspace]
+
+members = [
+#	"scrambledb",
+#	"elgamal",
+#	"coprf",
+#	"prp",
+#	"renc",
+	"hash-to-curve",
+]
