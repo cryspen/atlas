@@ -1,5 +1,5 @@
 use crate::p256;
-use libcrux::digest::{Algorithm, hash};
+use libcrux::digest::{hash, Algorithm};
 
 const B_IN_BYTES: usize = libcrux::digest::digest_size(Algorithm::Sha256); // output size of H = SHA-256 in bytes
 const S_IN_BYTES: usize = 64; // input block size of H = SHA-256
@@ -9,18 +9,41 @@ const K: usize = 128; // security level of this suite
 const L: usize = 48; // ceil((ceil(log2(p)) + k) / 8), where p = 2^256 - 2^224 + 2^192 + 2^96 - 1 and k = 128
 
 pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8> {
-    unimplemented!()
+    // adapted from hacspec-v1/specs/bls12-
+    let ell = (len_in_bytes + B_IN_BYTES - 1) / B_IN_BYTES; // ceil(len_in_bytes / b_in_bytes)
+                                                            // must be that ell <= 255
+    let dst_prime = [dst, &[dst.len() as u8]].concat();
+    let z_pad = [0u8; S_IN_BYTES];
+
+    let mut l_i_b_str = [0u8; 2];
+    l_i_b_str[0] = (len_in_bytes / 256) as u8;
+    l_i_b_str[1] = len_in_bytes as u8; // I2OSP(len_in_bytes, 2)
+    let msg_prime = [&z_pad, msg, &l_i_b_str, &[0u8; 1], &dst_prime].concat(); // Z_pad || msg || l_i_b_str || 0 || dst_prime
+    let b_0 = hash(Algorithm::Sha256, &msg_prime); // H(msg_prime)
+
+    let payload_1 = [b_0.clone(), vec![1u8], dst_prime.clone()].concat();
+    let mut b_i = hash(Algorithm::Sha256, &payload_1); // H(b_0 || 1 || dst_prime)
+    let mut uniform_bytes = b_i.clone();
+    for i in 2..=ell {
+        //     let t = ByteSeq::from_seq(&b_0);
+        let t: Vec<u8> = b_i.iter().zip(b_0.iter()).map(|(a, b)| a ^ b).collect();
+        let payload_i = [t, vec![i as u8], dst_prime.clone()].concat();
+        b_i = hash(Algorithm::Sha256, &payload_i); // &(t ^ b_i).push(&U8_from_usize(i)).concat(&dst_prime)); //H((b_0 ^ b_(i-1)) || 1 || dst_prime)
+        uniform_bytes.append(&mut b_i);
+    }
+    uniform_bytes.truncate(len_in_bytes);
+    uniform_bytes
 }
 
 pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<p256::Fp> {
     let len_in_bytes = count * p256::M * L;
-    let uniform_bytes = expand_message_xmd(msg,dst,len_in_bytes);
+    let uniform_bytes = expand_message_xmd(msg, dst, len_in_bytes);
     let mut u = Vec::with_capacity(count);
     for i in 0..count {
-	// m = 1
-	let elm_offset = L * i;
-	let tv = &uniform_bytes[elm_offset..L];
-	u.push(p256::Fp::from_bytes_be(tv));
+        // m = 1
+        let elm_offset = L * i;
+        let tv = &uniform_bytes[elm_offset..L];
+        u.push(p256::Fp::from_bytes_be(tv));
     }
     u
 }
@@ -37,4 +60,3 @@ pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> p256::G {
     let p = r.clear_cofactor();
     p
 }
-
