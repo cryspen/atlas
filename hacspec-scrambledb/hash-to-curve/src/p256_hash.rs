@@ -48,15 +48,41 @@ pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<p256::Fp> {
     u
 }
 
+// Simplified Shallue-van de Woestijne-Ulas method
 pub fn map_to_curve(u: &p256::Fp) -> p256::G {
-    unimplemented!()
+    use num_traits::Zero;
+    use num_traits::One;
+    let Z = p256::Fp::zero() - p256::Fp::from_literal(10u128);
+
+    let tv1 = (Z.clone() * Z.clone() * u * u * u * u + Z.clone() * u * u).inv0();
+    let x1 = if tv1.is_zero() {
+	(*p256::B).clone() * (Z.clone() * &(*p256::A)).inv0()
+    } else {
+	(p256::Fp::one() + tv1.clone()) * (p256::Fp::zero() - &(*p256::B)) * (&(*p256::A)).inv0()
+    };
+
+    let gx1 = x1.clone() * x1.clone() * x1.clone() + (*p256::A).clone() * x1.clone() + &(*p256::B);
+    let x2 = Z.clone() * u * u * x1.clone();
+    let gx2 = x2.clone() * x2.clone() * x2.clone() + (*p256::A).clone() * x2.clone() + &(*p256::B);
+
+    let mut output = if gx1.is_square() {
+	p256::G(x1, gx1.sqrt(), false)
+    } else {
+	p256::G(x2, gx2.sqrt(), false)
+    };
+
+    if u.sgn0() != output.1.sgn0() {
+	output.1 = p256::Fp::zero() - output.1
+    }
+
+    output
 }
 
 pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> p256::G {
     let u = hash_to_field(msg, dst, 2);
     let q0 = map_to_curve(&u[0]);
     let q1 = map_to_curve(&u[1]);
-    let r = q0 + q1;
+    let r = q0 + &q1;
     let p = r.clear_cofactor();
     p
 }
