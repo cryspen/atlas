@@ -145,7 +145,7 @@ impl Fp {
 }
 
 // bool signifies point at infinity
-pub struct G(Fp, Fp, bool);
+pub struct G(pub Fp, pub Fp, pub bool);
 
 impl Add<G> for G {
     type Output = G;
