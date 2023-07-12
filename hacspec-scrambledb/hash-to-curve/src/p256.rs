@@ -13,8 +13,8 @@ lazy_static! {
     );
     static ref Q: BigUint = P.clone();
     static ref C1: BigUint = (&(*Q) + BigUint::from(1u8)) / BigUint::from(4u8);
-    static ref A: Fp = Fp::zero() - Fp::from_literal(3u128);
-    static ref B: Fp = Fp(BigUint::from_bytes_be(
+    pub static ref A: Fp = Fp::zero() - Fp::from_literal(3u128);
+    pub static ref B: Fp = Fp(BigUint::from_bytes_be(
         hex::decode("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b")
             .unwrap()
             .as_slice()
