@@ -23,7 +23,7 @@ lazy_static! {
 
 pub const M: usize = 1; // The extension degree of P-256; including this so other code can be written more generically
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Fp(BigUint);
 
 impl Add<&Fp> for Fp {
@@ -145,18 +145,67 @@ impl Fp {
 }
 
 // bool signifies point at infinity
+#[derive(PartialEq, Eq, Clone)]
 pub struct G(pub Fp, pub Fp, pub bool);
 
-impl Add<G> for G {
+impl Add<&G> for G {
     type Output = G;
 
-    fn add(self, other: G) -> Self {
-	unimplemented!()
+    fn add(self, other: &G) -> Self {
+	let G(x1, y1,inf1) = &self;
+	let G(x2, y2, inf2) = other;
+
+	if *inf1 {
+	    other.clone()
+	} else {
+	    if *inf2 {
+		self.clone()
+	    } else {
+		if self == *other {
+		    self.double()
+		} else {
+		    if *other == self.negate() {
+			G(Fp::zero(), Fp::zero(), true)
+		    } else {
+			self.add_noninf(other)
+		    }
+		}
+	    }
+	}
     }
 }
 
 impl G {
     pub fn clear_cofactor(self) -> Self {
-	unimplemented!()
+	// no-op for P-256
+	self
+    }
+
+    fn double(&self) -> Self {
+	let G(x, y, _inf) = self;
+
+	let d = (x.clone() * x.clone() * Fp::from_literal(3u128) + A.clone()) * (Fp::from_literal(2u128) * y).inv0();
+	let x_out = d.clone() * d.clone() - x - x;
+	let y_out = d * (x.clone() - x_out.clone()) - y;
+
+	G(x_out, y_out, false)
+    }
+
+    fn negate(&self) -> Self {
+	let G(x, y, inf) = self;
+
+	G(x.clone(), Fp::zero() - y.clone(), *inf)
+    }
+
+    // assume neither summand is at infinity and the points are not the same
+    fn add_noninf(&self, other: &Self) -> Self {
+	let G(x1, y1, _) = self;
+	let G(x2, y2, _) = other;
+
+	let d = (y2.clone() - y1)  * (x2.clone() - x1).inv0();
+	let x_out = d.clone() * d.clone() - x1 - x2;
+	let y_out = d.clone() * (x1.clone() - x_out.clone()) - y1; 
+
+	G(x_out, y_out, false)
     }
 }
