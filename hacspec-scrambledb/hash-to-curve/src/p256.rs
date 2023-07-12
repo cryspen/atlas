@@ -152,8 +152,8 @@ impl Add<&G> for G {
     type Output = G;
 
     fn add(self, other: &G) -> Self {
-	let G(x1, y1,inf1) = &self;
-	let G(x2, y2, inf2) = other;
+	let G(_x1, _y1,inf1) = &self;
+	let G(_x2, _y2, inf2) = other;
 
 	if *inf1 {
 	    other.clone()

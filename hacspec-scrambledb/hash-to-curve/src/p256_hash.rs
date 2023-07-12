@@ -3,6 +3,7 @@ use libcrux::digest::{hash, Algorithm};
 
 const B_IN_BYTES: usize = libcrux::digest::digest_size(Algorithm::Sha256); // output size of H = SHA-256 in bytes
 const S_IN_BYTES: usize = 64; // input block size of H = SHA-256
+#[allow(unused)]
 const K: usize = 128; // security level of this suite
 
 // XXX: How to write this more generically?
@@ -76,17 +77,17 @@ pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<p256::Fp> {
 pub fn map_to_curve(u: &p256::Fp) -> p256::G {
     use num_traits::One;
     use num_traits::Zero;
-    let Z = p256::Fp::zero() - p256::Fp::from_literal(10u128);
+    let z = p256::Fp::zero() - p256::Fp::from_literal(10u128);
 
-    let tv1 = (Z.clone() * Z.clone() * u * u * u * u + Z.clone() * u * u).inv0();
+    let tv1 = (z.clone() * z.clone() * u * u * u * u + z.clone() * u * u).inv0();
     let x1 = if tv1.is_zero() {
-        (*p256::B).clone() * (Z.clone() * &(*p256::A)).inv0()
+        (*p256::B).clone() * (z.clone() * &(*p256::A)).inv0()
     } else {
         (p256::Fp::one() + tv1.clone()) * (p256::Fp::zero() - &(*p256::B)) * (&(*p256::A)).inv0()
     };
 
     let gx1 = x1.clone() * x1.clone() * x1.clone() + (*p256::A).clone() * x1.clone() + &(*p256::B);
-    let x2 = Z.clone() * u * u * x1.clone();
+    let x2 = z.clone() * u * u * x1.clone();
     let gx2 = x2.clone() * x2.clone() * x2.clone() + (*p256::A).clone() * x2.clone() + &(*p256::B);
 
     let mut output = if gx1.is_square() {
