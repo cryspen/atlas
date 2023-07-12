@@ -1,2 +1,2 @@
-mod p256;
-mod p256_hash;
+pub mod p256;
+pub mod p256_hash;
