@@ -23,7 +23,7 @@ lazy_static! {
 
 pub const M: usize = 1; // The extension degree of P-256; including this so other code can be written more generically
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Fp(BigUint);
 
 impl Add<&Fp> for Fp {
@@ -138,7 +138,7 @@ impl Fp {
 }
 
 // bool signifies point at infinity
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Debug,PartialEq, Eq, Clone)]
 pub struct G(pub Fp, pub Fp, pub bool);
 
 impl Add<&G> for G {

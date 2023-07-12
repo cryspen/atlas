@@ -127,7 +127,7 @@ mod tests {
         static ref VECTORS_EXPAND_MESSAGE_XMD_SHA256_38: serde_json::Value =
             load_vectors("expand_message_xmd_SHA256_38.json");
         static ref VECTORS_P256_XMD_SHA256_SSWU_RO: serde_json::Value =
-            load_vectors("P256_XMD_SHA-256_SSWU_RO_P256_XMD_SHA-256_SSWU_RO_.json");
+            load_vectors("P256_XMD_SHA-256_SSWU_RO_.json");
     }
 
     #[test]
@@ -207,16 +207,90 @@ mod tests {
 
     #[test]
     fn test_hash_to_field() {
-        unimplemented!()
+        let dst = VECTORS_P256_XMD_SHA256_SSWU_RO["dst"].as_str().unwrap();
+        let dst = dst.as_bytes();
+
+        let test_cases = VECTORS_P256_XMD_SHA256_SSWU_RO["vectors"]
+            .as_array()
+            .unwrap()
+            .clone();
+
+        for test_case in test_cases.iter() {
+            let msg = test_case["msg"].as_str().unwrap();
+            let msg = msg.as_bytes();
+
+            let u = test_case["u"].as_array().unwrap();
+            let u0_expected = u[0].as_str().unwrap().trim_start_matches("0x");
+            let u0_expected = p256::Fp::from_bytes_be(&hex::decode(u0_expected).unwrap());
+            let u1_expected = u[1].as_str().unwrap().trim_start_matches("0x");
+            let u1_expected = p256::Fp::from_bytes_be(&hex::decode(u1_expected).unwrap());
+
+            let u_real = hash_to_field(msg, dst, 2);
+            assert_eq!(u_real.len(), 2);
+            assert_eq!(u0_expected, u_real[0]);
+            assert_eq!(u1_expected, u_real[1]);
+        }
     }
 
     #[test]
     fn test_map_to_curve() {
-        unimplemented!()
+        let test_cases = VECTORS_P256_XMD_SHA256_SSWU_RO["vectors"]
+            .as_array()
+            .unwrap()
+            .clone();
+
+        for test_case in test_cases.iter() {
+            let u = test_case["u"].as_array().unwrap();
+            let u0 = u[0].as_str().unwrap().trim_start_matches("0x");
+            let u0 = p256::Fp::from_bytes_be(&hex::decode(u0).unwrap());
+            let u1 = u[1].as_str().unwrap().trim_start_matches("0x");
+            let u1 = p256::Fp::from_bytes_be(&hex::decode(u1).unwrap());
+
+            let q0 = map_to_curve(&u0);
+            let q1 = map_to_curve(&u1);
+
+            let q0_expected = &test_case["Q0"];
+            let q0_x_expected = q0_expected["x"].as_str().unwrap().trim_start_matches("0x");
+            let q0_x_expected = p256::Fp::from_bytes_be(&hex::decode(q0_x_expected).unwrap());
+            let q0_y_expected = q0_expected["y"].as_str().unwrap().trim_start_matches("0x");
+            let q0_y_expected = p256::Fp::from_bytes_be(&hex::decode(q0_y_expected).unwrap());
+            let q0_expected = p256::G(q0_x_expected, q0_y_expected, false);
+
+            let q1_expected = &test_case["Q1"];
+            let q1_x_expected = q1_expected["x"].as_str().unwrap().trim_start_matches("0x");
+            let q1_x_expected = p256::Fp::from_bytes_be(&hex::decode(q1_x_expected).unwrap());
+            let q1_y_expected = q1_expected["y"].as_str().unwrap().trim_start_matches("0x");
+            let q1_y_expected = p256::Fp::from_bytes_be(&hex::decode(q1_y_expected).unwrap());
+            let q1_expected = p256::G(q1_x_expected, q1_y_expected, false);
+
+            assert_eq!(q0_expected, q0);
+            assert_eq!(q1_expected, q1);
+        }
     }
 
     #[test]
     fn test_hash_to_curve() {
-        unimplemented!()
+        let dst = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["DST"]
+            .as_str()
+            .unwrap();
+        let dst = dst.as_bytes();
+        let test_cases = VECTORS_P256_XMD_SHA256_SSWU_RO["vectors"]
+            .as_array()
+            .unwrap()
+            .clone();
+
+        for test_case in test_cases.iter() {
+            let msg = test_case["msg"].as_str().unwrap();
+            let msg = msg.as_bytes();
+
+            let p_expected = &test_case["P"];
+            let p_x_expected = p_expected["x"].as_str().unwrap().trim_start_matches("0x");
+            let p_x_expected = p256::Fp::from_bytes_be(&hex::decode(p_x_expected).unwrap());
+            let p_y_expected = p_expected["y"].as_str().unwrap().trim_start_matches("0x");
+            let p_y_expected = p256::Fp::from_bytes_be(&hex::decode(p_y_expected).unwrap());
+            let p_expected = p256::G(p_x_expected, p_y_expected, false);
+
+            assert_eq!(p_expected, hash_to_curve(msg, dst));
+        }
     }
 }
