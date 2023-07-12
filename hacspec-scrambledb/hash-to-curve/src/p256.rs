@@ -107,7 +107,7 @@ impl Fp {
     }
 
     #[allow(dead_code)]
-    pub fn inv0(self) -> Self {
+    pub fn inv0(&self) -> Self {
         if self.is_zero() {
             Self::zero()
         } else {
