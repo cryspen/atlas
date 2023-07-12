@@ -8,24 +8,36 @@ const K: usize = 128; // security level of this suite
 // XXX: How to write this more generically?
 const L: usize = 48; // ceil((ceil(log2(p)) + k) / 8), where p = 2^256 - 2^224 + 2^192 + 2^96 - 1 and k = 128
 
-pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8> {
-    // adapted from hacspec-v1/specs/bls12-
-    let ell = (len_in_bytes + B_IN_BYTES - 1) / B_IN_BYTES; // ceil(len_in_bytes / b_in_bytes)
-                                                            // must be that ell <= 255
-    let mut dst_prime = Vec::from(dst);
-    dst_prime.extend_from_slice(&[dst.len() as u8; 1]);
-
+fn msg_prime(msg: &[u8], dst_prime: &[u8], len_in_bytes: usize) -> Vec<u8> {
     let z_pad = [0u8; S_IN_BYTES];
 
     let mut l_i_b_str = [0u8; 2];
     l_i_b_str[0] = (len_in_bytes / 256) as u8;
-    l_i_b_str[1] = len_in_bytes as u8; // I2OSP(len_in_bytes, 2)
+    l_i_b_str[1] = len_in_bytes as u8;
 
-    let mut msg_prime = Vec::from(z_pad);
-    msg_prime.extend_from_slice(msg);
-    msg_prime.extend_from_slice(&l_i_b_str);
-    msg_prime.extend_from_slice(&[0u8; 1]);
-    msg_prime.extend_from_slice(&dst_prime); // msg_prime = Z_pad || msg || l_i_b_str || 0 || dst_prime
+    let mut out = Vec::from(z_pad);
+    out.extend_from_slice(msg);
+    out.extend_from_slice(&l_i_b_str);
+    out.extend_from_slice(&[0u8; 1]);
+    out.extend_from_slice(&dst_prime); // msg_prime = Z_pad || msg || l_i_b_str || 0 || dst_prime
+
+    out
+}
+
+fn dst_prime(dst: &[u8]) -> Vec<u8> {
+    let mut out = Vec::from(dst);
+    out.extend_from_slice(&[dst.len() as u8; 1]);
+
+    out
+}
+
+pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8> {
+    // adapted from hacspec-v1/specs/bls12-
+    let ell = (len_in_bytes + B_IN_BYTES - 1) / B_IN_BYTES; // ceil(len_in_bytes / b_in_bytes)
+                                                            // must be that ell <= 255
+    let dst_prime = dst_prime(dst);
+
+    let msg_prime = msg_prime(msg, &dst_prime, len_in_bytes);
 
     let b_0 = hash(Algorithm::Sha256, &msg_prime); // H(msg_prime)
 
