@@ -81,15 +81,16 @@ pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldEleme
 
 // Simplified Shallue-van de Woestijne-Ulas method
 pub fn map_to_curve(u: &P256FieldElement) -> P256Point {
-    let a = P256FieldElement::zero() - P256FieldElement::from_u128(3u128);
+    let a = P256FieldElement::from_u128(3u128).neg();
     let b = P256FieldElement::from_hex("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b");
-    let z = P256FieldElement::zero() - P256FieldElement::from_u128(10u128);
+    let z = P256FieldElement::from_u128(10u128).neg();
 
+    
     let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
     let x1 = if tv1 == P256FieldElement::zero() {
         b * (z * a).inv()
     } else {
-        (b * a.inv()) * (tv1 - P256FieldElement::from_u128(1u128))
+        (b.neg() * a.inv()) * (tv1 + P256FieldElement::from_u128(1u128))
     };
 
     let gx1 = x1.pow(3) + a * x1 + b;
@@ -103,7 +104,7 @@ pub fn map_to_curve(u: &P256FieldElement) -> P256Point {
     };
 
     if u.sgn0() != output.1.sgn0() {
-        output.1 = P256FieldElement::zero() - output.1;
+        output.1 = output.1.neg() ;
     }
 
     output
@@ -264,7 +265,6 @@ mod tests {
             let q0_y_expected = q0_expected["y"].as_str().unwrap().trim_start_matches("0x");
             let q0_y_expected =
                 P256FieldElement::from_be_bytes(&hex::decode(q0_y_expected).unwrap());
-            let q0_expected = P256Point(q0_x_expected, q0_y_expected, false);
 
             let q1_expected = &test_case["Q1"];
             let q1_x_expected = q1_expected["x"].as_str().unwrap().trim_start_matches("0x");
@@ -273,14 +273,13 @@ mod tests {
             let q1_y_expected = q1_expected["y"].as_str().unwrap().trim_start_matches("0x");
             let q1_y_expected =
                 P256FieldElement::from_be_bytes(&hex::decode(q1_y_expected).unwrap());
-            let q1_expected = P256Point(q1_x_expected, q1_y_expected, false);
 
-	    assert_eq!(inf0, false);
-	    assert_eq!(inf1, false);
-            assert_eq!(q0_x_expected.as_ref(), q0_x.as_ref());
-	    assert_eq!(q0_y_expected.as_ref(), q0_y.as_ref());
-	    assert_eq!(q1_x_expected.as_ref(), q1_x.as_ref());
-	    assert_eq!(q1_y_expected.as_ref(), q1_y.as_ref());
+	    assert_eq!(inf0, false, "Q0 should not be infinite");
+	    assert_eq!(inf1, false, "Q1 should not be infinite");
+            assert_eq!(q0_x_expected.as_ref(), q0_x.as_ref(), "x0 incorrect");
+	    assert_eq!(q0_y_expected.as_ref(), q0_y.as_ref(), "y0 incorrect");
+	    assert_eq!(q1_x_expected.as_ref(), q1_x.as_ref(), "x1 incorrect");
+	    assert_eq!(q1_y_expected.as_ref(), q1_y.as_ref(), "y1 incorrect");
         }
     }
 
