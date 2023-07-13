@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn test_hash_to_curve() {
-        let dst = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["DST"]
+        let dst = VECTORS_P256_XMD_SHA256_SSWU_RO["dst"]
             .as_str()
             .unwrap();
         let dst = dst.as_bytes();
