@@ -303,9 +303,12 @@ mod tests {
             let p_x_expected = P256FieldElement::from_be_bytes(&hex::decode(p_x_expected).unwrap());
             let p_y_expected = p_expected["y"].as_str().unwrap().trim_start_matches("0x");
             let p_y_expected = P256FieldElement::from_be_bytes(&hex::decode(p_y_expected).unwrap());
-            let p_expected = P256Point(p_x_expected, p_y_expected, false);
 
-            assert_eq!(p_expected, hash_to_curve(msg, dst));
+	    let P256Point(x, y, inf) = hash_to_curve(msg, dst);
+
+	    assert!(!inf, "Point should not be infinite");
+	    assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
+	    assert_eq!(p_y_expected.as_ref(), y.as_ref(), "y-coordinate incorrect");
         }
     }
 }

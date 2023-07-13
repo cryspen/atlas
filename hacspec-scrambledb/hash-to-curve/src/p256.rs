@@ -4,7 +4,7 @@ use crate::hacspec_helper::*;
 #[nat_mod("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff", 64)]
 pub struct P256FieldElement {}
 
-#[derive(Copy, Clone, Debug,PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct P256Point(pub P256FieldElement, pub P256FieldElement, pub bool);
 
 impl P256FieldElement {
@@ -41,10 +41,9 @@ impl P256FieldElement {
     }
 
     pub fn neg(self) -> Self {
-	Self::zero() - self
+        Self::zero() - self
     }
 }
-
 
 pub fn clear_cofactor(p: P256Point) -> P256Point {
     // no-op for P-256
@@ -52,10 +51,54 @@ pub fn clear_cofactor(p: P256Point) -> P256Point {
 }
 
 pub fn gadd(p: P256Point, q: P256Point) -> P256Point {
-    // TODO
-    unimplemented!()
+    if p.2 {
+        // p at infinity
+        q
+    } else {
+        if q.2 {
+            // q at infinity
+            p
+        } else {
+            if p == q {
+                gdouble(p)
+            } else {
+                gadd_noninf(p, q)
+            }
+        }
+    }
 }
 
+fn gadd_noninf(p: P256Point, q: P256Point) -> P256Point {
+    let P256Point(px, py, p_inf) = p;
+    let P256Point(qx, qy, q_inf) = q;
+    assert!(!(p_inf || q_inf));
+
+    if px == qx && py == qy.neg() {
+        P256Point(P256FieldElement::zero(), P256FieldElement::zero(), true)
+    } else {
+        let d = (qy - py) * (qx - px).inv();
+        let out_x = d.pow(2) - px - qx;
+        let out_y = d * (px - out_x) - py;
+
+        P256Point(out_x, out_y, false)
+    }
+}
+
+fn gdouble(p: P256Point) -> P256Point {
+    let P256Point(px, py, p_inf) = p;
+    assert!(!p_inf);
+    if py == P256FieldElement::zero() {
+        P256Point(P256FieldElement::zero(), P256FieldElement::zero(), true)
+    } else {
+        let a = P256FieldElement::from_u128(3u128).neg();
+        let d = (P256FieldElement::from_u128(3) * px.pow(2) + a)
+            * (P256FieldElement::from_u128(2) * py).inv();
+        let out_x = d.pow(2) - P256FieldElement::from_u128(2) * px;
+        let out_y = d * (px - out_x) - py;
+
+        P256Point(out_x, out_y, false)
+    }
+}
 
 #[test]
 fn neg() {
