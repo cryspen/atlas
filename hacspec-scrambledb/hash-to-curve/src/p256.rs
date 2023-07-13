@@ -51,21 +51,104 @@ pub fn clear_cofactor(p: P256Point) -> P256Point {
 }
 
 pub fn gadd(p: P256Point, q: P256Point) -> P256Point {
-    if p.2 {
-        // p at infinity
-        q
+    jacobian_to_affine(point_add_jacob(affine_to_jacobian(p), affine_to_jacobian(q)).unwrap())
+    // if p.2 {
+    //     // p at infinity
+    //     q
+    // } else {
+    //     if q.2 {
+    //         // q at infinity
+    //         p
+    //     } else {
+    //         if p == q {
+    //             gdouble(p)
+    //         } else {
+    //             gadd_noninf(p, q)
+    //         }
+    //     }
+    // }
+}
+
+type P256Jacobian = (P256FieldElement, P256FieldElement, P256FieldElement);
+
+fn jacobian_to_affine(p: P256Jacobian) -> P256Point {
+    let (x, y, z) = p;
+    let z2 = z.pow(2u128);
+    let z2i = z2.inv();
+    let z3 = z * z2;
+    let z3i = z3.inv();
+    let x = x * z2i;
+    let y = y * z3i;
+    P256Point(x, y,false)
+}
+
+fn affine_to_jacobian(p: P256Point) -> P256Jacobian {
+    let P256Point(x, y, _) = p;
+    (x, y, P256FieldElement::from_u128(1u128))
+}
+
+#[derive(Debug)]
+pub enum Error {
+    InvalidAddition,
+}
+
+type JacobianResult = Result<P256Jacobian, Error>;
+fn is_point_at_infinity(p: P256Jacobian) -> bool {
+    let (_x, _y, z) = p;
+    z == (P256FieldElement::zero())
+}
+
+fn s1_equal_s2(s1: P256FieldElement, s2: P256FieldElement) -> JacobianResult {
+    if s1 == s2 {
+        JacobianResult::Err(Error::InvalidAddition)
     } else {
-        if q.2 {
-            // q at infinity
-            p
+        JacobianResult::Ok((
+            P256FieldElement::from_u128(0u128),
+            P256FieldElement::from_u128(1u128),
+            P256FieldElement::from_u128(0u128),
+        ))
+    }
+}
+
+fn point_add_jacob(p: P256Jacobian, q: P256Jacobian) -> JacobianResult {
+    let mut result = JacobianResult::Ok(q);
+    if !is_point_at_infinity(p) {
+        if is_point_at_infinity(q) {
+            result = JacobianResult::Ok(p);
         } else {
-            if p == q {
-                gdouble(p)
+            let (x1, y1, z1) = p;
+            let (x2, y2, z2) = q;
+            let z1z1 = z1.pow(2u128);
+            let z2z2 = z2.pow(2u128);
+            let u1 = x1 * z2z2;
+            let u2 = x2 * z1z1;
+            let s1 = (y1 * z2) * z2z2;
+            let s2 = (y2 * z1) * z1z1;
+
+            if u1 == u2 {
+                result = s1_equal_s2(s1, s2);
             } else {
-                gadd_noninf(p, q)
+                let h = u2 - u1;
+                let i = (P256FieldElement::from_u128(2u128) * h).pow(2u128);
+                let j = h * i;
+                let r = P256FieldElement::from_u128(2u128) * (s2 - s1);
+                let v = u1 * i;
+
+                let x3_1 = P256FieldElement::from_u128(2u128) * v;
+                let x3_2 = r.pow(2u128) - j;
+                let x3 = x3_2 - x3_1;
+
+                let y3_1 = (P256FieldElement::from_u128(2u128) * s1) * j;
+                let y3_2 = r * (v - x3);
+                let y3 = y3_2 - y3_1;
+
+                let z3_ = (z1 + z2).pow(2u128);
+                let z3 = (z3_ - (z1z1 + z2z2)) * h;
+                result = JacobianResult::Ok((x3, y3, z3));
             }
         }
-    }
+    };
+    result
 }
 
 fn gadd_noninf(p: P256Point, q: P256Point) -> P256Point {
