@@ -13,7 +13,9 @@
 - [Private Set Intersection](./psi.md)
 - [Threshold Cryptography](./threshold.md)
 - [MPC for Machine Learning](./ml.md)
-
+# Formal Verification of MPC Systems
+- [System-level Verification](./verif-sys.md)
+- [Verification of Building Blocks](./verif-bb.md)
 ---
 [References](./references.md)
 
