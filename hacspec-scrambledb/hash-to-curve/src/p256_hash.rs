@@ -254,8 +254,8 @@ mod tests {
             let u1 = u[1].as_str().unwrap().trim_start_matches("0x");
             let u1 = P256FieldElement::from_be_bytes(&hex::decode(u1).unwrap());
 
-            let q0 = map_to_curve(&u0);
-            let q1 = map_to_curve(&u1);
+            let P256Point(q0_x, q0_y, inf0) = map_to_curve(&u0);
+            let P256Point(q1_x, q1_y, inf1) = map_to_curve(&u1);
 
             let q0_expected = &test_case["Q0"];
             let q0_x_expected = q0_expected["x"].as_str().unwrap().trim_start_matches("0x");
@@ -275,8 +275,12 @@ mod tests {
                 P256FieldElement::from_be_bytes(&hex::decode(q1_y_expected).unwrap());
             let q1_expected = P256Point(q1_x_expected, q1_y_expected, false);
 
-            assert_eq!(q0_expected, q0);
-            assert_eq!(q1_expected, q1);
+	    assert_eq!(inf0, false);
+	    assert_eq!(inf1, false);
+            assert_eq!(q0_x_expected.as_ref(), q0_x.as_ref());
+	    assert_eq!(q0_y_expected.as_ref(), q0_y.as_ref());
+	    assert_eq!(q1_x_expected.as_ref(), q1_x.as_ref());
+	    assert_eq!(q1_y_expected.as_ref(), q1_y.as_ref());
         }
     }
 
