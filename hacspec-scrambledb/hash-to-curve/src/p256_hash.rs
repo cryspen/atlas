@@ -1,4 +1,5 @@
-use crate::p256;
+use crate::hacspec_helper::*;
+use crate::p256::*;
 use libcrux::digest::{hash, Algorithm};
 
 const B_IN_BYTES: usize = libcrux::digest::digest_size(Algorithm::Sha256); // output size of H = SHA-256 in bytes
@@ -60,55 +61,61 @@ pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8
     uniform_bytes
 }
 
-pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<p256::Fp> {
-    let len_in_bytes = count * p256::M * L;
+pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldElement> {
+    use num_bigint::BigUint;
+    let p = BigUint::from_bytes_be(&P256FieldElement::MODULUS);
+    // m = 1 for P-256
+    let len_in_bytes = count * L;
     let uniform_bytes = expand_message_xmd(msg, dst, len_in_bytes);
     let mut u = Vec::with_capacity(count);
     for i in 0..count {
         // m = 1
         let elm_offset = L * i;
-        let tv = &uniform_bytes[elm_offset..L];
-        u.push(p256::Fp::from_bytes_be(tv));
+        let tv = &uniform_bytes[elm_offset..L*(i+1)];
+        let tv = BigUint::from_bytes_be(&tv);
+        let tv = tv % &p;
+        u.push(P256FieldElement::from_bigint(tv));
     }
     u
 }
 
 // Simplified Shallue-van de Woestijne-Ulas method
-pub fn map_to_curve(u: &p256::Fp) -> p256::G {
-    use num_traits::One;
-    use num_traits::Zero;
-    let z = p256::Fp::zero() - p256::Fp::from_literal(10u128);
+pub fn map_to_curve(u: &P256FieldElement) -> P256Point {
+    let a = P256FieldElement::zero() - P256FieldElement::from_u128(3u128);
+    let b = P256FieldElement::from_hex("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e2
+         7d2604b");
+    let z = P256FieldElement::zero() - P256FieldElement::from_u128(10u128);
 
-    let tv1 = (z.clone() * z.clone() * u * u * u * u + z.clone() * u * u).inv0();
-    let x1 = if tv1.is_zero() {
-        (*p256::B).clone() * (z.clone() * &(*p256::A)).inv0()
+    let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
+    let x1 = if tv1 == P256FieldElement::zero() {
+        b * (z * a).inv()
     } else {
-        (p256::Fp::one() + tv1.clone()) * (p256::Fp::zero() - &(*p256::B)) * (&(*p256::A)).inv0()
+        (b * a.inv()) * (tv1 - P256FieldElement::from_u128(1u128))
     };
 
-    let gx1 = x1.clone() * x1.clone() * x1.clone() + (*p256::A).clone() * x1.clone() + &(*p256::B);
-    let x2 = z.clone() * u * u * x1.clone();
-    let gx2 = x2.clone() * x2.clone() * x2.clone() + (*p256::A).clone() * x2.clone() + &(*p256::B);
+    let gx1 = x1.pow(3) + a * x1 + b;
+    let x2 = z * u.pow(2) * x1;
+    let gx2 = x2.pow(3) + a * x2 + b;
 
     let mut output = if gx1.is_square() {
-        p256::G(x1, gx1.sqrt(), false)
+        P256Point(x1, gx1.sqrt(), false)
     } else {
-        p256::G(x2, gx2.sqrt(), false)
+        P256Point(x2, gx2.sqrt(), false)
     };
 
     if u.sgn0() != output.1.sgn0() {
-        output.1 = p256::Fp::zero() - output.1
+        output.1 = P256FieldElement::zero() - output.1;
     }
 
     output
 }
 
-pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> p256::G {
+pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> P256Point {
     let u = hash_to_field(msg, dst, 2);
     let q0 = map_to_curve(&u[0]);
     let q1 = map_to_curve(&u[1]);
-    let r = q0 + &q1;
-    let p = r.clear_cofactor();
+    let r = gadd(q0, q1);
+    let p = clear_cofactor(r);
     p
 }
 
@@ -215,20 +222,22 @@ mod tests {
             .unwrap()
             .clone();
 
-        for test_case in test_cases.iter() {
-            let msg = test_case["msg"].as_str().unwrap();
-            let msg = msg.as_bytes();
+				      for test_case in test_cases.iter() {
+
+				      let msg_str = test_case["msg"].as_str().unwrap();
+				   
+            let msg = msg_str.as_bytes();
 
             let u = test_case["u"].as_array().unwrap();
             let u0_expected = u[0].as_str().unwrap().trim_start_matches("0x");
-            let u0_expected = p256::Fp::from_bytes_be(&hex::decode(u0_expected).unwrap());
+            let u0_expected = P256FieldElement::from_be_bytes(&hex::decode(u0_expected).unwrap());
             let u1_expected = u[1].as_str().unwrap().trim_start_matches("0x");
-            let u1_expected = p256::Fp::from_bytes_be(&hex::decode(u1_expected).unwrap());
+            let u1_expected = P256FieldElement::from_be_bytes(&hex::decode(u1_expected).unwrap());
 
             let u_real = hash_to_field(msg, dst, 2);
             assert_eq!(u_real.len(), 2);
-            assert_eq!(u0_expected, u_real[0]);
-            assert_eq!(u1_expected, u_real[1]);
+            assert_eq!(u0_expected.as_ref(), u_real[0].as_ref(), "u0 did not match for {msg_str}");
+            assert_eq!(u1_expected.as_ref(), u_real[1].as_ref(), "u1 did not match for {msg_str}");
         }
     }
 
@@ -242,26 +251,30 @@ mod tests {
         for test_case in test_cases.iter() {
             let u = test_case["u"].as_array().unwrap();
             let u0 = u[0].as_str().unwrap().trim_start_matches("0x");
-            let u0 = p256::Fp::from_bytes_be(&hex::decode(u0).unwrap());
+            let u0 = P256FieldElement::from_be_bytes(&hex::decode(u0).unwrap());
             let u1 = u[1].as_str().unwrap().trim_start_matches("0x");
-            let u1 = p256::Fp::from_bytes_be(&hex::decode(u1).unwrap());
+            let u1 = P256FieldElement::from_be_bytes(&hex::decode(u1).unwrap());
 
             let q0 = map_to_curve(&u0);
             let q1 = map_to_curve(&u1);
 
             let q0_expected = &test_case["Q0"];
             let q0_x_expected = q0_expected["x"].as_str().unwrap().trim_start_matches("0x");
-            let q0_x_expected = p256::Fp::from_bytes_be(&hex::decode(q0_x_expected).unwrap());
+            let q0_x_expected =
+                P256FieldElement::from_be_bytes(&hex::decode(q0_x_expected).unwrap());
             let q0_y_expected = q0_expected["y"].as_str().unwrap().trim_start_matches("0x");
-            let q0_y_expected = p256::Fp::from_bytes_be(&hex::decode(q0_y_expected).unwrap());
-            let q0_expected = p256::G(q0_x_expected, q0_y_expected, false);
+            let q0_y_expected =
+                P256FieldElement::from_be_bytes(&hex::decode(q0_y_expected).unwrap());
+            let q0_expected = P256Point(q0_x_expected, q0_y_expected, false);
 
             let q1_expected = &test_case["Q1"];
             let q1_x_expected = q1_expected["x"].as_str().unwrap().trim_start_matches("0x");
-            let q1_x_expected = p256::Fp::from_bytes_be(&hex::decode(q1_x_expected).unwrap());
+            let q1_x_expected =
+                P256FieldElement::from_be_bytes(&hex::decode(q1_x_expected).unwrap());
             let q1_y_expected = q1_expected["y"].as_str().unwrap().trim_start_matches("0x");
-            let q1_y_expected = p256::Fp::from_bytes_be(&hex::decode(q1_y_expected).unwrap());
-            let q1_expected = p256::G(q1_x_expected, q1_y_expected, false);
+            let q1_y_expected =
+                P256FieldElement::from_be_bytes(&hex::decode(q1_y_expected).unwrap());
+            let q1_expected = P256Point(q1_x_expected, q1_y_expected, false);
 
             assert_eq!(q0_expected, q0);
             assert_eq!(q1_expected, q1);
@@ -285,10 +298,10 @@ mod tests {
 
             let p_expected = &test_case["P"];
             let p_x_expected = p_expected["x"].as_str().unwrap().trim_start_matches("0x");
-            let p_x_expected = p256::Fp::from_bytes_be(&hex::decode(p_x_expected).unwrap());
+            let p_x_expected = P256FieldElement::from_be_bytes(&hex::decode(p_x_expected).unwrap());
             let p_y_expected = p_expected["y"].as_str().unwrap().trim_start_matches("0x");
-            let p_y_expected = p256::Fp::from_bytes_be(&hex::decode(p_y_expected).unwrap());
-            let p_expected = p256::G(p_x_expected, p_y_expected, false);
+            let p_y_expected = P256FieldElement::from_be_bytes(&hex::decode(p_y_expected).unwrap());
+            let p_expected = P256Point(p_x_expected, p_y_expected, false);
 
             assert_eq!(p_expected, hash_to_curve(msg, dst));
         }
