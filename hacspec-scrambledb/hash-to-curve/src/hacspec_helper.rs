@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 /// This has to come from the lib.
 pub use natmod::nat_mod;
 
@@ -81,10 +83,18 @@ pub trait NatMod<const LEN: usize> {
         Self::new(Self::ZERO)
     }
 
+    /// One element
+    fn one() -> Self
+    where
+        Self: Sized,
+    {
+        let out = Self::new(Self::ZERO);
+        out.fadd(Self::from_u128(1))
+    }
+
     fn bit(&self, bit: u128) -> bool {
         let val = num_bigint::BigUint::from_bytes_be(self.value());
-        let tmp = val >> bit;
-        (tmp & num_bigint::BigUint::from(1u128)).to_bytes_le()[0] == 1
+        val.bit(bit.try_into().unwrap())
     }
 
     /// Returns 2 to the power of the argument
@@ -105,19 +115,27 @@ pub trait NatMod<const LEN: usize> {
     }
 
     /// Create a new [`#ident`] from a little endian byte slice.
+    ///
+    /// This computes bytes % MODULUS
     fn from_le_bytes(bytes: &[u8]) -> Self
     where
         Self: Sized,
     {
-        Self::from_bigint(num_bigint::BigUint::from_bytes_le(bytes))
+        let value = num_bigint::BigUint::from_bytes_le(bytes);
+        let modulus = num_bigint::BigUint::from_bytes_be(&Self::MODULUS);
+        Self::from_bigint(value % modulus)
     }
 
     /// Create a new [`#ident`] from a little endian byte slice.
+    ///
+    /// This computes bytes % MODULUS
     fn from_be_bytes(bytes: &[u8]) -> Self
     where
         Self: Sized,
     {
-        Self::from_bigint(num_bigint::BigUint::from_bytes_be(bytes))
+        let value = num_bigint::BigUint::from_bytes_be(bytes);
+        let modulus = num_bigint::BigUint::from_bytes_be(&Self::MODULUS);
+        Self::from_bigint(value % modulus)
     }
 
     fn to_le_bytes(self) -> [u8; LEN]
@@ -125,6 +143,13 @@ pub trait NatMod<const LEN: usize> {
         Self: Sized,
     {
         Self::pad(&num_bigint::BigUint::from_bytes_be(self.value()).to_bytes_le())
+    }
+
+    fn to_be_bytes(self) -> [u8; LEN]
+    where
+        Self: Sized,
+    {
+        self.value().try_into().unwrap()
     }
 
     /// Get hex string representation of this.

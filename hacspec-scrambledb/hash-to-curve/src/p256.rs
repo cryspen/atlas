@@ -1,6 +1,6 @@
 use crate::hacspec_helper::*;
 
-#[derive(Debug)]
+
 #[nat_mod("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff", 64)]
 pub struct P256FieldElement {}
 
