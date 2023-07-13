@@ -82,8 +82,7 @@ pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldEleme
 // Simplified Shallue-van de Woestijne-Ulas method
 pub fn map_to_curve(u: &P256FieldElement) -> P256Point {
     let a = P256FieldElement::zero() - P256FieldElement::from_u128(3u128);
-    let b = P256FieldElement::from_hex("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e2
-         7d2604b");
+    let b = P256FieldElement::from_hex("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b");
     let z = P256FieldElement::zero() - P256FieldElement::from_u128(10u128);
 
     let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
