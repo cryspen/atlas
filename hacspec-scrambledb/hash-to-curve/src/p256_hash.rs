@@ -1,6 +1,8 @@
-use crate::hacspec_helper::*;
-use crate::p256::*;
+// TODO: Add comments about what this is and where the spec is.
+
+// use crate::hacspec_helper::*;
 use libcrux::digest::{hash, Algorithm};
+use p256::{NatMod, *};
 
 const B_IN_BYTES: usize = libcrux::digest::digest_size(Algorithm::Sha256); // output size of H = SHA-256 in bytes
 const S_IN_BYTES: usize = 64; // input block size of H = SHA-256
@@ -10,6 +12,7 @@ const K: usize = 128; // security level of this suite
 // XXX: How to write this more generically?
 const L: usize = 48; // ceil((ceil(log2(p)) + k) / 8), where p = 2^256 - 2^224 + 2^192 + 2^96 - 1 and k = 128
 
+// TODO: Add the pseudoc code and description as doc comments form the RFC to the functions.
 fn msg_prime(msg: &[u8], dst_prime: &[u8], len_in_bytes: usize) -> Vec<u8> {
     let z_pad = [0u8; S_IN_BYTES];
 
@@ -62,8 +65,10 @@ pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8
 }
 
 pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldElement> {
+    // XXX: You should only have to use natmods. If you need a general nat (without mod), we should add it to the library as well.
+    //      But looks like natmod should be enough here.
     use num_bigint::BigUint;
-    let p = BigUint::from_bytes_be(&P256FieldElement::MODULUS);
+    let p: BigUint = BigUint::from_bytes_be(&P256FieldElement::MODULUS);
     // m = 1 for P-256
     let len_in_bytes = count * L;
     let uniform_bytes = expand_message_xmd(msg, dst, len_in_bytes);
@@ -71,7 +76,7 @@ pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldEleme
     for i in 0..count {
         // m = 1
         let elm_offset = L * i;
-        let tv = &uniform_bytes[elm_offset..L*(i+1)];
+        let tv = &uniform_bytes[elm_offset..L * (i + 1)];
         let tv = BigUint::from_bytes_be(&tv);
         let tv = tv % &p;
         u.push(P256FieldElement::from_bigint(tv));
@@ -82,10 +87,11 @@ pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldEleme
 // Simplified Shallue-van de Woestijne-Ulas method
 pub fn map_to_curve(u: &P256FieldElement) -> P256Point {
     let a = P256FieldElement::from_u128(3u128).neg();
-    let b = P256FieldElement::from_hex("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b");
+    let b = P256FieldElement::from_hex(
+        "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+    );
     let z = P256FieldElement::from_u128(10u128).neg();
 
-    
     let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
     let x1 = if tv1 == P256FieldElement::zero() {
         b * (z * a).inv()
@@ -97,25 +103,31 @@ pub fn map_to_curve(u: &P256FieldElement) -> P256Point {
     let x2 = z * u.pow(2) * x1;
     let gx2 = x2.pow(3) + a * x2 + b;
 
+    // TODO: add square and sqrt functions somewhere.
     let mut output = if gx1.is_square() {
-        P256Point(x1, gx1.sqrt(), false)
+        (x1, gx1.sqrt())
     } else {
-        P256Point(x2, gx2.sqrt(), false)
+        (x2, gx2.sqrt())
     };
 
     if u.sgn0() != output.1.sgn0() {
-        output.1 = output.1.neg() ;
+        output.1 = output.1.neg();
     }
 
     output
+}
+
+fn p256_clear_cofactor(p: P256Point) -> P256Point {
+    // no-op for P-256
+    p
 }
 
 pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> P256Point {
     let u = hash_to_field(msg, dst, 2);
     let q0 = map_to_curve(&u[0]);
     let q1 = map_to_curve(&u[1]);
-    let r = gadd(q0, q1);
-    let p = clear_cofactor(r);
+    let r = point_add(q0, q1).unwrap();
+    let p = p256_clear_cofactor(r);
     p
 }
 
@@ -222,10 +234,9 @@ mod tests {
             .unwrap()
             .clone();
 
-				      for test_case in test_cases.iter() {
+        for test_case in test_cases.iter() {
+            let msg_str = test_case["msg"].as_str().unwrap();
 
-				      let msg_str = test_case["msg"].as_str().unwrap();
-				   
             let msg = msg_str.as_bytes();
 
             let u = test_case["u"].as_array().unwrap();
@@ -236,8 +247,16 @@ mod tests {
 
             let u_real = hash_to_field(msg, dst, 2);
             assert_eq!(u_real.len(), 2);
-            assert_eq!(u0_expected.as_ref(), u_real[0].as_ref(), "u0 did not match for {msg_str}");
-            assert_eq!(u1_expected.as_ref(), u_real[1].as_ref(), "u1 did not match for {msg_str}");
+            assert_eq!(
+                u0_expected.as_ref(),
+                u_real[0].as_ref(),
+                "u0 did not match for {msg_str}"
+            );
+            assert_eq!(
+                u1_expected.as_ref(),
+                u_real[1].as_ref(),
+                "u1 did not match for {msg_str}"
+            );
         }
     }
 
@@ -255,8 +274,8 @@ mod tests {
             let u1 = u[1].as_str().unwrap().trim_start_matches("0x");
             let u1 = P256FieldElement::from_be_bytes(&hex::decode(u1).unwrap());
 
-            let P256Point(q0_x, q0_y, inf0) = map_to_curve(&u0);
-            let P256Point(q1_x, q1_y, inf1) = map_to_curve(&u1);
+            let (q0_x, q0_y) = map_to_curve(&u0);
+            let (q1_x, q1_y) = map_to_curve(&u1);
 
             let q0_expected = &test_case["Q0"];
             let q0_x_expected = q0_expected["x"].as_str().unwrap().trim_start_matches("0x");
@@ -274,20 +293,18 @@ mod tests {
             let q1_y_expected =
                 P256FieldElement::from_be_bytes(&hex::decode(q1_y_expected).unwrap());
 
-	    assert_eq!(inf0, false, "Q0 should not be infinite");
-	    assert_eq!(inf1, false, "Q1 should not be infinite");
+            // assert_eq!(inf0, false, "Q0 should not be infinite");
+            // assert_eq!(inf1, false, "Q1 should not be infinite");
             assert_eq!(q0_x_expected.as_ref(), q0_x.as_ref(), "x0 incorrect");
-	    assert_eq!(q0_y_expected.as_ref(), q0_y.as_ref(), "y0 incorrect");
-	    assert_eq!(q1_x_expected.as_ref(), q1_x.as_ref(), "x1 incorrect");
-	    assert_eq!(q1_y_expected.as_ref(), q1_y.as_ref(), "y1 incorrect");
+            assert_eq!(q0_y_expected.as_ref(), q0_y.as_ref(), "y0 incorrect");
+            assert_eq!(q1_x_expected.as_ref(), q1_x.as_ref(), "x1 incorrect");
+            assert_eq!(q1_y_expected.as_ref(), q1_y.as_ref(), "y1 incorrect");
         }
     }
 
     #[test]
     fn test_hash_to_curve() {
-        let dst = VECTORS_P256_XMD_SHA256_SSWU_RO["dst"]
-            .as_str()
-            .unwrap();
+        let dst = VECTORS_P256_XMD_SHA256_SSWU_RO["dst"].as_str().unwrap();
         let dst = dst.as_bytes();
         let test_cases = VECTORS_P256_XMD_SHA256_SSWU_RO["vectors"]
             .as_array()
@@ -304,11 +321,11 @@ mod tests {
             let p_y_expected = p_expected["y"].as_str().unwrap().trim_start_matches("0x");
             let p_y_expected = P256FieldElement::from_be_bytes(&hex::decode(p_y_expected).unwrap());
 
-	    let P256Point(x, y, inf) = hash_to_curve(msg, dst);
+            let (x, y) = hash_to_curve(msg, dst);
 
-	    assert!(!inf, "Point should not be infinite");
-	    assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
-	    assert_eq!(p_y_expected.as_ref(), y.as_ref(), "y-coordinate incorrect");
+            // assert!(!inf, "Point should not be infinite");
+            assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
+            assert_eq!(p_y_expected.as_ref(), y.as_ref(), "y-coordinate incorrect");
         }
     }
 }

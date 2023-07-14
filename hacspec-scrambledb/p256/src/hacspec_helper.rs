@@ -64,6 +64,18 @@ pub trait NatMod<const LEN: usize> {
         Self::from_bigint(res)
     }
 
+    /// `self ^ rhs % MODULUS`.
+    fn pow_felem(self, rhs: &Self) -> Self
+    where
+        Self: Sized,
+    {
+        let lhs = num_bigint::BigUint::from_bytes_be(self.value());
+        let rhs = num_bigint::BigUint::from_bytes_be(rhs.value());
+        let modulus = num_bigint::BigUint::from_bytes_be(&Self::MODULUS);
+        let res = lhs.modpow(&rhs, &modulus);
+        Self::from_bigint(res)
+    }
+
     /// Invert self and return the result `self ^ -1 % MODULUS`.
     fn inv(self) -> Self
     where
@@ -73,6 +85,17 @@ pub trait NatMod<const LEN: usize> {
         let modulus = num_bigint::BigUint::from_bytes_be(&Self::MODULUS);
         let m = &modulus - num_bigint::BigUint::from(2u32);
         Self::from_bigint(val.modpow(&m, &modulus))
+    }
+
+    fn inv0(self) -> Self
+    where
+        Self: Sized,
+    {
+        if self.value() == Self::zero().value() {
+            Self::zero()
+        } else {
+            self.inv()
+        }
     }
 
     /// Zero element
@@ -104,6 +127,13 @@ pub trait NatMod<const LEN: usize> {
     {
         let res = num_bigint::BigUint::from(1u32) << x;
         Self::from_bigint(res)
+    }
+
+    fn neg(self) -> Self
+    where
+        Self: Sized,
+    {
+        Self::zero().fsub(self)
     }
 
     /// Create a new [`#ident`] from a `u128` literal.
@@ -165,14 +195,13 @@ pub trait NatMod<const LEN: usize> {
     {
         assert!(hex.len() % 2 == 0);
         let l = hex.len() / 2;
-        assert!(l <= LEN);
-        let mut value = [0u8; LEN];
-        let skip = LEN - l;
+        let mut value = vec![0u8; l];
         for i in 0..l {
-            value[skip + i] = u8::from_str_radix(&hex[2 * i..2 * i + 2], 16)
+            value[i] = u8::from_str_radix(&hex[2 * i..2 * i + 2], 16)
                 .expect("An unexpected error occurred.");
         }
-        Self::new(value)
+
+        Self::from_be_bytes(&value)
     }
 
     fn pad(bytes: &[u8]) -> [u8; LEN] {
@@ -205,9 +234,66 @@ pub trait NatMod<const LEN: usize> {
 
 // === Secret Integers
 
-#[allow(dead_code, non_snake_case)]
 pub type U8 = u8;
 #[allow(dead_code, non_snake_case)]
 pub fn U8(x: u8) -> u8 {
     x
+}
+
+// === Test vector helpers
+pub use std::io::Write;
+#[macro_export]
+macro_rules! create_test_vectors {
+    ($struct_name: ident, $($element: ident: $ty: ty),+) => {
+        #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+        #[allow(non_snake_case)]
+        struct $struct_name { $($element: $ty),+ }
+        impl $struct_name {
+            #[cfg_attr(feature="use_attributes", not_hacspec)]
+            pub fn from_file<T: serde::de::DeserializeOwned>(file: &'static str) -> T {
+                let file = match std::fs::File::open(file) {
+                    Ok(f) => f,
+                    Err(_) => panic!("Couldn't open file {}.", file),
+                };
+                let reader = std::io::BufReader::new(file);
+                match serde_json::from_reader(reader) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        println!("{:?}", e);
+                        panic!("Error reading file.")
+                    },
+                }
+            }
+            #[cfg_attr(feature="use_attributes", not_hacspec)]
+            pub fn write_file(&self, file: &'static str) {
+                let mut file = match std::fs::File::create(file) {
+                    Ok(f) => f,
+                    Err(_) => panic!("Couldn't open file {}.", file),
+                };
+                let json = match serde_json::to_string_pretty(&self) {
+                    Ok(j) => j,
+                    Err(_) => panic!("Couldn't serialize this object."),
+                };
+                match file.write_all(&json.into_bytes()) {
+                    Ok(_) => (),
+                    Err(_) => panic!("Error writing to file."),
+                }
+            }
+            #[cfg_attr(feature="use_attributes", not_hacspec)]
+            pub fn new_array(file: &'static str) -> Vec<Self> {
+                let file = match std::fs::File::open(file) {
+                    Ok(f) => f,
+                    Err(_) => panic!("Couldn't open file."),
+                };
+                let reader = std::io::BufReader::new(file);
+                match serde_json::from_reader(reader) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        println!("{:?}", e);
+                        panic!("Error reading file.")
+                    },
+                }
+            }
+        }
+    };
 }

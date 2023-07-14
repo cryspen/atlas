@@ -51,22 +51,22 @@ pub fn clear_cofactor(p: P256Point) -> P256Point {
 }
 
 pub fn gadd(p: P256Point, q: P256Point) -> P256Point {
-    jacobian_to_affine(point_add_jacob(affine_to_jacobian(p), affine_to_jacobian(q)).unwrap())
-    // if p.2 {
-    //     // p at infinity
-    //     q
-    // } else {
-    //     if q.2 {
-    //         // q at infinity
-    //         p
-    //     } else {
-    //         if p == q {
-    //             gdouble(p)
-    //         } else {
-    //             gadd_noninf(p, q)
-    //         }
-    //     }
-    // }
+    // jacobian_to_affine(point_add_jacob(affine_to_jacobian(p), affine_to_jacobian(q)).unwrap())
+    if p.2 {
+        // p at infinity
+        q
+    } else {
+        if q.2 {
+            // q at infinity
+            p
+        } else {
+            if p == q {
+                gdouble(p)
+            } else {
+                gadd_noninf(p, q)
+            }
+        }
+    }
 }
 
 type P256Jacobian = (P256FieldElement, P256FieldElement, P256FieldElement);

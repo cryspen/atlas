@@ -1,10 +1,11 @@
 [workspace]
 
 members = [
-#	"scrambledb",
-#	"elgamal",
-#	"coprf",
-#	"prp",
-#	"renc",
+	#	"scrambledb",
+	#	"elgamal",
+	#	"coprf",
+	#	"prp",
+	#	"renc",
 	"hash-to-curve",
+	"p256",
 ]
