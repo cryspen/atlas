@@ -1,6 +1,5 @@
 // TODO: Add comments about what this is and where the spec is.
 
-// use crate::hacspec_helper::*;
 use libcrux::digest::{hash, Algorithm};
 use p256::{NatMod, *};
 
