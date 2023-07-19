@@ -79,6 +79,34 @@ pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldEleme
     u
 }
 
+/// This function returns `true` whenever the value `x` is a square in the field F. By Euler's criterion, this function can be calculated in constant time as
+///
+/// ```text
+/// is_square(x) := { True, if x^((q - 1) / 2) is 0 or 1 in F;
+/// 	            { False, otherwise.
+/// ```
+fn is_square(x: P256FieldElement) -> bool {
+    let exp = P256FieldElement::zero() - P256FieldElement::from_u128(1) * P256FieldElement::from_u128(2).inv();
+    let test = x.pow_felem(&exp);
+    test == P256FieldElement::zero() || test == P256FieldElement::from_u128(1)
+}
+
+/// Input: x, an element of F.
+/// Output: z, an element of F such that (z^2) == x, if x is square in F.
+///
+/// For P-256, we have q = p = 3 (mod 4). Therefore we compute the square as follows:
+///
+/// 1. c1 = (q + 1) / 4
+/// 2. return x^c1
+fn sqrt(x: P256FieldElement) -> P256FieldElement {
+    let c1 = P256FieldElement::from_u128(1) * P256FieldElement::from_u128(4).inv();
+    x.pow_felem(&c1)
+}
+
+fn sgn0(x: P256FieldElement) -> bool {
+    x.bit(0)
+}
+
 // Simplified Shallue-van de Woestijne-Ulas method
 pub fn map_to_curve(u: &P256FieldElement) -> P256Point {
     let a = P256FieldElement::from_u128(3u128).neg();
@@ -98,14 +126,13 @@ pub fn map_to_curve(u: &P256FieldElement) -> P256Point {
     let x2 = z * u.pow(2) * x1;
     let gx2 = x2.pow(3) + a * x2 + b;
 
-    // TODO: add square and sqrt functions somewhere.
-    let mut output = if gx1.is_square() {
-        (x1, gx1.sqrt())
+    let mut output = if is_square(gx1) {
+        (x1, sqrt(gx1))
     } else {
-        (x2, gx2.sqrt())
+        (x2, sqrt(gx2))
     };
 
-    if u.sgn0() != output.1.sgn0() {
+    if sgn0(*u) != sgn0(output.1) {
         output.1 = output.1.neg();
     }
 
