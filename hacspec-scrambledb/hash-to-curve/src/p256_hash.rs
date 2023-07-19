@@ -65,10 +65,6 @@ pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8
 }
 
 pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldElement> {
-    // XXX: You should only have to use natmods. If you need a general nat (without mod), we should add it to the library as well.
-    //      But looks like natmod should be enough here.
-    use num_bigint::BigUint;
-    let p: BigUint = BigUint::from_bytes_be(&P256FieldElement::MODULUS);
     // m = 1 for P-256
     let len_in_bytes = count * L;
     let uniform_bytes = expand_message_xmd(msg, dst, len_in_bytes);
@@ -77,9 +73,8 @@ pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldEleme
         // m = 1
         let elm_offset = L * i;
         let tv = &uniform_bytes[elm_offset..L * (i + 1)];
-        let tv = BigUint::from_bytes_be(&tv);
-        let tv = tv % &p;
-        u.push(P256FieldElement::from_bigint(tv));
+	let tv = P256FieldElement::from_be_bytes(&tv);
+	u.push(tv);
     }
     u
 }
