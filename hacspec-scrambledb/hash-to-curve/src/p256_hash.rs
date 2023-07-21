@@ -1,155 +1,141 @@
 // TODO: Add comments about what this is and where the spec is.
 
-use libcrux::digest::{hash, Algorithm};
 use p256::{NatMod, *};
+use crate::hash_suite::HashToCurveSuite;
+use crate::hasher::{HashAlgorithm, SHA256};
+use crate::expand_message::expand_message_xmd;
+use crate::prime_field::{PrimeField, hash_to_field_prime_order};
 
-const B_IN_BYTES: usize = libcrux::digest::digest_size(Algorithm::Sha256); // output size of H = SHA-256 in bytes
-const S_IN_BYTES: usize = 64; // input block size of H = SHA-256
-#[allow(unused)]
-const K: usize = 128; // security level of this suite
+#[allow(non_camel_case_types)]
+pub struct P256_XMD_SHA256_SSWU_RO_ {}
 
-// XXX: How to write this more generically?
-const L: usize = 48; // ceil((ceil(log2(p)) + k) / 8), where p = 2^256 - 2^224 + 2^192 + 2^96 - 1 and k = 128
+impl HashToCurveSuite for P256_XMD_SHA256_SSWU_RO_ {
+    const ID: &'static str = "P256_XMD:SHA-256_SSWU_RO_";
+    const K: usize = 128;
+    const L: usize = 48;
 
-// TODO: Add the pseudoc code and description as doc comments form the RFC to the functions.
-fn msg_prime(msg: &[u8], dst_prime: &[u8], len_in_bytes: usize) -> Vec<u8> {
-    let z_pad = [0u8; S_IN_BYTES];
+    type BaseField = P256FieldElement;
+    type OutputCurve = P256Point;
+    type Hash = SHA256;
 
-    let mut l_i_b_str = [0u8; 2];
-    l_i_b_str[0] = (len_in_bytes / 256) as u8;
-    l_i_b_str[1] = len_in_bytes as u8;
-
-    let mut out = Vec::from(z_pad);
-    out.extend_from_slice(msg);
-    out.extend_from_slice(&l_i_b_str);
-    out.extend_from_slice(&[0u8; 1]);
-    out.extend_from_slice(&dst_prime); // msg_prime = Z_pad || msg || l_i_b_str || 0 || dst_prime
-
-    out
-}
-
-fn dst_prime(dst: &[u8]) -> Vec<u8> {
-    let mut out = Vec::from(dst);
-    out.extend_from_slice(&[dst.len() as u8; 1]);
-
-    out
-}
-
-pub fn expand_message_xmd(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8> {
-    // adapted from hacspec-v1/specs/bls12-
-    let ell = (len_in_bytes + B_IN_BYTES - 1) / B_IN_BYTES; // ceil(len_in_bytes / b_in_bytes)
-                                                            // must be that ell <= 255
-    let dst_prime = dst_prime(dst);
-
-    let msg_prime = msg_prime(msg, &dst_prime, len_in_bytes);
-
-    let b_0 = hash(Algorithm::Sha256, &msg_prime); // H(msg_prime)
-
-    let mut payload_1 = b_0.clone();
-    payload_1.extend_from_slice(&[1u8; 1]);
-    payload_1.extend_from_slice(&dst_prime);
-    let mut b_i = hash(Algorithm::Sha256, &payload_1); // H(b_0 || 1 || dst_prime)
-
-    let mut uniform_bytes = b_i.clone();
-    for i in 2..=ell {
-        let t: Vec<u8> = b_i.iter().zip(b_0.iter()).map(|(a, b)| a ^ b).collect();
-        let mut payload_i = t;
-        payload_i.extend_from_slice(&[i as u8; 1]);
-        payload_i.extend_from_slice(&dst_prime);
-        b_i = hash(Algorithm::Sha256, &payload_i); //H((b_0 ^ b_(i-1)) || 1 || dst_prime)
-        uniform_bytes.extend_from_slice(&b_i);
-    }
-    uniform_bytes.truncate(len_in_bytes);
-    uniform_bytes
-}
-
-pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldElement> {
-    // m = 1 for P-256
-    let len_in_bytes = count * L;
-    let uniform_bytes = expand_message_xmd(msg, dst, len_in_bytes);
-    let mut u = Vec::with_capacity(count);
-    for i in 0..count {
-        // m = 1
-        let elm_offset = L * i;
-        let tv = &uniform_bytes[elm_offset..L * (i + 1)];
-	let tv = P256FieldElement::from_be_bytes(&tv);
-	u.push(tv);
-    }
-    u
-}
-
-/// This function returns `true` whenever the value `x` is a square in the field F. By Euler's criterion, this function can be calculated in constant time as
-///
-/// ```text
-/// is_square(x) := { True, if x^((q - 1) / 2) is 0 or 1 in F;
-/// 	            { False, otherwise.
-/// ```
-fn is_square(x: P256FieldElement) -> bool {
-    let exp = P256FieldElement::zero() - P256FieldElement::from_u128(1) * P256FieldElement::from_u128(2).inv();
-    let test = x.pow_felem(&exp);
-    test == P256FieldElement::zero() || test == P256FieldElement::from_u128(1)
-}
-
-/// Input: x, an element of F.
-/// Output: z, an element of F such that (z^2) == x, if x is square in F.
-///
-/// For P-256, we have q = p = 3 (mod 4). Therefore we compute the square as follows:
-///
-/// 1. c1 = (q + 1) / 4
-/// 2. return x^c1
-fn sqrt(x: P256FieldElement) -> P256FieldElement {
-    let c1 = P256FieldElement::from_u128(1) * P256FieldElement::from_u128(4).inv();
-    x.pow_felem(&c1)
-}
-
-fn sgn0(x: P256FieldElement) -> bool {
-    x.bit(0)
-}
-
-// Simplified Shallue-van de Woestijne-Ulas method
-pub fn map_to_curve(u: &P256FieldElement) -> P256Point {
-    let a = P256FieldElement::from_u128(3u128).neg();
-    let b = P256FieldElement::from_hex(
-        "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
-    );
-    let z = P256FieldElement::from_u128(10u128).neg();
-
-    let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
-    let x1 = if tv1 == P256FieldElement::zero() {
-        b * (z * a).inv()
-    } else {
-        (b.neg() * a.inv()) * (tv1 + P256FieldElement::from_u128(1u128))
-    };
-
-    let gx1 = x1.pow(3) + a * x1 + b;
-    let x2 = z * u.pow(2) * x1;
-    let gx2 = x2.pow(3) + a * x2 + b;
-
-    let mut output = if is_square(gx1) {
-        (x1, sqrt(gx1))
-    } else {
-        (x2, sqrt(gx2))
-    };
-
-    if sgn0(*u) != sgn0(output.1) {
-        output.1 = output.1.neg();
+    fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8> {
+        expand_message_xmd(
+            msg,
+            dst,
+            len_in_bytes,
+            SHA256::B_IN_BYTES,
+            SHA256::S_IN_BYTES,
+            SHA256::hash,
+        )
     }
 
-    output
+    fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldElement> {
+        hash_to_field_prime_order::<P256FieldElement,32>(msg, dst, count, Self::L, Self::expand_message)
+    }
+
+    fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Self::OutputCurve {
+        let u = Self::hash_to_field(msg, dst, 2);
+        let q0 = P256Point::map_to_curve(&u[0]);
+        let q1 = P256Point::map_to_curve(&u[1]);
+        let r = point_add(q0, q1).unwrap();
+        P256Point::clear_cofactor(r)
+    }
 }
 
-fn p256_clear_cofactor(p: P256Point) -> P256Point {
-    // no-op for P-256
-    p
+
+impl PrimeField<p256::P256FieldElement, 32> for P256FieldElement {
+    /// This function returns `true` whenever the value `x` is a square in the field F. By Euler's criterion, this function can be calculated in constant time as
+    ///
+    /// ```text
+    /// is_square(x) := { True, if x^((q - 1) / 2) is 0 or 1 in F;
+    ///                 { False, otherwise.
+    /// ```
+    fn is_sqare(&self) -> bool {
+        let exp = P256FieldElement::from_u128(1).neg() * P256FieldElement::from_u128(2).inv();
+        let test = self.pow_felem(&exp);
+        test == P256FieldElement::zero() || test == P256FieldElement::from_u128(1)
+    }
+
+    /// Input: x, an element of F.
+    /// Output: z, an element of F such that (z^2) == x, if x is square in F.
+    ///
+    /// For P-256, we have q = p = 3 (mod 4). Therefore we compute the square as follows:
+    ///
+    /// 1. c1 = (q + 1) / 4
+    /// 2. return x^c1
+    fn sqrt(self) -> P256FieldElement {
+        let c1 = P256FieldElement::from_u128(1) * P256FieldElement::from_u128(4).inv();
+        self.pow_felem(&c1)
+    }
+
+    fn sgn0(self) -> bool {
+        self.bit(0)
+    }
 }
 
-pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> P256Point {
-    let u = hash_to_field(msg, dst, 2);
-    let q0 = map_to_curve(&u[0]);
-    let q1 = map_to_curve(&u[1]);
-    let r = point_add(q0, q1).unwrap();
-    let p = p256_clear_cofactor(r);
-    p
+
+
+trait PrimeCurveWeierstrass<T: NatMod<LEN>, const LEN: usize> {
+    type BaseField: PrimeField<T, LEN>;
+
+    fn map_to_curve(fe: &Self::BaseField) -> Self;
+    fn clear_cofactor(self) -> Self;
+
+    fn weierstrass_a() -> Self::BaseField;
+    fn weierstrass_b() -> Self::BaseField;
+    fn sswu_z() -> Self::BaseField;
+}
+
+impl PrimeCurveWeierstrass<p256::P256FieldElement, 32> for P256Point {
+    type BaseField = P256FieldElement;
+
+    fn weierstrass_a() -> Self::BaseField {
+        P256FieldElement::from_u128(3u128).neg()
+    }
+
+    fn weierstrass_b() -> Self::BaseField {
+        P256FieldElement::from_hex(
+            "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+        )
+    }
+
+    fn sswu_z() -> Self::BaseField {
+        P256FieldElement::from_u128(10u128).neg()
+    }
+
+    // Simplified Shallue-van de Woestijne-Ulas method
+    // TODO: Can I implement this generically?
+    fn map_to_curve(u: &Self::BaseField) -> Self {
+        let a = Self::weierstrass_a();
+        let b = Self::weierstrass_b();
+        let z = Self::sswu_z();
+
+        let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
+        let x1 = if tv1 == P256FieldElement::zero() {
+            b * (z * a).inv()
+        } else {
+            (b.neg() * a.inv()) * (tv1 + P256FieldElement::from_u128(1u128))
+        };
+
+        let gx1 = x1.pow(3) + a * x1 + b;
+        let x2 = z * u.pow(2) * x1;
+        let gx2 = x2.pow(3) + a * x2 + b;
+
+        let mut output = if gx1.is_sqare() {
+            (x1, gx1.sqrt())
+        } else {
+            (x2, gx2.sqrt())
+        };
+
+        if u.sgn0() != output.1.sgn0() {
+            output.1 = output.1.neg();
+        }
+
+        output
+    }
+    fn clear_cofactor(self) -> Self {
+        self
+    }
 }
 
 #[cfg(test)]
@@ -158,60 +144,16 @@ mod tests {
     use lazy_static::lazy_static;
     use serde_json::Value;
 
-    fn load_vectors(path: &str) -> Value {
+    pub fn load_vectors(path: &str) -> Value {
         use std::fs;
         serde_json::from_str(&fs::read_to_string(path).expect("File not found.")).unwrap()
     }
 
     lazy_static! {
-        static ref VECTORS_EXPAND_MESSAGE_XMD_SHA256_38: serde_json::Value =
+        pub static ref VECTORS_EXPAND_MESSAGE_XMD_SHA256_38: serde_json::Value =
             load_vectors("expand_message_xmd_SHA256_38.json");
-        static ref VECTORS_P256_XMD_SHA256_SSWU_RO: serde_json::Value =
+        pub static ref VECTORS_P256_XMD_SHA256_SSWU_RO: serde_json::Value =
             load_vectors("P256_XMD_SHA-256_SSWU_RO_.json");
-    }
-
-    #[test]
-    fn test_dst_prime() {
-        let dst = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["DST"]
-            .as_str()
-            .unwrap();
-        let dst = dst.as_bytes();
-
-        let mut test_cases = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["tests"]
-            .as_array()
-            .unwrap()
-            .clone();
-        let test_case = test_cases.pop().unwrap();
-
-        let dst_prime_expected = test_case["DST_prime"].as_str().unwrap();
-        let dst_prime_expected = hex::decode(dst_prime_expected).unwrap();
-        assert_eq!(dst_prime_expected, dst_prime(&dst));
-    }
-
-    #[test]
-    fn test_msg_prime() {
-        let test_cases = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["tests"]
-            .as_array()
-            .unwrap()
-            .clone();
-        for test_case in test_cases.iter() {
-            let msg = test_case["msg"].as_str().unwrap();
-            let msg = msg.as_bytes();
-
-            let msg_prime_expected = test_case["msg_prime"].as_str().unwrap();
-            let msg_prime_expected = hex::decode(msg_prime_expected).unwrap();
-
-            let dst_prime = test_case["DST_prime"].as_str().unwrap();
-            let dst_prime = hex::decode(dst_prime).unwrap();
-
-            let len_in_bytes = test_case["len_in_bytes"]
-                .as_str()
-                .unwrap()
-                .trim_start_matches("0x");
-            let len_in_bytes = usize::from_str_radix(len_in_bytes, 16).unwrap();
-
-            assert_eq!(msg_prime_expected, msg_prime(msg, &dst_prime, len_in_bytes));
-        }
     }
 
     #[test]
@@ -240,7 +182,7 @@ mod tests {
 
             assert_eq!(
                 uniform_bytes_expected,
-                expand_message_xmd(msg, &dst, len_in_bytes)
+                P256_XMD_SHA256_SSWU_RO_::expand_message(msg, &dst, len_in_bytes)
             );
         }
     }
@@ -266,7 +208,7 @@ mod tests {
             let u1_expected = u[1].as_str().unwrap().trim_start_matches("0x");
             let u1_expected = P256FieldElement::from_be_bytes(&hex::decode(u1_expected).unwrap());
 
-            let u_real = hash_to_field(msg, dst, 2);
+            let u_real = P256_XMD_SHA256_SSWU_RO_::hash_to_field(msg, dst, 2);
             assert_eq!(u_real.len(), 2);
             assert_eq!(
                 u0_expected.as_ref(),
@@ -295,8 +237,8 @@ mod tests {
             let u1 = u[1].as_str().unwrap().trim_start_matches("0x");
             let u1 = P256FieldElement::from_be_bytes(&hex::decode(u1).unwrap());
 
-            let (q0_x, q0_y) = map_to_curve(&u0);
-            let (q1_x, q1_y) = map_to_curve(&u1);
+            let (q0_x, q0_y) = P256Point::map_to_curve(&u0);
+            let (q1_x, q1_y) = P256Point::map_to_curve(&u1);
 
             let q0_expected = &test_case["Q0"];
             let q0_x_expected = q0_expected["x"].as_str().unwrap().trim_start_matches("0x");
@@ -342,7 +284,7 @@ mod tests {
             let p_y_expected = p_expected["y"].as_str().unwrap().trim_start_matches("0x");
             let p_y_expected = P256FieldElement::from_be_bytes(&hex::decode(p_y_expected).unwrap());
 
-            let (x, y) = hash_to_curve(msg, dst);
+            let (x, y) = P256_XMD_SHA256_SSWU_RO_::hash_to_curve(msg, dst);
 
             // assert!(!inf, "Point should not be infinite");
             assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
