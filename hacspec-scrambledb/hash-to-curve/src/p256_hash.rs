@@ -16,7 +16,6 @@ impl HashToCurveSuite for P256_XMD_SHA256_SSWU_RO_ {
 
     type BaseField = P256FieldElement;
     type OutputCurve = P256Point;
-    type Hash = SHA256;
 
     fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8> {
         expand_message_xmd(
@@ -42,6 +41,38 @@ impl HashToCurveSuite for P256_XMD_SHA256_SSWU_RO_ {
     }
 }
 
+#[allow(non_camel_case_types)]
+pub struct P256_XMD_SHA256_SSWU_NU_ {}
+
+impl HashToCurveSuite for P256_XMD_SHA256_SSWU_NU_ {
+    const ID: &'static str = "P256_XMD:SHA-256_SSWU_NU_";
+    const K: usize = 128;
+    const L: usize = 48;
+
+    type BaseField = P256FieldElement;
+    type OutputCurve = P256Point;
+
+    fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8> {
+        expand_message_xmd(
+            msg,
+            dst,
+            len_in_bytes,
+            SHA256::B_IN_BYTES,
+            SHA256::S_IN_BYTES,
+            SHA256::hash,
+        )
+    }
+
+    fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<P256FieldElement> {
+        hash_to_field_prime_order::<P256FieldElement,32>(msg, dst, count, Self::L, Self::expand_message)
+    }
+
+    fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Self::OutputCurve {
+        let u = Self::hash_to_field(msg, dst, 1);
+        let q = P256Point::map_to_curve(&u[0]);
+        P256Point::clear_cofactor(q)
+    }
+}
 
 impl PrimeField<p256::P256FieldElement, 32> for P256FieldElement {
     /// This function returns `true` whenever the value `x` is a square in the field F. By Euler's criterion, this function can be calculated in constant time as
@@ -151,9 +182,12 @@ mod tests {
 
     lazy_static! {
         pub static ref VECTORS_EXPAND_MESSAGE_XMD_SHA256_38: serde_json::Value =
-            load_vectors("expand_message_xmd_SHA256_38.json");
+            load_vectors("vectors/expand_message_xmd_SHA256_38.json");
         pub static ref VECTORS_P256_XMD_SHA256_SSWU_RO: serde_json::Value =
-            load_vectors("P256_XMD_SHA-256_SSWU_RO_.json");
+            load_vectors("vectors/P256_XMD:SHA-256_SSWU_RO_.json");
+	pub static ref VECTORS_P256_XMD_SHA256_SSWU_NU: serde_json::Value =
+            load_vectors("vectors/P256_XMD:SHA-256_SSWU_NU_.json");
+
     }
 
     #[test]
@@ -266,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_to_curve() {
+    fn test_hash_to_curve_uniform() {
         let dst = VECTORS_P256_XMD_SHA256_SSWU_RO["dst"].as_str().unwrap();
         let dst = dst.as_bytes();
         let test_cases = VECTORS_P256_XMD_SHA256_SSWU_RO["vectors"]
@@ -285,6 +319,33 @@ mod tests {
             let p_y_expected = P256FieldElement::from_be_bytes(&hex::decode(p_y_expected).unwrap());
 
             let (x, y) = P256_XMD_SHA256_SSWU_RO_::hash_to_curve(msg, dst);
+
+            // assert!(!inf, "Point should not be infinite");
+            assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
+            assert_eq!(p_y_expected.as_ref(), y.as_ref(), "y-coordinate incorrect");
+        }
+    }
+
+        #[test]
+    fn test_hash_to_curve_nonuniform() {
+        let dst = VECTORS_P256_XMD_SHA256_SSWU_NU["dst"].as_str().unwrap();
+        let dst = dst.as_bytes();
+        let test_cases = VECTORS_P256_XMD_SHA256_SSWU_NU["vectors"]
+            .as_array()
+            .unwrap()
+            .clone();
+
+        for test_case in test_cases.iter() {
+            let msg = test_case["msg"].as_str().unwrap();
+            let msg = msg.as_bytes();
+
+            let p_expected = &test_case["P"];
+            let p_x_expected = p_expected["x"].as_str().unwrap().trim_start_matches("0x");
+            let p_x_expected = P256FieldElement::from_be_bytes(&hex::decode(p_x_expected).unwrap());
+            let p_y_expected = p_expected["y"].as_str().unwrap().trim_start_matches("0x");
+            let p_y_expected = P256FieldElement::from_be_bytes(&hex::decode(p_y_expected).unwrap());
+
+            let (x, y) = P256_XMD_SHA256_SSWU_NU_::hash_to_curve(msg, dst);
 
             // assert!(!inf, "Point should not be infinite");
             assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");

@@ -1,12 +1,15 @@
 use libcrux::digest::{hash, Algorithm};
 
+/// This trait collects relevant information about the hash function `H` that
+/// is to instantiate a `hash-to-curve` suite.
 pub trait HashAlgorithm {
-    /// b / 8 for b the output size of H in bits
+    /// The output size of `H` in bytes, i.e. b / 8, for b the output size of `H` in bits.
     const B_IN_BYTES: usize;
 
-    /// the input block size of H in bytes
+    /// The input block size of `H` in bytes.
     const S_IN_BYTES: usize;
 
+    /// A wrapper around the actual hash function.
     fn hash(payload: &[u8]) -> Vec<u8>;
 }
 
