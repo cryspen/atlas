@@ -2,7 +2,7 @@
 | E            | Suites                            | Implemented?                        |
 |--------------|-----------------------------------|-------------------------------------|
 | NIST P-256   | P256_XMD:SHA-256_SSWU_RO_         | ✅                                  |
-|              | P256_XMD:SHA-256_SSWU_NU_         | ❌ (missing non-uniform encoding)   |
+|              | P256_XMD:SHA-256_SSWU_NU_         | ✅                                  |
 | NIST P-384   | P384_XMD:SHA-384_SSWU_RO_         | ❌  (missing curve specs)           |
 |              | P384_XMD:SHA-384_SSWU_NU_         | ❌ (+ missing non-uniform encoding) |
 | NIST P-521   | P521_XMD:SHA-512_SSWU_RO_         | ❌  (missing curve specs)           |
@@ -21,7 +21,7 @@
 |              | BLS12381G1_XMD:SHA-256_SSWU_NU_   | ❌ (+ missing non-uniform encoding) |
 | BLS12-381 G2 | BLS12381G2_XMD:SHA-256_SSWU_RO_   | ❌  (curve specs need extending)    |
 |              | BLS12381G2_XMD:SHA-256_SSWU_NU_   | ❌ (+ missing non-uniform encoding) |
-|              |                                   |                                    |
+|              |                                   |                                     |
 
 
 
