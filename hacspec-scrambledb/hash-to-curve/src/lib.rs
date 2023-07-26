@@ -13,11 +13,11 @@
 //! * Comments are all code because of indentation
 
 #![doc = include_str!("../Readme.md")]
-#![warn(missing_docs)]
-#![warn(rustdoc::missing_crate_level_docs)]
+// #![warn(missing_docs)]
+// #![warn(rustdoc::missing_crate_level_docs)]
 
 mod hacspec_helper;
-use hacspec_helper::*;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
