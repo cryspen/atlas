@@ -10,9 +10,7 @@ edition = "2021"
 natmod = { path = "../natmod" }
 # XXX: Added the P256 spec so you don't need it in here
 p256 = { path = "../p256" }
-lazy_static = "1.4.0"
 libcrux = { git = "https://github.com/cryspen/libcrux" }
-
 
 
 [dev-dependencies]

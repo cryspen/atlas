@@ -271,19 +271,11 @@ fn strxor(a: &[u8], b: &[u8]) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::hasher::{HashAlgorithm, SHA256};
-    use lazy_static::lazy_static;
     use serde_json::Value;
 
     pub fn load_vectors(path: &str) -> Value {
         use std::fs;
         serde_json::from_str(&fs::read_to_string(path).expect("File not found.")).unwrap()
-    }
-
-    lazy_static! {
-        pub static ref VECTORS_EXPAND_MESSAGE_XMD_SHA256_38: serde_json::Value =
-            load_vectors("expand_message_xmd_SHA256_38.json");
-        pub static ref VECTORS_P256_XMD_SHA256_SSWU_RO: serde_json::Value =
-            load_vectors("P256_XMD_SHA-256_SSWU_RO_.json");
     }
 
     /// Helper function to assemble `msg_prime`.
@@ -312,12 +304,15 @@ mod tests {
 
     #[test]
     fn test_dst_prime() {
-        let dst = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["DST"]
+        let vectors_expand_message_xmd_sha256_38 =
+            load_vectors("expand_message_xmd_SHA256_38.json");
+
+        let dst = vectors_expand_message_xmd_sha256_38["DST"]
             .as_str()
             .unwrap();
         let dst = dst.as_bytes();
 
-        let mut test_cases = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["tests"]
+        let mut test_cases = vectors_expand_message_xmd_sha256_38["tests"]
             .as_array()
             .unwrap()
             .clone();
@@ -330,7 +325,10 @@ mod tests {
 
     #[test]
     fn test_msg_prime() {
-        let test_cases = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["tests"]
+        let vectors_expand_message_xmd_sha256_38 =
+            load_vectors("expand_message_xmd_SHA256_38.json");
+
+        let test_cases = vectors_expand_message_xmd_sha256_38["tests"]
             .as_array()
             .unwrap()
             .clone();
@@ -359,12 +357,15 @@ mod tests {
 
     #[test]
     fn test_expand_message_xmd() {
-        let dst = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["DST"]
+        let vectors_expand_message_xmd_sha256_38 =
+            load_vectors("expand_message_xmd_SHA256_38.json");
+
+        let dst = vectors_expand_message_xmd_sha256_38["DST"]
             .as_str()
             .unwrap();
         let dst = dst.as_bytes();
 
-        let test_cases = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["tests"]
+        let test_cases = vectors_expand_message_xmd_sha256_38["tests"]
             .as_array()
             .unwrap()
             .clone();

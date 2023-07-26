@@ -177,7 +177,6 @@ impl PrimeCurveWeierstrass for P256Point {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lazy_static::lazy_static;
     use serde_json::Value;
 
     pub fn load_vectors(path: &str) -> Value {
@@ -185,23 +184,17 @@ mod tests {
         serde_json::from_str(&fs::read_to_string(path).expect("File not found.")).unwrap()
     }
 
-    lazy_static! {
-        pub static ref VECTORS_EXPAND_MESSAGE_XMD_SHA256_38: serde_json::Value =
-            load_vectors("vectors/expand_message_xmd_SHA256_38.json");
-        pub static ref VECTORS_P256_XMD_SHA256_SSWU_RO: serde_json::Value =
-            load_vectors("vectors/P256_XMD:SHA-256_SSWU_RO_.json");
-        pub static ref VECTORS_P256_XMD_SHA256_SSWU_NU: serde_json::Value =
-            load_vectors("vectors/P256_XMD:SHA-256_SSWU_NU_.json");
-    }
-
     #[test]
     fn test_expand_message_xmd() {
-        let dst = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["DST"]
+        let vectors_expand_message_xmd_sha256_38 =
+            load_vectors("vectors/expand_message_xmd_SHA256_38.json");
+
+        let dst = vectors_expand_message_xmd_sha256_38["DST"]
             .as_str()
             .unwrap();
         let dst = dst.as_bytes();
 
-        let test_cases = VECTORS_EXPAND_MESSAGE_XMD_SHA256_38["tests"]
+        let test_cases = vectors_expand_message_xmd_sha256_38["tests"]
             .as_array()
             .unwrap()
             .clone();
@@ -227,10 +220,13 @@ mod tests {
 
     #[test]
     fn test_hash_to_field() {
-        let dst = VECTORS_P256_XMD_SHA256_SSWU_RO["dst"].as_str().unwrap();
+        let vectors_p256_xmd_sha256_sswu_ro =
+            load_vectors("vectors/P256_XMD:SHA-256_SSWU_RO_.json");
+
+        let dst = vectors_p256_xmd_sha256_sswu_ro["dst"].as_str().unwrap();
         let dst = dst.as_bytes();
 
-        let test_cases = VECTORS_P256_XMD_SHA256_SSWU_RO["vectors"]
+        let test_cases = vectors_p256_xmd_sha256_sswu_ro["vectors"]
             .as_array()
             .unwrap()
             .clone();
@@ -263,7 +259,10 @@ mod tests {
 
     #[test]
     fn test_map_to_curve() {
-        let test_cases = VECTORS_P256_XMD_SHA256_SSWU_RO["vectors"]
+        let vectors_p256_xmd_sha256_sswu_ro =
+            load_vectors("vectors/P256_XMD:SHA-256_SSWU_RO_.json");
+
+        let test_cases = vectors_p256_xmd_sha256_sswu_ro["vectors"]
             .as_array()
             .unwrap()
             .clone();
@@ -305,9 +304,12 @@ mod tests {
 
     #[test]
     fn test_hash_to_curve_uniform() {
-        let dst = VECTORS_P256_XMD_SHA256_SSWU_RO["dst"].as_str().unwrap();
+        let vectors_p256_xmd_sha256_sswu_ro =
+            load_vectors("vectors/P256_XMD:SHA-256_SSWU_RO_.json");
+
+        let dst = vectors_p256_xmd_sha256_sswu_ro["dst"].as_str().unwrap();
         let dst = dst.as_bytes();
-        let test_cases = VECTORS_P256_XMD_SHA256_SSWU_RO["vectors"]
+        let test_cases = vectors_p256_xmd_sha256_sswu_ro["vectors"]
             .as_array()
             .unwrap()
             .clone();
@@ -332,9 +334,12 @@ mod tests {
 
     #[test]
     fn test_hash_to_curve_nonuniform() {
-        let dst = VECTORS_P256_XMD_SHA256_SSWU_NU["dst"].as_str().unwrap();
+        let vectors_p256_xmd_sha256_sswu_nu =
+            load_vectors("vectors/P256_XMD:SHA-256_SSWU_NU_.json");
+
+        let dst = vectors_p256_xmd_sha256_sswu_nu["dst"].as_str().unwrap();
         let dst = dst.as_bytes();
-        let test_cases = VECTORS_P256_XMD_SHA256_SSWU_NU["vectors"]
+        let test_cases = vectors_p256_xmd_sha256_sswu_nu["vectors"]
             .as_array()
             .unwrap()
             .clone();
