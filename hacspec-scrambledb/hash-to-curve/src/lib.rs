@@ -18,14 +18,18 @@
 
 mod hacspec_helper;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     InvalidEll,
 }
 
+mod bls12_381;
+pub mod bls12_381_hash;
 pub mod expand_message;
 pub mod hash_suite;
 pub mod hasher;
 pub mod p256_hash;
-pub mod prime_field;
+pub mod prime_curve;
+
+#[cfg(test)]
+mod test_utils;

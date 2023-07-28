@@ -30,3 +30,17 @@ impl FunctionalVec for &[u8] {
         out
     }
 }
+
+pub trait Conversions {
+    fn to_le_bytes(&self) -> Vec<u8>;
+}
+
+impl<const LEN: usize> Conversions for [u64; LEN] {
+    fn to_le_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(LEN * 8);
+        for item in self {
+            out.extend_from_slice(&item.to_le_bytes());
+        }
+        out
+    }
+}

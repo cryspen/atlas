@@ -1,16 +1,31 @@
 // TODO: Add comments about what this is and where the spec is.
 
-use crate::expand_message::expand_message_xmd;
-use crate::hash_suite::HashToCurve;
+use crate::hash_suite::{EncodeToCurve, HashToCurve, HashToField};
 use crate::hasher::SHA256;
-use crate::prime_field::PrimeField;
+use crate::prime_curve::{MapToCurve, MapToCurveWeierstrass, PrimeField};
 use crate::Error;
+use crate::{expand_message::expand_message_xmd, hash_suite::Ciphersuite};
 use p256::{point_add, NatMod, P256FieldElement, P256Point};
 
+/// # 8.2 Suites for NIST P-256
+///
+/// `P256_XMD:SHA-256_SSWU_RO_`
+///
+/// [`P256_XMD:SHA-256_SSWU_NU_`](P256_XMD_SHA256_SSWU_NU) is identical to `P256_XMD:SHA-256_SSWU_RO_`,
+/// except that the encoding type is encode_to_curve (Section 3).
 #[allow(non_camel_case_types)]
 pub struct P256_XMD_SHA256_SSWU_RO {}
 
-impl P256_XMD_SHA256_SSWU_RO {
+impl Ciphersuite for P256_XMD_SHA256_SSWU_RO {
+    const ID: &'static str = "P256_XMD:SHA-256_SSWU_RO_";
+    const K: usize = 128;
+    const L: usize = 48;
+
+    type BaseField = P256FieldElement;
+    type OutputCurve = P256Point;
+}
+
+impl HashToField for P256_XMD_SHA256_SSWU_RO {
     fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256FieldElement>, Error> {
         let len_in_bytes = count * Self::L;
         let uniform_bytes = expand_message_xmd::<SHA256>(msg, dst, len_in_bytes)?;
@@ -23,13 +38,6 @@ impl P256_XMD_SHA256_SSWU_RO {
 }
 
 impl HashToCurve for P256_XMD_SHA256_SSWU_RO {
-    const ID: &'static str = "P256_XMD:SHA-256_SSWU_RO_";
-    const K: usize = 128;
-    const L: usize = 48;
-
-    type BaseField = P256FieldElement;
-    type OutputCurve = P256Point;
-
     fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<Self::OutputCurve, Error> {
         let u = Self::hash_to_field(msg, dst, 2)?;
         let q0 = P256Point::map_to_curve(&u[0]);
@@ -42,7 +50,16 @@ impl HashToCurve for P256_XMD_SHA256_SSWU_RO {
 #[allow(non_camel_case_types)]
 pub struct P256_XMD_SHA256_SSWU_NU {}
 
-impl P256_XMD_SHA256_SSWU_NU {
+impl Ciphersuite for P256_XMD_SHA256_SSWU_NU {
+    const ID: &'static str = "P256_XMD:SHA-256_SSWU_NU_";
+    const K: usize = 128;
+    const L: usize = 48;
+
+    type BaseField = P256FieldElement;
+    type OutputCurve = P256Point;
+}
+
+impl HashToField for P256_XMD_SHA256_SSWU_NU {
     fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256FieldElement>, Error> {
         let len_in_bytes = count * Self::L;
         let uniform_bytes = expand_message_xmd::<SHA256>(msg, dst, len_in_bytes)?;
@@ -54,15 +71,8 @@ impl P256_XMD_SHA256_SSWU_NU {
     }
 }
 
-impl HashToCurve for P256_XMD_SHA256_SSWU_NU {
-    const ID: &'static str = "P256_XMD:SHA-256_SSWU_NU_";
-    const K: usize = 128;
-    const L: usize = 48;
-
-    type BaseField = P256FieldElement;
-    type OutputCurve = P256Point;
-
-    fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<Self::OutputCurve, Error> {
+impl EncodeToCurve for P256_XMD_SHA256_SSWU_NU {
+    fn encode_to_curve(msg: &[u8], dst: &[u8]) -> Result<Self::OutputCurve, Error> {
         let u = Self::hash_to_field(msg, dst, 1)?;
         let q = P256Point::map_to_curve(&u[0]);
         Ok(P256Point::clear_cofactor(q))
@@ -111,19 +121,24 @@ impl PrimeField for P256FieldElement {
     }
 }
 
-trait PrimeCurveWeierstrass {
-    type BaseField: PrimeField;
+impl MapToCurve for P256Point {
+    type BaseField = P256FieldElement;
 
-    fn map_to_curve(fe: &Self::BaseField) -> Self;
-    fn clear_cofactor(self) -> Self;
+    // Simplified Shallue-van de Woestijne-Ulas method
+    // TODO: Can I implement this generically?
+    fn map_to_curve(u: &Self::BaseField) -> Self {
+        P256Point::sswu(u)
+    }
 
-    fn weierstrass_a() -> Self::BaseField;
-    fn weierstrass_b() -> Self::BaseField;
-    fn sswu_z() -> Self::BaseField;
+    fn clear_cofactor(self) -> Self {
+        self
+    }
 }
 
-impl PrimeCurveWeierstrass for P256Point {
-    type BaseField = P256FieldElement;
+impl MapToCurveWeierstrass for P256Point {
+    fn sswu(u: &Self::BaseField) -> Self {
+        sswu(u)
+    }
 
     fn weierstrass_a() -> Self::BaseField {
         P256FieldElement::from_u128(3u128).neg()
@@ -138,88 +153,47 @@ impl PrimeCurveWeierstrass for P256Point {
     fn sswu_z() -> Self::BaseField {
         P256FieldElement::from_u128(10u128).neg()
     }
+}
 
-    // Simplified Shallue-van de Woestijne-Ulas method
-    // TODO: Can I implement this generically?
-    fn map_to_curve(u: &Self::BaseField) -> Self {
-        let a = Self::weierstrass_a();
-        let b = Self::weierstrass_b();
-        let z = Self::sswu_z();
+/// # 6.6.2. Simplified Shallue-van de Woestijne-Ulas method
+/// 
+fn sswu<const LEN: usize, Field: PrimeField<{ LEN }>>(
+    u: &Field,
+    a: &Field,
+    b: &Field,
+    z: Field,
+) -> (Field, Field) {
+    let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
+    let x1 = if tv1 == P256FieldElement::zero() {
+        b * (z * a).inv()
+    } else {
+        (b.neg() * a.inv()) * (tv1 + P256FieldElement::from_u128(1u128))
+    };
 
-        let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
-        let x1 = if tv1 == P256FieldElement::zero() {
-            b * (z * a).inv()
-        } else {
-            (b.neg() * a.inv()) * (tv1 + P256FieldElement::from_u128(1u128))
-        };
+    let gx1 = x1.pow(3) + a * x1 + b;
+    let x2 = z * u.pow(2) * x1;
+    let gx2 = x2.pow(3) + a * x2 + b;
 
-        let gx1 = x1.pow(3) + a * x1 + b;
-        let x2 = z * u.pow(2) * x1;
-        let gx2 = x2.pow(3) + a * x2 + b;
+    let mut output = if gx1.is_square() {
+        (x1, gx1.sqrt())
+    } else {
+        (x2, gx2.sqrt())
+    };
 
-        let mut output = if gx1.is_square() {
-            (x1, gx1.sqrt())
-        } else {
-            (x2, gx2.sqrt())
-        };
-
-        if u.sgn0() != output.1.sgn0() {
-            output.1 = output.1.neg();
-        }
-
-        output
+    if u.sgn0() != output.1.sgn0() {
+        output.1 = output.1.neg();
     }
-    fn clear_cofactor(self) -> Self {
-        self
-    }
+
+    output
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
-
-    pub fn load_vectors(path: &str) -> Value {
-        use std::fs;
-        serde_json::from_str(&fs::read_to_string(path).expect("File not found.")).unwrap()
-    }
+    use crate::test_utils::*;
 
     #[test]
-    fn test_expand_message_xmd() {
-        let vectors_expand_message_xmd_sha256_38 =
-            load_vectors("vectors/expand_message_xmd_SHA256_38.json");
-
-        let dst = vectors_expand_message_xmd_sha256_38["DST"]
-            .as_str()
-            .unwrap();
-        let dst = dst.as_bytes();
-
-        let test_cases = vectors_expand_message_xmd_sha256_38["tests"]
-            .as_array()
-            .unwrap()
-            .clone();
-        for test_case in test_cases.iter() {
-            let msg = test_case["msg"].as_str().unwrap();
-            let msg = msg.as_bytes();
-
-            let len_in_bytes = test_case["len_in_bytes"]
-                .as_str()
-                .unwrap()
-                .trim_start_matches("0x");
-            let len_in_bytes = usize::from_str_radix(len_in_bytes, 16).unwrap();
-
-            let uniform_bytes_expected = test_case["uniform_bytes"].as_str().unwrap();
-            let uniform_bytes_expected = hex::decode(uniform_bytes_expected).unwrap();
-
-            assert_eq!(
-                uniform_bytes_expected,
-                expand_message_xmd::<SHA256>(msg, &dst, len_in_bytes).unwrap()
-            );
-        }
-    }
-
-    #[test]
-    fn test_hash_to_field() {
+    fn p256_xmd_sha256_sswu_ro_hash_to_field() {
         let vectors_p256_xmd_sha256_sswu_ro =
             load_vectors("vectors/P256_XMD:SHA-256_SSWU_RO_.json");
 
@@ -258,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn test_map_to_curve() {
+    fn p256_xmd_sha256_sswu_ro_map_to_curve() {
         let vectors_p256_xmd_sha256_sswu_ro =
             load_vectors("vectors/P256_XMD:SHA-256_SSWU_RO_.json");
 
@@ -303,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_to_curve_uniform() {
+    fn p256_xmd_sha256_sswu_ro_to_curve_uniform() {
         let vectors_p256_xmd_sha256_sswu_ro =
             load_vectors("vectors/P256_XMD:SHA-256_SSWU_RO_.json");
 
@@ -354,7 +328,7 @@ mod tests {
             let p_y_expected = p_expected["y"].as_str().unwrap().trim_start_matches("0x");
             let p_y_expected = P256FieldElement::from_be_bytes(&hex::decode(p_y_expected).unwrap());
 
-            let (x, y) = P256_XMD_SHA256_SSWU_NU::hash_to_curve(msg, dst).unwrap();
+            let (x, y) = P256_XMD_SHA256_SSWU_NU::encode_to_curve(msg, dst).unwrap();
 
             // assert!(!inf, "Point should not be infinite");
             assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
