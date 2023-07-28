@@ -1,5 +1,6 @@
 # Summary
 
+
 - [Introduction](./introduction.md)
 # Security Notions
 - [Attackers & Corruption Strategies](./attackers.md)
@@ -9,7 +10,7 @@
 - [Secret Sharing Schemes](./secret_sharing.md)
 - [Garbled Circuits](./garbled_circuits.md)
 - [Implemented Schemes](./implementations.md)
-# Specialized MPC Systems 
+# Specialized MPC Systems
 - [Private Set Intersection](./psi.md)
 - [Threshold Cryptography](./threshold.md)
 - [MPC for Machine Learning](./ml.md)
