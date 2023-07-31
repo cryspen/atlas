@@ -1,12 +1,6 @@
-/// A trait collecting information about a given `hash-to-curve`
-/// suite.
-///
-/// NOTE: At the moment, the following restrictions apply:
-///
-/// 	 Curve must be over a prime order field.
-/// 	 Suite must specify uniform output encoding.
-///
-pub trait HashToCurveSuite {
+use crate::Error;
+
+pub trait Ciphersuite {
     /// The SuiteID.
     const ID: &'static str;
 
@@ -21,27 +15,27 @@ pub trait HashToCurveSuite {
 
     /// A field of prime characteristic p ≠ 2.
     type BaseField;
+}
 
-    ///    `expand_message`` is a function that generates a uniformly random byte
-    ///    string. More information can be found in the [expand_message module](mod@crate::expand_message).
-    fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Vec<u8>;
+/// encode_to_curve is a nonuniform encoding from byte strings to points in G. That is, the distribution of its output is not uniformly random in G: the set of possible outputs of encode_to_curve is only a fraction of the points in G, and some points in this set are more likely to be output than others. Section 10.4 gives a more precise definition of encode_to_curve's output distribution.
+pub trait EncodeToCurve: Ciphersuite {
+    fn encode_to_curve (msg: &[u8], dst: &[u8]) -> Result<Self::OutputCurve, Error>;
+}
 
-    /// The function hash_to_field hashes arbitrary-length byte strings to
-    /// a list of one or more elements of a finite field F; its
-    /// implementation is defined in Section 5.
-    ///
-    /// ``` text
-    /// 	hash_to_field(msg, count)
-    ///
-    ///       Inputs:
-    ///       - msg, a byte string containing the message to hash.
-    ///       - count, the number of elements of F to output.
-    ///
-    ///       Outputs:
-    ///       - (u_0, ..., u_(count - 1)), a list of field elements.
-    /// ```
-    fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Vec<Self::BaseField>;
 
+pub trait HashToField: Ciphersuite {
+    fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<Self::BaseField>, Error>;
+}
+
+/// A trait collecting information about a given `hash-to-curve`
+/// suite.
+///
+/// NOTE: At the moment, the following restrictions apply:
+///
+/// * Curve must be over a prime order field.
+/// * Suite must specify uniform output encoding.
+///
+pub trait HashToCurve: Ciphersuite {
     /// `hash_to_curve` is a uniform encoding from byte strings to points in
     /// G.  That is, the distribution of its output is statistically close
     /// to uniform in G.
@@ -57,5 +51,5 @@ pub trait HashToCurveSuite {
     ///       Input: msg, an arbitrary-length byte string.
     ///       Output: P, a point in G.
     /// ```
-    fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Self::OutputCurve;
+    fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<Self::OutputCurve, Error>;
 }

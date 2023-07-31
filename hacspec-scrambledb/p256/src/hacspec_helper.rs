@@ -115,6 +115,15 @@ pub trait NatMod<const LEN: usize> {
         out.fadd(Self::from_u128(1))
     }
 
+    /// One element
+    fn two() -> Self
+    where
+        Self: Sized,
+    {
+        let out = Self::new(Self::ZERO);
+        out.fadd(Self::from_u128(2))
+    }
+
     fn bit(&self, bit: u128) -> bool {
         let val = num_bigint::BigUint::from_bytes_be(self.value());
         val.bit(bit.try_into().unwrap())

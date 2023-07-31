@@ -1,10 +1,13 @@
 //! // This trait lives in the library
+//!
+//! ```
 //! pub trait NatModTrait<T> {
 //!     const MODULUS: T;
 //! }
 //!
 //! #[nat_mod("123456", 10)]
 //! struct MyNatMod {}
+//! ```
 
 use hex::FromHex;
 use proc_macro::TokenStream;
