@@ -1,4 +1,5 @@
 // BLS: y^2 = x^3 + 4
+#![allow(unused)]
 
 use crate::hacspec_helper::*;
 use natmod::nat_mod;
@@ -11,8 +12,10 @@ pub struct BLS12FieldElement {}
 pub struct Scalar {}
 
 //bool is "isPointAtInfinity"
+#[allow(non_camel_case_types)]
 pub type BLS12_G1 = (BLS12FieldElement, BLS12FieldElement, bool);
 pub type Fp2 = (BLS12FieldElement, BLS12FieldElement); //(10, 8) = (10+8u) : u² = -1
+#[allow(non_camel_case_types)]
 pub type BLS12_G2 = (Fp2, Fp2, bool);
 pub type Fp6 = (Fp2, Fp2, Fp2); //v³ = u + 1
 pub type Fp12 = (Fp6, Fp6); //w² = v
