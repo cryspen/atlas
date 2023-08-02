@@ -137,7 +137,7 @@ pub fn expand_message_xof(
     S_IN_BYTES: usize,
     hash: fn(&[u8]) -> Vec<u8>,
 ) -> Vec<u8> {
-    unimplemented!()
+    todo!()
 }
 
 ///
