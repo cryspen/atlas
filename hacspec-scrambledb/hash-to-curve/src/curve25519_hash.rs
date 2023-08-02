@@ -10,21 +10,25 @@ mod tests {
     use crate::test_utils::*;
 
     #[test]
+    #[should_panic]
     fn curve25519_xmd_sha512_ell2_hash_to_field() {
 	todo!()
     }
 
     #[test]
+    #[should_panic]
     fn curve25519_xmd_sha512_ell2_map_to_curve() {
         todo!()
     }
 
     #[test]
+    #[should_panic]
     fn curve25519_xmd_sha512_ell2_ro_hash_to_curve() {
         todo!()
     }
 
     #[test]
+    #[should_panic]
     fn curve25519_xmd_sha512_ell2_nu_encode_to_curve() {
         todo!()
     }

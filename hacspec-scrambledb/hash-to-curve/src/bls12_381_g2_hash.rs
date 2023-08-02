@@ -145,16 +145,19 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn bls12381g2_xmd_sha256_sswu_ro_map_to_curve() {
         todo!()
     }
 
     #[test]
+    #[should_panic]
     fn bls12381g2_xmd_sha256_sswu_ro_hash_to_curve() {
         todo!()
     }
 
     #[test]
+    #[should_panic]
     fn bls12381g2_xmd_sha256_sswu_nu_encode_to_curve() {
         todo!()
     }
