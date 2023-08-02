@@ -12,7 +12,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn curve25519_xmd_sha512_ell2_hash_to_field() {
-	todo!()
+        todo!()
     }
 
     #[test]

@@ -2,7 +2,7 @@ use crate::bls12_381::*;
 use crate::expand_message::expand_message_xmd;
 use crate::hash_suite::{Ciphersuite, HashToCurve, HashToField};
 use crate::hasher::SHA256;
-use crate::prime_curve::{MapToCurve, PrimeCurve, Constructor};
+use crate::prime_curve::{Constructor, MapToCurve, PrimeCurve};
 use crate::Error;
 use p256::NatMod; // XXX: move to hacspec lib
 
@@ -23,11 +23,10 @@ impl Ciphersuite for BLS12381G2_XMD_SHA_256_SSWU_RO {
     }
 }
 
-
 impl Constructor<48, BLS12FieldElement> for Fp2 {
     fn from_coeffs(v: Vec<BLS12FieldElement>) -> Self {
-       assert_eq!(v.len(), 2);
-            (v[0], v[1])
+        assert_eq!(v.len(), 2);
+        (v[0], v[1])
     }
 }
 impl HashToField for BLS12381G2_XMD_SHA_256_SSWU_RO {

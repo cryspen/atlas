@@ -1,5 +1,5 @@
 use crate::{
-    hash_suite::{Ciphersuite, HashToCurve, HashToField, EncodeToCurve},
+    hash_suite::{Ciphersuite, EncodeToCurve, HashToCurve, HashToField},
     prime_curve::MapToCurve,
 };
 use p256::NatMod;
@@ -94,8 +94,7 @@ where
 pub fn test_hash_to_curve<const LEN: usize, C>()
 where
     C: HashToCurve,
-    <C as Ciphersuite>::BaseField:
-        NatMod<{ LEN }> + AsRef<[u8]>
+    <C as Ciphersuite>::BaseField: NatMod<{ LEN }> + AsRef<[u8]>,
 {
     let mut vector_path = std::path::Path::new("vectors").join(C::ID);
     vector_path.set_extension("json");
@@ -125,8 +124,8 @@ where
 
 pub fn test_encode_to_curve<const LEN: usize, C>()
 where
-     C: EncodeToCurve,
-     <C as Ciphersuite>::BaseField: NatMod<{ LEN }> + AsRef<[u8]>
+    C: EncodeToCurve,
+    <C as Ciphersuite>::BaseField: NatMod<{ LEN }> + AsRef<[u8]>,
 {
     let mut vector_path = std::path::Path::new("vectors").join(C::ID);
     vector_path.set_extension("json");
@@ -151,5 +150,5 @@ where
         // assert!(!inf, "Point should not be infinite");
         assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
         assert_eq!(p_y_expected.as_ref(), y.as_ref(), "y-coordinate incorrect");
-        }
- }
+    }
+}

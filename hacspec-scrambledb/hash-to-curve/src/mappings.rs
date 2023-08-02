@@ -139,7 +139,7 @@ pub fn sswu_m_eq_1<const LEN: usize, Fp: PrimeField<{ LEN }>>(
     z: Fp,
 ) -> (Fp, Fp)
 where
-    Fp: std::ops::Mul<Fp, Output = Fp> + std::ops::Add<Fp, Output = Fp> + PartialEq + Copy
+    Fp: std::ops::Mul<Fp, Output = Fp> + std::ops::Add<Fp, Output = Fp> + PartialEq + Copy,
 {
     let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
     let x1 = if tv1 == Fp::zero() {
@@ -173,8 +173,10 @@ pub fn sswu_m_eq_2<const LEN: usize, Fp: PrimeField<{ LEN }>>(
     z: (Fp, Fp),
 ) -> ((Fp, Fp), (Fp, Fp))
 where
-    Fp: std::ops::Mul<Fp, Output = Fp> + std::ops::Add<Fp, Output = Fp> + PartialEq + Copy
-{unimplemented!()}
+    Fp: std::ops::Mul<Fp, Output = Fp> + std::ops::Add<Fp, Output = Fp> + PartialEq + Copy,
+{
+    unimplemented!()
+}
 
 /// ### 6.6.3. Simplified SWU for AB == 0
 ///
@@ -242,7 +244,10 @@ pub fn sswu_ainvb_eq_1<const LEN: usize, Field: PrimeField<{ LEN }>>(
     isogeny_map: fn(Field, Field) -> (Field, Field),
 ) -> (Field, Field)
 where
-    Field: std::ops::Mul<Field, Output = Field> + std::ops::Add<Field, Output = Field> + PartialEq + Copy
+    Field: std::ops::Mul<Field, Output = Field>
+        + std::ops::Add<Field, Output = Field>
+        + PartialEq
+        + Copy,
 {
     let (x_prime, y_prime) = sswu_m_eq_1(u, isogeny_a, isogeny_b, isogeny_z);
     isogeny_map(x_prime, y_prime)
@@ -256,12 +261,14 @@ pub fn sswu_ainvb_eq_2<const LEN: usize, Field: PrimeField<{ LEN }>>(
     isogeny_map: fn((Field, Field), (Field, Field)) -> ((Field, Field), (Field, Field)),
 ) -> ((Field, Field), (Field, Field))
 where
-    Field: std::ops::Mul<Field, Output = Field> + std::ops::Add<Field, Output = Field> + PartialEq + Copy
+    Field: std::ops::Mul<Field, Output = Field>
+        + std::ops::Add<Field, Output = Field>
+        + PartialEq
+        + Copy,
 {
     let (x_prime, y_prime) = sswu_m_eq_2(u, isogeny_a, isogeny_b, isogeny_z);
     isogeny_map(x_prime, y_prime)
 }
-
 
 /// # 6.7 Mappings for Montgomery curves
 /// The mapping defined in this section applies to a target curve M defined by the equation

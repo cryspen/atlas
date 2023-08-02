@@ -21,14 +21,13 @@ mod hacspec_helper;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     InvalidEll,
-    InvalidAddition
+    InvalidAddition,
 }
 
-
-pub mod mappings;
 pub mod expand_message;
 pub mod hash_suite;
 pub mod hasher;
+pub mod mappings;
 
 pub mod prime_curve;
 
