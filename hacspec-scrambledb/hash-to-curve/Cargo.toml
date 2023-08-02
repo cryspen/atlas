@@ -14,5 +14,6 @@ libcrux = { git = "https://github.com/cryspen/libcrux" }
 
 
 [dev-dependencies]
-serde_json = "1.0.102"
-hex = "0.4.3"
+serde_json = { version = "1.0.102" }
+hex = { version = "0.4.3", features = ["serde"] }
+serde = { version = "1.0.180", features = ["derive"] }

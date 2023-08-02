@@ -71,7 +71,7 @@
 //! (Section 4) to compute multiplicative inverses, to avoid exceptional
 //! cases that result from attempting to compute the inverse of 0.
 
-use crate::prime_curve::PrimeField;
+use crate::prime_curve::{PrimeField, FieldArithmetic};
 
 /// 6.6. Mappings for Weierstrass curves
 ///
@@ -165,17 +165,38 @@ where
     output
 }
 
-#[allow(unused)]
-pub fn sswu_m_eq_2<const LEN: usize, Fp: PrimeField<{ LEN }>>(
-    u: &(Fp, Fp),
-    a: &(Fp, Fp),
-    b: &(Fp, Fp),
-    z: (Fp, Fp),
-) -> ((Fp, Fp), (Fp, Fp))
+/// # 6.6.2 Simplified Shallue-van de Woestijne-Ulas method
+pub fn map_to_curve_simple_swu<Fp: FieldArithmetic>(
+    u: &Fp,
+    a: &Fp,
+    b: &Fp,
+    z: Fp,
+) -> (Fp, Fp)
 where
-    Fp: std::ops::Mul<Fp, Output = Fp> + std::ops::Add<Fp, Output = Fp> + PartialEq + Copy,
+    Fp: std::ops::Mul<Fp, Output = Fp> + std::ops::Add<Fp, Output = Fp> + std::ops::Neg<Output=Fp> +PartialEq + Copy,
 {
-    unimplemented!()
+    let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
+    let x1 = if tv1 == Fp::zero() {
+        *b * (z * *a).inv()
+    } else {
+        (b.neg() * a.inv()) * (tv1 + Fp::from_u128(1u128))
+    };
+
+    let gx1 = x1.pow(3) + (*a) * x1 + (*b);
+    let x2 = z * u.pow(2) * x1;
+    let gx2 = x2.pow(3) + *a * x2 + *b;
+
+    let mut output = if gx1.is_square() {
+        (x1, gx1.sqrt())
+    } else {
+        (x2, gx2.sqrt())
+    };
+
+    if u.sgn0() != output.1.sgn0() {
+        output.1 = output.1.neg();
+    }
+
+    output
 }
 
 /// ### 6.6.3. Simplified SWU for AB == 0
@@ -236,6 +257,20 @@ where
 ///
 /// See [hash2curve-repo] or [WB19] Section 4.3 for details on
 /// implementing the isogeny map.
+pub fn sswu_ainvb<Field: FieldArithmetic>(
+    u: &Field,
+    isogeny_a: &Field,
+    isogeny_b: &Field,
+    isogeny_z: Field,
+    iso_map: fn(Field, Field) -> (Field, Field)
+) -> (Field, Field)
+where Field: std::ops::Mul<Field, Output = Field> + std::ops::Add<Field, Output = Field> + std::ops::Neg<Output=Field> +PartialEq + Copy,
+ {
+    let (x_prime, y_prime) = map_to_curve_simple_swu(u, isogeny_a, isogeny_b, isogeny_z);
+    iso_map(x_prime, y_prime)
+}
+
+
 pub fn sswu_ainvb_eq_1<const LEN: usize, Field: PrimeField<{ LEN }>>(
     u: &Field,
     isogeny_a: &Field,
@@ -253,22 +288,22 @@ where
     isogeny_map(x_prime, y_prime)
 }
 
-pub fn sswu_ainvb_eq_2<const LEN: usize, Field: PrimeField<{ LEN }>>(
-    u: &(Field, Field),
-    isogeny_a: &(Field, Field),
-    isogeny_b: &(Field, Field),
-    isogeny_z: (Field, Field),
-    isogeny_map: fn((Field, Field), (Field, Field)) -> ((Field, Field), (Field, Field)),
-) -> ((Field, Field), (Field, Field))
-where
-    Field: std::ops::Mul<Field, Output = Field>
-        + std::ops::Add<Field, Output = Field>
-        + PartialEq
-        + Copy,
-{
-    let (x_prime, y_prime) = sswu_m_eq_2(u, isogeny_a, isogeny_b, isogeny_z);
-    isogeny_map(x_prime, y_prime)
-}
+// pub fn sswu_ainvb_eq_2<const LEN: usize, Field: PrimeField<{ LEN }>>(
+//     u: &(Field, Field),
+//     isogeny_a: &(Field, Field),
+//     isogeny_b: &(Field, Field),
+//     isogeny_z: (Field, Field),
+//     isogeny_map: fn((Field, Field), (Field, Field)) -> ((Field, Field), (Field, Field)),
+// ) -> ((Field, Field), (Field, Field))
+// where
+//     Field: std::ops::Mul<Field, Output = Field>
+//         + std::ops::Add<Field, Output = Field>
+//         + PartialEq
+//         + Copy,
+// {
+//     let (x_prime, y_prime) = sswu_m_eq_2(u, isogeny_a, isogeny_b, isogeny_z);
+//     isogeny_map(x_prime, y_prime)
+// }
 
 /// # 6.7 Mappings for Montgomery curves
 /// The mapping defined in this section applies to a target curve M defined by the equation

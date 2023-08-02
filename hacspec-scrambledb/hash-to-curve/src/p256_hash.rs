@@ -2,7 +2,7 @@
 
 use crate::hash_suite::{EncodeToCurve, HashToCurve, HashToField};
 use crate::hasher::SHA256;
-use crate::prime_curve::{Constructor, MapToCurve, PrimeCurve, PrimeField};
+use crate::prime_curve::{Constructor, FieldArithmetic, MapToCurve, PrimeCurve, PrimeField};
 use crate::Error;
 use crate::{expand_message::expand_message_xmd, hash_suite::Ciphersuite};
 use p256::{NatMod, P256FieldElement, P256Point};
@@ -98,6 +98,44 @@ impl EncodeToCurve for P256_XMD_SHA256_SSWU_NU {
     }
 }
 
+impl FieldArithmetic for P256FieldElement {
+    fn is_square(&self) -> bool {
+        crate::prime_curve::is_square_m_eq_1(self)
+    }
+
+    fn sqrt(self) -> Self {
+        crate::prime_curve::sqrt_3mod4_m_eq_1(&self)
+    }
+
+    fn sgn0(self) -> bool {
+        crate::prime_curve::sgn0_m_eq_1(self)
+    }
+
+    fn inv(self) -> Self {
+        <P256FieldElement as NatMod<32>>::inv(self)
+    }
+
+    fn inv0(self) -> Self {
+        <P256FieldElement as NatMod<32>>::inv0(self)
+    }
+
+    fn pow(self, rhs: u128) -> Self {
+        <P256FieldElement as NatMod<32>>::pow(self, rhs)
+    }
+
+    fn zero() -> Self {
+        <P256FieldElement as NatMod<32>>::zero()
+    }
+
+    fn one() -> Self {
+        <P256FieldElement as NatMod<32>>::one()
+    }
+
+    fn from_u128(x: u128) -> Self {
+        <P256FieldElement as NatMod<32>>::from_u128(x)
+    }
+}
+
 impl PrimeField<32> for P256FieldElement {
     fn is_square(&self) -> bool {
         crate::prime_curve::is_square_m_eq_1(self)
@@ -128,13 +166,13 @@ impl MapToCurve for P256FieldElement {
     type TargetCurve = P256Point;
 
     fn map_to_curve(self) -> Self::TargetCurve {
-        crate::mappings::sswu_m_eq_1(
+        crate::mappings::map_to_curve_simple_swu(
             &self,
-            &P256FieldElement::from_u128(3u128).neg(),
+            &<P256FieldElement as FieldArithmetic>::from_u128(3u128).neg(),
             &P256FieldElement::from_hex(
                 "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
             ),
-            P256FieldElement::from_u128(10u128).neg(),
+            <P256FieldElement as FieldArithmetic>::from_u128(10u128).neg(),
         )
     }
 }
@@ -148,6 +186,11 @@ mod tests {
     fn p256_xmd_sha256_sswu_ro_hash_to_field() {
         test_hash_to_field::<32, P256_XMD_SHA256_SSWU_RO>()
     }
+
+    // #[test]
+    // fn p256_xmd_sha256_sswu_nu_hash_to_field() {
+    //     test_hash_to_field::<32, P256_XMD_SHA256_SSWU_NU>()
+    // }
 
     #[test]
     fn p256_xmd_sha256_sswu_ro_map_to_curve() {

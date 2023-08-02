@@ -1,3 +1,5 @@
+use std::fs::read_to_string;
+
 use crate::{
     hash_suite::{Ciphersuite, EncodeToCurve, HashToCurve, HashToField},
     prime_curve::MapToCurve,
@@ -6,8 +8,7 @@ use p256::NatMod;
 use serde_json::Value;
 
 pub fn load_vectors(path: &std::path::Path) -> Value {
-    use std::fs;
-    serde_json::from_str(&fs::read_to_string(path).expect("File not found.")).unwrap()
+    serde_json::from_str(&read_to_string(path).expect("File not found.")).unwrap()
 }
 
 pub fn test_hash_to_field<const LEN: usize, C>()
@@ -17,36 +18,37 @@ where
 {
     let mut vector_path = std::path::Path::new("vectors").join(C::ID);
     vector_path.set_extension("json");
-    let vectors = load_vectors(vector_path.as_path());
+    eprintln!(" Reading {}", vector_path.display());
 
-    let dst = vectors["dst"].as_str().unwrap();
-    let dst = dst.as_bytes();
+    let tests = load_vectors(vector_path.as_path());
+    let dst = tests["dst"].as_str().unwrap().as_bytes();
 
-    let test_cases = vectors["vectors"].as_array().unwrap().clone();
+    assert_eq!(tests["ciphersuite"].as_str().unwrap(), C::ID);
 
-    for test_case in test_cases.iter() {
+    for test_case in tests["vectors"].as_array().unwrap().iter() {
         let msg_str = test_case["msg"].as_str().unwrap();
-
         let msg = msg_str.as_bytes();
 
-        let u = test_case["u"].as_array().unwrap();
-        let u0_expected = u[0].as_str().unwrap().trim_start_matches("0x");
-        let u0_expected = C::BaseField::from_be_bytes(&hex::decode(u0_expected).unwrap());
-        let u1_expected = u[1].as_str().unwrap().trim_start_matches("0x");
-        let u1_expected = C::BaseField::from_be_bytes(&hex::decode(u1_expected).unwrap());
+        let u_expected: Vec<_> = test_case["u"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|u_i| {
+                let u_i = u_i.as_str().unwrap();
+                let u0_expected = u_i.trim_start_matches("0x");
+                C::BaseField::from_be_bytes(&hex::decode(u0_expected).unwrap())
+            })
+            .collect();
 
         let u_real = C::hash_to_field(msg, dst, 2).unwrap();
-        assert_eq!(u_real.len(), 2);
-        assert_eq!(
-            u0_expected.as_ref(),
-            u_real[0].as_ref(),
-            "u0 did not match for {msg_str}"
-        );
-        assert_eq!(
-            u1_expected.as_ref(),
-            u_real[1].as_ref(),
-            "u1 did not match for {msg_str}"
-        );
+        assert_eq!(u_real.len(), u_expected.len());
+        for (u_real, u_expected) in u_real.iter().zip(u_expected.iter()) {
+            assert_eq!(
+                u_expected.as_ref(),
+                u_real.as_ref(),
+                "u0 did not match for {msg_str}",
+            );
+        }
     }
 }
 

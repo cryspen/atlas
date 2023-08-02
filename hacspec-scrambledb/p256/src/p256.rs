@@ -34,6 +34,14 @@ pub fn jacobian_to_affine(p: P256Jacobian) -> Affine {
     (x, y)
 }
 
+impl std::ops::Neg for P256FieldElement {
+    type Output = P256FieldElement;
+
+    fn neg(self) -> Self::Output {
+        hacspec_helper::NatMod::neg(self)
+    }
+}
+
 pub fn affine_to_jacobian(p: Affine) -> P256Jacobian {
     let (x, y) = p;
     (x, y, P256FieldElement::from_u128(1))

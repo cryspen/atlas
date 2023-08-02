@@ -1,6 +1,18 @@
 use crate::Error;
 use p256::NatMod;
 
+pub trait FieldArithmetic {
+    fn is_square(&self) -> bool;
+    fn sqrt(self) -> Self;
+    fn sgn0(self) -> bool;
+    fn inv(self) -> Self;
+    fn inv0(self) -> Self;
+    fn pow(self, rhs: u128) -> Self;
+    fn zero() -> Self;
+    fn one() -> Self;
+    fn from_u128 (x: u128) -> Self;
+}
+
 pub trait PrimeField<const LEN: usize>: NatMod<{ LEN }> {
     fn is_square(&self) -> bool;
     fn sqrt(self) -> Self;

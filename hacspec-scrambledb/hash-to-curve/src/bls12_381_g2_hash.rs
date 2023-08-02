@@ -6,6 +6,19 @@ use crate::prime_curve::{Constructor, MapToCurve, PrimeCurve};
 use crate::Error;
 use p256::NatMod; // XXX: move to hacspec lib
 
+/// # 8.8.2
+///
+/// `BLS12381G2_XMD:SHA-256_SSWU_RO_`
+///
+/// `BLS12381G2_XMD:SHA-256_SSWU_NU_` is identical to BLS12381G2_XMD:SHA-256_SSWU_RO_,
+/// except that the encoding type is encode_to_curve (Section 3).
+///
+/// Note that the h_eff values for these suites are chosen for compatibility with
+/// the fast cofactor clearing method described by Budroni and Pintore ([BP17], Section 4.1),
+/// and summarized in Appendix G.3.
+///
+/// An optimized example implementation of the Simplified SWU mapping to the
+/// curve E' isogenous to BLS12-381 G2 is given in Appendix F.2.
 #[allow(non_camel_case_types)]
 pub struct BLS12381G2_XMD_SHA_256_SSWU_RO {}
 
@@ -63,6 +76,9 @@ impl MapToCurve for Fp2 {
     type TargetCurve = (Fp2, Fp2);
 
     fn map_to_curve(self) -> Self::TargetCurve {
+        // iso_a = 240 * I
+        //
+        // crate::mappings::sswu_ainvb(&self, isogeny_a, isogeny_b, isogeny_z, isogeny_map)
         todo!()
     }
 }
