@@ -1,6 +1,18 @@
 use crate::Error;
 use p256::NatMod;
 
+pub trait FieldArithmetic {
+    fn is_square(&self) -> bool;
+    fn sqrt(self) -> Self;
+    fn sgn0(self) -> bool;
+    fn inv(self) -> Self;
+    fn inv0(self) -> Self;
+    fn pow(self, rhs: u128) -> Self;
+    fn zero() -> Self;
+    fn one() -> Self;
+    fn from_u128 (x: u128) -> Self;
+}
+
 pub trait PrimeField<const LEN: usize>: NatMod<{ LEN }> {
     fn is_square(&self) -> bool;
     fn sqrt(self) -> Self;
@@ -30,10 +42,9 @@ pub trait PrimeCurve: Sized {
     fn point_add(lhs: Self, rhs: Self) -> Result<(Self::BaseField, Self::BaseField), Error>;
 }
 
-pub trait Constructor<const LEN:usize, Fp: PrimeField<{LEN}>> {
-     fn from_coeffs(v: Vec<Fp>) -> Self;
+pub trait Constructor<const LEN: usize, Fp: PrimeField<{ LEN }>> {
+    fn from_coeffs(v: Vec<Fp>) -> Self;
 }
-
 
 // I^2 + 1 = 0 in F
 /// ## I.5. is_square for F = GF(p^2)
@@ -69,7 +80,7 @@ pub trait Constructor<const LEN:usize, Fp: PrimeField<{LEN}>> {
 #[allow(non_snake_case)]
 pub fn is_square_m_eq_2<T: NatMod<{ LEN }>, const LEN: usize>(x: &(T, T), I: &T) -> bool
 where
-    T: PartialEq<T> + std::ops::Mul<T, Output = T> + std::ops::Sub<T, Output = T> + Copy
+    T: PartialEq<T> + std::ops::Mul<T, Output = T> + std::ops::Sub<T, Output = T> + Copy,
 {
     let (x_1, x_2) = x;
     let c1 = T::from_u128(1).neg() * T::from_u128(2).inv();
@@ -84,7 +95,7 @@ where
 
 pub fn is_square_m_eq_1<T: NatMod<{ LEN }>, const LEN: usize>(x: &T) -> bool
 where
-    T: PartialEq<T> + std::ops::Mul<T, Output = T> + Copy
+    T: PartialEq<T> + std::ops::Mul<T, Output = T> + Copy,
 {
     let exp = T::from_u128(1).neg() * T::from_u128(2).inv();
     let test = x.pow_felem(&exp);
@@ -99,7 +110,7 @@ where
 /// 2. return x^c1
 pub fn sqrt_3mod4_m_eq_1<T: NatMod<{ LEN }>, const LEN: usize>(x: &T) -> T
 where
-    T: PartialEq<T> + std::ops::Mul<T, Output = T> + Copy
+    T: PartialEq<T> + std::ops::Mul<T, Output = T> + Copy,
 {
     let c1 = T::one() * T::from_u128(4).inv();
     x.pow_felem(&c1)

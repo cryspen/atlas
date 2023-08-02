@@ -1,6 +1,6 @@
-use crate::Error;
 use crate::prime_curve::Constructor;
 use crate::prime_curve::PrimeField;
+use crate::Error;
 
 pub trait Ciphersuite {
     /// The SuiteID.
@@ -142,48 +142,72 @@ pub trait HashToCurve: Ciphersuite {
     fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<(Self::BaseField, Self::BaseField), Error>;
 }
 
+// trait Curve{
+//     fn hash_to_field();
+//     fn map_to_curve();
+//     fn clear_cofactor();
+// }
+// struct Point{}
+// /// hash_to_curve(msg)
+// /// 
+// /// Input: msg, an arbitrary-length byte string.
+// /// Output: P, a point in G.
+// /// 
+// /// Steps:
+// /// 1. u = hash_to_field(msg, 2)
+// /// 2. Q0 = map_to_curve(u[0])
+// /// 3. Q1 = map_to_curve(u[1])
+// /// 4. R = Q0 + Q1              # Point addition
+// /// 5. P = clear_cofactor(R)
+// /// 6. return P
+// fn hash_to_curve<C: Curve>(msg: &[u8], dst: &[u8]) -> Result<Point, Error> {
+//     let u = C::hash_to_field();
+//     // ...
+//     todo!()
+// }
 
-
-    /// ## 5.2.  hash_to_field implementation
-    ///
-    /// The following procedure implements hash_to_field.
-    ///
-    /// The expand_message parameter to this function MUST conform to the
-    /// requirements given in Section 5.3.  Section 3.1 discusses the
-    /// REQUIRED method for constructing DST, the domain separation tag.
-    /// Note that hash_to_field may fail (abort) if expand_message fails.
-    ///
-    /// hash_to_field(msg, count)
-    ///
-    /// Parameters:
-    /// - DST, a domain separation tag (see Section 3.1).
-    /// - F, a finite field of characteristic p and order q = p^m.
-    /// - p, the characteristic of F (see immediately above).
-    /// - m, the extension degree of F, m >= 1 (see immediately above).
-    /// - L = ceil((ceil(log2(p)) + k) / 8), where k is the security
-    ///   parameter of the suite (e.g., k = 128).
-    /// - expand_message, a function that expands a byte string and
-    ///   domain separation tag into a uniformly random byte string
-    ///   (see Section 5.3).
-    ///
-    /// Inputs:
-    /// - msg, a byte string containing the message to hash.
-    /// - count, the number of elements of F to output.
-    ///
-    /// Outputs:
-    /// - (u_0, ..., u_(count - 1)), a list of field elements.
-    ///
-    /// Steps:
-    /// 1. len_in_bytes = count * m * L
-    /// 2. uniform_bytes = expand_message(msg, DST, len_in_bytes)
-    /// 3. for i in (0, ..., count - 1):
-    /// 4.   for j in (0, ..., m - 1):
-    /// 5.     elm_offset = L * (j + i * m)
-    /// 6.     tv = substr(uniform_bytes, elm_offset, L)
-    /// 7.     e_j = OS2IP(tv) mod p
-    /// 8.   u_i = (e_0, ..., e_(m - 1))
-    /// 9. return (u_0, ..., u_(count - 1))
-pub fn hash_to_field<const LEN: usize, Fp: PrimeField<{ LEN }>, Fpn: Constructor<{LEN}, Fp>>(
+/// ## 5.2.  hash_to_field implementation
+///
+/// The following procedure implements hash_to_field.
+///
+/// The expand_message parameter to this function MUST conform to the
+/// requirements given in Section 5.3.  Section 3.1 discusses the
+/// REQUIRED method for constructing DST, the domain separation tag.
+/// Note that hash_to_field may fail (abort) if expand_message fails.
+///
+/// hash_to_field(msg, count)
+///
+/// Parameters:
+/// - DST, a domain separation tag (see Section 3.1).
+/// - F, a finite field of characteristic p and order q = p^m.
+/// - p, the characteristic of F (see immediately above).
+/// - m, the extension degree of F, m >= 1 (see immediately above).
+/// - L = ceil((ceil(log2(p)) + k) / 8), where k is the security
+///   parameter of the suite (e.g., k = 128).
+/// - expand_message, a function that expands a byte string and
+///   domain separation tag into a uniformly random byte string
+///   (see Section 5.3).
+///
+/// ```text
+/// Inputs:
+/// - msg, a byte string containing the message to hash.
+/// - count, the number of elements of F to output.
+///
+/// Outputs:
+/// - (u_0, ..., u_(count - 1)), a list of field elements.
+///
+/// Steps:
+/// 1. len_in_bytes = count * m * L
+/// 2. uniform_bytes = expand_message(msg, DST, len_in_bytes)
+/// 3. for i in (0, ..., count - 1):
+/// 4.   for j in (0, ..., m - 1):
+/// 5.     elm_offset = L * (j + i * m)
+/// 6.     tv = substr(uniform_bytes, elm_offset, L)
+/// 7.     e_j = OS2IP(tv) mod p
+/// 8.   u_i = (e_0, ..., e_(m - 1))
+/// 9. return (u_0, ..., u_(count - 1))
+///```
+pub fn hash_to_field<const LEN: usize, Fp: PrimeField<{ LEN }>, Fpn: Constructor<{ LEN }, Fp>>(
     msg: &[u8],
     dst: &[u8],
     count: usize,
@@ -195,13 +219,13 @@ pub fn hash_to_field<const LEN: usize, Fp: PrimeField<{ LEN }>, Fpn: Constructor
     let uniform_bytes = expand_message(msg, dst, len_in_bytes)?;
     let mut u = Vec::new();
     for i in 0..count {
-	let mut u_i = Vec::new();
-	for j in 0..m {
-	    let elm_offset = l * (j + i * m);
-	    let tv = &uniform_bytes[elm_offset..elm_offset + l];
-	    u_i.push(Fp::from_be_bytes(tv))
-	}
-	u.push(Fpn::from_coeffs(u_i))
+        let mut u_i = Vec::new();
+        for j in 0..m {
+            let elm_offset = l * (j + i * m);
+            let tv = &uniform_bytes[elm_offset..elm_offset + l];
+            u_i.push(Fp::from_be_bytes(tv))
+        }
+        u.push(Fpn::from_coeffs(u_i))
     }
     Ok(u)
 }
@@ -233,22 +257,22 @@ pub fn hash_to_field_m_eq_2<const LEN: usize, Fp: PrimeField<{ LEN }>>(
     dst: &[u8],
     count: usize,
     l: usize,
-    expand_message: fn(&[u8], &[u8], usize) -> Result<Vec<u8>, Error>
+    expand_message: fn(&[u8], &[u8], usize) -> Result<Vec<u8>, Error>,
 ) -> Result<Vec<(Fp, Fp)>, Error> {
     let len_in_bytes = count * l * 2;
     let uniform_bytes = expand_message(msg, dst, len_in_bytes)?;
     let mut u = Vec::with_capacity(count);
     for i in 0..count {
-	// unrolled two loop over j in {0,1}
-	let elm_offset0 = l * i * 2;
-	let tv0 = &uniform_bytes[elm_offset0..elm_offset0 + l];
-	let e0 = Fp::from_be_bytes(tv0);
+        // unrolled two loop over j in {0,1}
+        let elm_offset0 = l * i * 2;
+        let tv0 = &uniform_bytes[elm_offset0..elm_offset0 + l];
+        let e0 = Fp::from_be_bytes(tv0);
 
-	let elm_offset1 = l + l * i * 2;
-	let tv1 = &uniform_bytes[elm_offset1..elm_offset1 + l];
-	let e1 = Fp::from_be_bytes(tv1);
+        let elm_offset1 = l + l * i * 2;
+        let tv1 = &uniform_bytes[elm_offset1..elm_offset1 + l];
+        let e1 = Fp::from_be_bytes(tv1);
 
-	u.push((e0, e1));
+        u.push((e0, e1));
     }
     Ok(u)
 }

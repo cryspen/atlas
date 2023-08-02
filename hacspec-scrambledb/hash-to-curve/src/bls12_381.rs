@@ -2,6 +2,7 @@
 #![allow(unused)]
 
 use crate::hacspec_helper::*;
+use crate::prime_curve::FieldArithmetic;
 use natmod::nat_mod;
 use p256::NatMod;
 
@@ -69,6 +70,60 @@ pub fn fp2inv(n: Fp2) -> Fp2 {
 pub fn fp2conjugate(n: Fp2) -> Fp2 {
     let (n1, n2) = n;
     (n1, BLS12FieldElement::zero() - n2)
+}
+
+// impl<T: std::ops::Mul<T>> std::ops::Mul<(T, T)> for (T, T) {
+//     type Output = Fp2;
+
+//     fn mul(self, rhs: Fp2) -> Self::Output {
+//         todo!()
+//     }
+// }
+
+// impl std::ops::Add<Fp2> for Fp2 {
+//     type Output = Fp2;
+
+//     fn add(self, rhs: Fp2) -> Self::Output {
+//         todo!()
+//     }
+// }
+
+// impl std::ops::Neg for Fp2 {
+//     type Output = Fp2;
+
+//     fn neg(self) -> Self::Output {
+//         fp2neg(self)
+//     }
+// }
+
+impl FieldArithmetic for Fp2 {
+    fn is_square(&self) -> bool {
+        todo!()
+    }
+    fn sqrt(self) -> Self {
+        todo!()
+    }
+    fn sgn0(self) -> bool {
+        todo!()
+    }
+    fn inv(self) -> Self {
+        todo!()
+    }
+    fn inv0(self) -> Self {
+        todo!()
+    }
+    fn pow(self, rhs: u128) -> Self {
+        todo!()
+    }
+    fn zero() -> Self {
+        todo!()
+    }
+    fn one() -> Self {
+        todo!()
+    }
+    fn from_u128(x: u128) -> Self {
+        todo!()
+    }
 }
 
 /* Arithmetic for Fp6 elements */

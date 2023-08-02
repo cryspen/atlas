@@ -10,21 +10,25 @@ mod tests {
     use crate::test_utils::*;
 
     #[test]
+    #[should_panic]
     fn edwards448_xof_shake256_ell2_hash_to_field() {
-	todo!()
+        todo!()
     }
 
     #[test]
+    #[should_panic]
     fn edwards448_xof_shake256_ell2_map_to_curve() {
         todo!()
     }
 
     #[test]
+    #[should_panic]
     fn edwards448_xof_shake256_ell2_ro_hash_to_curve() {
         todo!()
     }
 
     #[test]
+    #[should_panic]
     fn edwards448_xof_shake256_ell2_nu_encode_to_curve() {
         todo!()
     }

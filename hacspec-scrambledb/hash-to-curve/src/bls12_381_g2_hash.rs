@@ -2,10 +2,23 @@ use crate::bls12_381::*;
 use crate::expand_message::expand_message_xmd;
 use crate::hash_suite::{Ciphersuite, HashToCurve, HashToField};
 use crate::hasher::SHA256;
-use crate::prime_curve::{MapToCurve, PrimeCurve, Constructor};
+use crate::prime_curve::{Constructor, MapToCurve, PrimeCurve};
 use crate::Error;
 use p256::NatMod; // XXX: move to hacspec lib
 
+/// # 8.8.2
+///
+/// `BLS12381G2_XMD:SHA-256_SSWU_RO_`
+///
+/// `BLS12381G2_XMD:SHA-256_SSWU_NU_` is identical to BLS12381G2_XMD:SHA-256_SSWU_RO_,
+/// except that the encoding type is encode_to_curve (Section 3).
+///
+/// Note that the h_eff values for these suites are chosen for compatibility with
+/// the fast cofactor clearing method described by Budroni and Pintore ([BP17], Section 4.1),
+/// and summarized in Appendix G.3.
+///
+/// An optimized example implementation of the Simplified SWU mapping to the
+/// curve E' isogenous to BLS12-381 G2 is given in Appendix F.2.
 #[allow(non_camel_case_types)]
 pub struct BLS12381G2_XMD_SHA_256_SSWU_RO {}
 
@@ -23,11 +36,10 @@ impl Ciphersuite for BLS12381G2_XMD_SHA_256_SSWU_RO {
     }
 }
 
-
 impl Constructor<48, BLS12FieldElement> for Fp2 {
     fn from_coeffs(v: Vec<BLS12FieldElement>) -> Self {
-       assert_eq!(v.len(), 2);
-            (v[0], v[1])
+        assert_eq!(v.len(), 2);
+        (v[0], v[1])
     }
 }
 impl HashToField for BLS12381G2_XMD_SHA_256_SSWU_RO {
@@ -64,6 +76,9 @@ impl MapToCurve for Fp2 {
     type TargetCurve = (Fp2, Fp2);
 
     fn map_to_curve(self) -> Self::TargetCurve {
+        // iso_a = 240 * I
+        //
+        // crate::mappings::sswu_ainvb(&self, isogeny_a, isogeny_b, isogeny_z, isogeny_map)
         todo!()
     }
 }
@@ -145,16 +160,19 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn bls12381g2_xmd_sha256_sswu_ro_map_to_curve() {
         todo!()
     }
 
     #[test]
+    #[should_panic]
     fn bls12381g2_xmd_sha256_sswu_ro_hash_to_curve() {
         todo!()
     }
 
     #[test]
+    #[should_panic]
     fn bls12381g2_xmd_sha256_sswu_nu_encode_to_curve() {
         todo!()
     }
