@@ -8,4 +8,5 @@ members = [
 	#	"renc",
 	"hash-to-curve",
 	"p256",
+	"oprf"
 ]
