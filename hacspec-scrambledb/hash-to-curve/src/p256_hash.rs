@@ -2,10 +2,12 @@
 
 use crate::hash_suite::{EncodeToCurve, HashToCurve, HashToField};
 use crate::hasher::SHA256;
-use crate::prime_curve::{Constructor, FieldArithmetic, MapToCurve, PrimeCurve, PrimeField};
+use crate::prime_curve::{
+    sqrt_ts_ct, Constructor, FieldArithmetic, MapToCurve, PrimeCurve, PrimeField,
+};
 use crate::Error;
 use crate::{expand_message::expand_message_xmd, hash_suite::Ciphersuite};
-use p256::{NatMod, P256FieldElement, P256Point};
+use p256::{NatMod, P256FieldElement, P256Point, P256Scalar};
 
 /// # 8.2 Suites for NIST P-256
 ///
@@ -147,6 +149,26 @@ impl PrimeField<32> for P256FieldElement {
 
     fn sgn0(self) -> bool {
         crate::prime_curve::sgn0_m_eq_1(self)
+    }
+}
+
+impl PrimeField<32> for P256Scalar {
+    fn is_square(&self) -> bool {
+        crate::prime_curve::is_square_m_eq_1(self)
+    }
+
+    fn sqrt(self) -> Self {
+        sqrt_ts_ct(vec![self], 1)[0]
+    }
+
+    fn sgn0(self) -> bool {
+        crate::prime_curve::sgn0_m_eq_1(self)
+    }
+}
+
+impl Constructor<32, P256Scalar> for P256Scalar {
+    fn from_coeffs(v: Vec<P256Scalar>) -> Self {
+        v[0]
     }
 }
 
