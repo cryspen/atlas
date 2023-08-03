@@ -10,7 +10,7 @@ pub trait FieldArithmetic {
     fn pow(self, rhs: u128) -> Self;
     fn zero() -> Self;
     fn one() -> Self;
-    fn from_u128 (x: u128) -> Self;
+    fn from_u128(x: u128) -> Self;
 }
 
 pub trait PrimeField<const LEN: usize>: NatMod<{ LEN }> {
@@ -130,6 +130,18 @@ pub fn sqrt_5mod8_generic<T: NatMod<{ LEN }>, const LEN: usize>(_x: Vec<T>, _m: 
 }
 pub fn sqrt_9mod16_generic<T: NatMod<{ LEN }>, const LEN: usize>(_x: Vec<T>, _m: usize) -> Vec<T> {
     unimplemented!()
+}
+
+///  I.4. Constant-time Tonelli-Shanks algorithm
+///
+/// This algorithm is a constant-time version of the classic Tonelli-Shanks algorithm
+/// ([C93], Algorithm 1.5.1) due to Sean Bowe, Jack Grigg, and Eirik Ogilvie-Wigley
+/// [jubjub-fq], adapted and optimized by Michael Scott.
+/// This algorithm applies to GF(p) for any p. Note, however, that the
+/// special-purpose algorithms given in the prior sections are faster, when they
+/// apply.
+pub fn sqrt_ts_ct<T: NatMod<{ LEN }>, const LEN: usize>(_x: Vec<T>, _m: usize) -> Vec<T> {
+    todo!()
 }
 
 // XXX: All the spec ever does with this function's output is
