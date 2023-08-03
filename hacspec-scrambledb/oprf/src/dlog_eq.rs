@@ -202,7 +202,7 @@ fn compute_composites_fast(
     context_string: &[u8],
 ) -> Result<(P256Point, P256Point), Error> {
     let Bm = serialize_element(&B); // Bm = G.SerializeElement(B)
-    let mut seed_dst = Vec::from(b"Seed-".as_slice()); //seedDST = "Seed-" || contextString
+    let mut seed_dst: Vec<u8> = "Seed".into(); //seedDST = "Seed-" || contextString
     seed_dst.extend_from_slice(context_string);
 
     let mut seed_transcript = Vec::new(); //  seedTranscript =
@@ -393,7 +393,7 @@ fn compute_composites(
     context_string: &[u8],
 ) -> Result<(P256Point, P256Point), Error> {
     let Bm = serialize_element(&B); // Bm = G.SerializeElement(B)
-    let mut seed_dst = Vec::from(b"Seed-".as_slice()); //seedDST = "Seed-" || contextString
+    let mut seed_dst: Vec<u8> = "Seed-".into(); //seedDST = "Seed-" || contextString
     seed_dst.extend_from_slice(context_string);
 
     let mut seed_transcript = Vec::new(); //  seedTranscript =
