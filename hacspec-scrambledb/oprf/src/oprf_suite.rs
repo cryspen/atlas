@@ -1,4 +1,4 @@
-//! 4.  Ciphersuites
+//! # 4.  Ciphersuites
 //!
 //! A ciphersuite (also referred to as 'suite' in this document) for the
 //! protocol wraps the functionality required for the protocol to take
@@ -33,11 +33,9 @@
 //! ciphersuites targeting P-256 and ristretto255.  See Section 7.2 for
 //! related discussion.
 
-
-
 pub trait Ciphersuite<PrimeOrderGroup> {
-   #[allow(non_upper_case_globals)]
-   const identifier: &'static [u8];
+    #[allow(non_upper_case_globals)]
+    const identifier: &'static [u8];
 
-   fn hash(payload: &[u8]) -> Vec<u8>;
+    fn hash(payload: &[u8]) -> Vec<u8>;
 }

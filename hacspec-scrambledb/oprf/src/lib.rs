@@ -50,13 +50,19 @@ pub enum Error {
     InvalidExpansion,
 }
 
+// 2.1 Prime-Order Group
 pub mod prime_order_group;
 
+// 2.2 Discrete Logarithm Equivalence Proofs
 pub mod dlog_eq;
 
+// 3. Protocol
 pub mod oprf;
 
+// 4. Ciphersuites
 pub mod oprf_suite;
+
+// 4.2 OPRF(P-256, SHA-256)
 mod p256_sha256;
 
 mod util;
