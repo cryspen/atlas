@@ -28,7 +28,6 @@
 //! verifying the proof, which is done by clients in the protocol.
 
 use crate::p256_sha256::serialize_element;
-use crate::prime_order_group::PrimeOrderGroup;
 use crate::util::*;
 use crate::Error;
 use libcrux::digest::{hash, Algorithm};
@@ -135,7 +134,7 @@ pub fn generate_proof(
     challenge_transcript.extend_from_slice(b"Challenge"); //        "Challenge"
 
     // c = G.HashToScalar(challengeTranscript)
-    let c = P256Point::hash_to_scalar(&challenge_transcript);
+    let c = crate::p256_sha256::hash_to_scalar(&challenge_transcript, context_string);
 
     let s = r - c * k; // s = r - c * k
 
@@ -213,7 +212,7 @@ fn compute_composites_fast(
 
     let seed = hash(Algorithm::Sha256, &seed_transcript); // seed = Hash(seedTranscript)
 
-    let mut M = P256Point::identity(); // M = G.Identity()
+    let mut M = crate::p256_sha256::identity(); // M = G.Identity()
 
     for i in 0..C.len() {
         let Ci = serialize_element(&C[i]); // Ci = G.SerializeElement(C[i])
@@ -232,7 +231,7 @@ fn compute_composites_fast(
         composite_transcript.extend_from_slice(b"Composite"); //          "Composite"
 
         // di = G.HashToScalar(challengeTranscript)
-        let di = P256Point::hash_to_scalar(&composite_transcript);
+        let di = crate::p256_sha256::hash_to_scalar(&composite_transcript, context_string);
 
         // TODO: Error conversion!
         M = p256::point_add(M, p256_point_mul(di, C[i]).unwrap()).unwrap(); // M = di * C[i] + M
@@ -333,7 +332,7 @@ pub fn verify_proof(
     challenge_transcript.extend_from_slice(b"Challenge"); //        "Challenge"
 
     // G.HashToScalar(challengeTranscript)
-    let expected_c = P256Point::hash_to_scalar(&challenge_transcript);
+    let expected_c = crate::p256_sha256::hash_to_scalar(&challenge_transcript, context_string);
 
     Ok(expected_c == c)
 }
@@ -404,8 +403,8 @@ fn compute_composites(
 
     let seed = hash(Algorithm::Sha256, &seed_transcript); // seed = Hash(seedTranscript)
 
-    let mut M = P256Point::identity(); // M = G.Identity()
-    let mut Z = P256Point::identity(); // Z = G.Identity()
+    let mut M = crate::p256_sha256::identity(); // M = G.Identity()
+    let mut Z = crate::p256_sha256::identity(); // Z = G.Identity()
 
     for i in 0..C.len() {
         let Ci = serialize_element(&C[i]); // Ci = G.SerializeElement(C[i])
@@ -424,7 +423,7 @@ fn compute_composites(
         composite_transcript.extend_from_slice(b"Composite"); //          "Composite"
 
         // di = G.HashToScalar(challengeTranscript)
-        let di = P256Point::hash_to_scalar(&composite_transcript);
+        let di = crate::p256_sha256::hash_to_scalar(&composite_transcript, context_string);
 
         // TODO: Error conversion!
         M = p256::point_add(M, p256_point_mul(di, C[i]).unwrap()).unwrap(); // M = di * C[i] + M

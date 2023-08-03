@@ -32,10 +32,3 @@
 //! Setup functions.  Applications should take caution in using
 //! ciphersuites targeting P-256 and ristretto255.  See Section 7.2 for
 //! related discussion.
-
-pub trait Ciphersuite<PrimeOrderGroup> {
-    #[allow(non_upper_case_globals)]
-    const identifier: &'static [u8];
-
-    fn hash(payload: &[u8]) -> Vec<u8>;
-}
