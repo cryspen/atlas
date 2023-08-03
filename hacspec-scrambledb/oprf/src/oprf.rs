@@ -1,21 +1,24 @@
-use p256::{P256Point, P256Scalar};
+//! # 3. Protocol
+
 use crate::util::*;
+use crate::Error;
+use p256::{P256Point, P256Scalar};
 
 type ServerPrivateKey = P256Scalar;
 type ServerPublicKey = P256Point;
 
-type KeyGenerationResult = Result<(ServerPrivateKey,ServerPublicKey), Error>;
+type KeyGenerationResult = Result<(ServerPrivateKey, ServerPublicKey), Error>;
 
-pub fn generate_key_pair() -> (ServerPrivateKey, ServerPublicKey){
+pub fn generate_key_pair() -> (ServerPrivateKey, ServerPublicKey) {
     let skS = random_scalar();
     let pkS = p256::p256_point_mul_base(skS).unwrap();
     (skS, pkS)
 }
 
 pub fn derive_key_pair(seed: &[u8], info: &[u8]) -> (ServerPrivateKey, ServerPublicKey) {
-    let mut deriveInput = Vec::new();
-    deriveInput.extend_from_slice(seed);
-    concat_length_prefixed(&mut deriveInput, info, 2);
+    let mut deriveInput = seed.to_vec();
+    deriveInput.extend_from_slice(&i2osp(info.len(), 2));
+    deriveInput.extend_from_slice(&info);
 
     unimplemented!()
 }
