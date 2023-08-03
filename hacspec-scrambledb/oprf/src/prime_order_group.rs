@@ -1,3 +1,11 @@
+//! # 2. Preliminaries
+//!
+//! The protocols in this document have two primary dependencies:
+//! * Group: A prime-order group implementing the API described below in
+//!   Section 2.1. See Section 4 for specific instances of groups.
+//! * Hash: A cryptographic hash function whose output length is Nh bytes.
+//!   Section 4 specifies ciphersuites as combinations of Group and Hash.
+//!
 //! ## 2.1.  Prime-Order Group
 //!
 //! In this document, we assume the construction of an additive, prime-
@@ -40,9 +48,8 @@ use crate::Error;
 pub trait PrimeOrderGroup {
     type Scalar;
 
-     /// *  Order(): Outputs the order of the group (i.e. p).
+    /// *  Order(): Outputs the order of the group (i.e. p).
     fn order();
-
 
     /// *  Identity(): Outputs the identity element of the group (i.e.  I).
     fn identity() -> Self;
@@ -81,7 +88,8 @@ pub trait PrimeOrderGroup {
     ///    identity element of the group; see Section 4 for group-specific
     ///    input validation steps.
     fn deserialize_element(bytes: &[u8]) -> Result<Self, Error>
-	where Self: Sized;
+    where
+        Self: Sized;
 
     /// *  SerializeScalar(s): Maps a Scalar s to a canonical byte array buf
     ///    of fixed length Ns.
