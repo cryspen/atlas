@@ -27,13 +27,12 @@
 //! done by servers in the verifiable protocols, and another for
 //! verifying the proof, which is done by clients in the protocol.
 
-
-use libcrux::digest::{hash, Algorithm};
-use p256::{p256_point_mul,P256Point, P256Scalar};
+use crate::p256_sha256::serialize_element;
 use crate::prime_order_group::PrimeOrderGroup;
 use crate::util::*;
 use crate::Error;
-use crate::p256_sha256::serialize_element;
+use libcrux::digest::{hash, Algorithm};
+use p256::{p256_point_mul, P256Point, P256Scalar};
 
 /// ### 2.2.1.  Proof Generation
 ///
@@ -116,13 +115,13 @@ pub fn generate_proof(
     let t2 = p256_point_mul(r, A).unwrap(); // t2 = r * A
     let t3 = p256_point_mul(r, M).unwrap(); // t3 = r * M
 
-    let Bm = serialize_element(&B);  // Bm = G.SerializeElement(B)
-    let a0 = serialize_element(&M);  // a0 = G.SerializeElement(M)
-    let a1 = serialize_element(&Z);  // a1 = G.SerializeElement(Z)
+    let Bm = serialize_element(&B); // Bm = G.SerializeElement(B)
+    let a0 = serialize_element(&M); // a0 = G.SerializeElement(M)
+    let a1 = serialize_element(&Z); // a1 = G.SerializeElement(Z)
     let a2 = serialize_element(&t2); // a2 = G.SerializeElement(t2)
     let a3 = serialize_element(&t3); // a3 = G.SerializeElement(t3)
 
-    let mut challenge_transcript = Vec::new();                    // challengeTranscript =
+    let mut challenge_transcript = Vec::new(); // challengeTranscript =
     challenge_transcript.extend_from_slice(&i2osp(Bm.len(), 2)); //        I2OSP(len(Bm), 2) || Bm ||
     challenge_transcript.extend_from_slice(&Bm);
     challenge_transcript.extend_from_slice(&i2osp(a0.len(), 2)); //        I2OSP(len(a0), 2) || a0 ||
@@ -133,7 +132,7 @@ pub fn generate_proof(
     challenge_transcript.extend_from_slice(&a2);
     challenge_transcript.extend_from_slice(&i2osp(a3.len(), 2)); //        I2OSP(len(a3), 2) || a3 ||
     challenge_transcript.extend_from_slice(&a3);
-    challenge_transcript.extend_from_slice(b"Challenge");         //        "Challenge"
+    challenge_transcript.extend_from_slice(b"Challenge"); //        "Challenge"
 
     // c = G.HashToScalar(challengeTranscript)
     let c = P256Point::hash_to_scalar(&challenge_transcript);
@@ -142,7 +141,6 @@ pub fn generate_proof(
 
     Ok((c, s)) //return [c, s]
 }
-
 
 /// The helper function ComputeCompositesFast is as defined below, and is
 /// an optimization of the ComputeComposites function for servers since
@@ -207,41 +205,41 @@ fn compute_composites_fast(
     let mut seed_dst = Vec::from(b"Seed-".as_slice()); //seedDST = "Seed-" || contextString
     seed_dst.extend_from_slice(context_string);
 
-    let mut seed_transcript = Vec::new();                         //  seedTranscript =
-    seed_transcript.extend_from_slice(&i2osp(Bm.len(), 2));       //     I2OSP(len(Bm), 2) || Bm ||
+    let mut seed_transcript = Vec::new(); //  seedTranscript =
+    seed_transcript.extend_from_slice(&i2osp(Bm.len(), 2)); //     I2OSP(len(Bm), 2) || Bm ||
     seed_transcript.extend_from_slice(&Bm);
-    seed_transcript.extend_from_slice(&i2osp(seed_dst.len(),2));  //     I2OSP(len(seedDST), 2) || seedDST
+    seed_transcript.extend_from_slice(&i2osp(seed_dst.len(), 2)); //     I2OSP(len(seedDST), 2) || seedDST
     seed_transcript.extend_from_slice(&seed_dst);
 
-    let seed = hash(Algorithm::Sha256, &seed_transcript);        // seed = Hash(seedTranscript)
-    
-    let mut M = P256Point::identity();        // M = G.Identity()
+    let seed = hash(Algorithm::Sha256, &seed_transcript); // seed = Hash(seedTranscript)
+
+    let mut M = P256Point::identity(); // M = G.Identity()
 
     for i in 0..C.len() {
-	let Ci = serialize_element(&C[i]); // Ci = G.SerializeElement(C[i])
-	let Di = serialize_element(&D[i]); // Di = G.SerializeElement(D[i])
+        let Ci = serialize_element(&C[i]); // Ci = G.SerializeElement(C[i])
+        let Di = serialize_element(&D[i]); // Di = G.SerializeElement(D[i])
 
-	let mut composite_transcript = Vec::new();                     // compositeTranscript =
-	composite_transcript.extend_from_slice(&i2osp(seed.len(),2));  //          I2OSP(len(seed), 2) || seed || I2OSP(i, 2) ||
-	composite_transcript.extend_from_slice(&seed);
-	composite_transcript.extend_from_slice(&i2osp(i, 2));
+        let mut composite_transcript = Vec::new(); // compositeTranscript =
+        composite_transcript.extend_from_slice(&i2osp(seed.len(), 2)); //          I2OSP(len(seed), 2) || seed || I2OSP(i, 2) ||
+        composite_transcript.extend_from_slice(&seed);
+        composite_transcript.extend_from_slice(&i2osp(i, 2));
 
-	composite_transcript.extend_from_slice(&i2osp(Ci.len(),2));    //          I2OSP(len(Ci), 2) || Ci ||
-	composite_transcript.extend_from_slice(&Ci);
-	composite_transcript.extend_from_slice(&i2osp(Di.len(),2));    //          I2OSP(len(Ci), 2) || Ci ||
-	composite_transcript.extend_from_slice(&Di);
+        composite_transcript.extend_from_slice(&i2osp(Ci.len(), 2)); //          I2OSP(len(Ci), 2) || Ci ||
+        composite_transcript.extend_from_slice(&Ci);
+        composite_transcript.extend_from_slice(&i2osp(Di.len(), 2)); //          I2OSP(len(Ci), 2) || Ci ||
+        composite_transcript.extend_from_slice(&Di);
 
-	composite_transcript.extend_from_slice(b"Composite");	       //          "Composite"
+        composite_transcript.extend_from_slice(b"Composite"); //          "Composite"
 
-	// di = G.HashToScalar(challengeTranscript)
-    let di = P256Point::hash_to_scalar(&composite_transcript);
+        // di = G.HashToScalar(challengeTranscript)
+        let di = P256Point::hash_to_scalar(&composite_transcript);
 
-    // TODO: Error conversion!
-    M = p256::point_add(M, p256_point_mul(di, C[i]).unwrap()).unwrap(); // M = di * C[i] + M
+        // TODO: Error conversion!
+        M = p256::point_add(M, p256_point_mul(di, C[i]).unwrap()).unwrap(); // M = di * C[i] + M
     }
 
     // TODO: Error conversion!
-    let Z = p256_point_mul(k, M).unwrap();  // Z = k * M
+    let Z = p256_point_mul(k, M).unwrap(); // Z = k * M
 
     Ok((M, Z)) // return (M,Z)
 }
@@ -315,14 +313,13 @@ pub fn verify_proof(
     let t2 = p256::point_add(p256_point_mul(s, A).unwrap(), p256_point_mul(c, B).unwrap()).unwrap();
     let t3 = p256::point_add(p256_point_mul(s, M).unwrap(), p256_point_mul(c, Z).unwrap()).unwrap();
 
-
-    let Bm = serialize_element(&B);  // Bm = G.SerializeElement(B)
-    let a0 = serialize_element(&M);  // a0 = G.SerializeElement(M)
-    let a1 = serialize_element(&Z);  // a1 = G.SerializeElement(Z)
+    let Bm = serialize_element(&B); // Bm = G.SerializeElement(B)
+    let a0 = serialize_element(&M); // a0 = G.SerializeElement(M)
+    let a1 = serialize_element(&Z); // a1 = G.SerializeElement(Z)
     let a2 = serialize_element(&t2); // a2 = G.SerializeElement(t2)
     let a3 = serialize_element(&t3); // a3 = G.SerializeElement(t3)
 
-    let mut challenge_transcript = Vec::new();                    // challengeTranscript =
+    let mut challenge_transcript = Vec::new(); // challengeTranscript =
     challenge_transcript.extend_from_slice(&i2osp(Bm.len(), 2)); //        I2OSP(len(Bm), 2) || Bm ||
     challenge_transcript.extend_from_slice(&Bm);
     challenge_transcript.extend_from_slice(&i2osp(a0.len(), 2)); //        I2OSP(len(a0), 2) || a0 ||
@@ -333,7 +330,7 @@ pub fn verify_proof(
     challenge_transcript.extend_from_slice(&a2);
     challenge_transcript.extend_from_slice(&i2osp(a3.len(), 2)); //        I2OSP(len(a3), 2) || a3 ||
     challenge_transcript.extend_from_slice(&a3);
-    challenge_transcript.extend_from_slice(b"Challenge");         //        "Challenge"
+    challenge_transcript.extend_from_slice(b"Challenge"); //        "Challenge"
 
     // G.HashToScalar(challengeTranscript)
     let expected_c = P256Point::hash_to_scalar(&challenge_transcript);
@@ -399,39 +396,39 @@ fn compute_composites(
     let mut seed_dst = Vec::from(b"Seed-".as_slice()); //seedDST = "Seed-" || contextString
     seed_dst.extend_from_slice(context_string);
 
-    let mut seed_transcript = Vec::new();                         //  seedTranscript =
-    seed_transcript.extend_from_slice(&i2osp(Bm.len(), 2));       //     I2OSP(len(Bm), 2) || Bm ||
+    let mut seed_transcript = Vec::new(); //  seedTranscript =
+    seed_transcript.extend_from_slice(&i2osp(Bm.len(), 2)); //     I2OSP(len(Bm), 2) || Bm ||
     seed_transcript.extend_from_slice(&Bm);
-    seed_transcript.extend_from_slice(&i2osp(seed_dst.len(),2));  //     I2OSP(len(seedDST), 2) || seedDST
+    seed_transcript.extend_from_slice(&i2osp(seed_dst.len(), 2)); //     I2OSP(len(seedDST), 2) || seedDST
     seed_transcript.extend_from_slice(&seed_dst);
 
-    let seed = hash(Algorithm::Sha256, &seed_transcript);        // seed = Hash(seedTranscript)
-    
-    let mut M = P256Point::identity();        // M = G.Identity()
-    let mut Z = P256Point::identity();        // Z = G.Identity()
+    let seed = hash(Algorithm::Sha256, &seed_transcript); // seed = Hash(seedTranscript)
+
+    let mut M = P256Point::identity(); // M = G.Identity()
+    let mut Z = P256Point::identity(); // Z = G.Identity()
 
     for i in 0..C.len() {
-	let Ci = serialize_element(&C[i]); // Ci = G.SerializeElement(C[i])
-	let Di = serialize_element(&D[i]); // Di = G.SerializeElement(D[i])
+        let Ci = serialize_element(&C[i]); // Ci = G.SerializeElement(C[i])
+        let Di = serialize_element(&D[i]); // Di = G.SerializeElement(D[i])
 
-	let mut composite_transcript = Vec::new();                     // compositeTranscript =
-	composite_transcript.extend_from_slice(&i2osp(seed.len(),2));  //          I2OSP(len(seed), 2) || seed || I2OSP(i, 2) ||
-	composite_transcript.extend_from_slice(&seed);
-	composite_transcript.extend_from_slice(&i2osp(i, 2));
+        let mut composite_transcript = Vec::new(); // compositeTranscript =
+        composite_transcript.extend_from_slice(&i2osp(seed.len(), 2)); //          I2OSP(len(seed), 2) || seed || I2OSP(i, 2) ||
+        composite_transcript.extend_from_slice(&seed);
+        composite_transcript.extend_from_slice(&i2osp(i, 2));
 
-	composite_transcript.extend_from_slice(&i2osp(Ci.len(),2));    //          I2OSP(len(Ci), 2) || Ci ||
-	composite_transcript.extend_from_slice(&Ci);
-	composite_transcript.extend_from_slice(&i2osp(Di.len(),2));    //          I2OSP(len(Ci), 2) || Ci ||
-	composite_transcript.extend_from_slice(&Di);
+        composite_transcript.extend_from_slice(&i2osp(Ci.len(), 2)); //          I2OSP(len(Ci), 2) || Ci ||
+        composite_transcript.extend_from_slice(&Ci);
+        composite_transcript.extend_from_slice(&i2osp(Di.len(), 2)); //          I2OSP(len(Ci), 2) || Ci ||
+        composite_transcript.extend_from_slice(&Di);
 
-	composite_transcript.extend_from_slice(b"Composite");	       //          "Composite"
+        composite_transcript.extend_from_slice(b"Composite"); //          "Composite"
 
-	// di = G.HashToScalar(challengeTranscript)
-    let di = P256Point::hash_to_scalar(&composite_transcript);
+        // di = G.HashToScalar(challengeTranscript)
+        let di = P256Point::hash_to_scalar(&composite_transcript);
 
-    // TODO: Error conversion!
-    M = p256::point_add(M, p256_point_mul(di, C[i]).unwrap()).unwrap(); // M = di * C[i] + M
-    Z = p256::point_add(Z, p256_point_mul(di, D[i]).unwrap()).unwrap(); // M = di * C[i] + M
+        // TODO: Error conversion!
+        M = p256::point_add(M, p256_point_mul(di, C[i]).unwrap()).unwrap(); // M = di * C[i] + M
+        Z = p256::point_add(Z, p256_point_mul(di, D[i]).unwrap()).unwrap(); // M = di * C[i] + M
     }
 
     Ok((M, Z)) // return (M,Z)
