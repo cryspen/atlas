@@ -203,7 +203,6 @@ fn compute_composites_fast(
     D: Vec<P256Point>,
     context_string: &[u8],
 ) -> Result<(P256Point, P256Point), Error> {
-    
     let Bm = serialize_element(&B); // Bm = G.SerializeElement(B)
     let mut seed_dst = Vec::from(b"Seed-".as_slice()); //seedDST = "Seed-" || contextString
     seed_dst.extend_from_slice(context_string);
