@@ -175,12 +175,18 @@ impl Constructor<32, P256Scalar> for P256Scalar {
 impl PrimeCurve for P256Point {
     type BaseField = P256FieldElement;
 
-    fn clear_cofactor(self) -> Self {
-        self
+    fn clear_cofactor(self) -> Result<Self, Error> {
+        match self {
+            Self::AtInfinity => Err(Error::PointAtInfinity),
+            Self::NonInf(a) => Ok(self),
+        }
     }
 
-    fn point_add(lhs: Self, rhs: Self) -> Result<(Self::BaseField, Self::BaseField), Error> {
-        p256::point_add(lhs, rhs).map_err(|_e| Error::InvalidAddition)
+    fn point_add(
+        lhs: (P256FieldElement, P256FieldElement),
+        rhs: (P256FieldElement, P256FieldElement),
+    ) -> Result<(Self::BaseField, Self::BaseField), Error> {
+        p256::point_add_noninf(lhs, rhs).map_err(|_e| Error::InvalidAddition)
     }
 }
 

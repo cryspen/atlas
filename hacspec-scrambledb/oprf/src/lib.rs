@@ -44,10 +44,27 @@ The following terms are used throughout this document.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
-    InvalidScalarMult,
-    InvalidPointAdd,
+    VerifyError,
     DeserializeError,
-    InvalidExpansion,
+    InputValidationError,
+    InvalidInputError,
+    InverseError,
+    DeriveKeyPairError,
+
+    CurveError,
+    HashToCurveError,
+}
+
+impl From<p256::Error> for Error {
+    fn from(value: p256::Error) -> Self {
+        Self::CurveError
+    }
+}
+
+impl From<hash_to_curve::Error> for Error {
+    fn from(value: hash_to_curve::Error) -> Self {
+        Self::HashToCurveError
+    }
 }
 
 // 2.1 Prime-Order Group
@@ -57,7 +74,7 @@ pub mod prime_order_group;
 pub mod dlog_eq;
 
 // 3. Protocol
-pub mod oprf;
+pub mod protocol;
 
 // 4. Ciphersuites
 pub mod oprf_suite;

@@ -21,7 +21,10 @@ pub type AffineResult = Result<Affine, Error>;
 type P256Jacobian = (P256FieldElement, P256FieldElement, P256FieldElement);
 type JacobianResult = Result<P256Jacobian, Error>;
 
-pub type P256Point = Affine;
+pub enum P256Point {
+    NonInf(Affine),
+    AtInfinity,
+}
 
 pub fn jacobian_to_affine(p: P256Jacobian) -> Affine {
     let (x, y, z) = p;
@@ -168,8 +171,18 @@ fn point_add_distinct(p: Affine, q: Affine) -> AffineResult {
     AffineResult::Ok(jacobian_to_affine(r))
 }
 
+pub fn point_add(p: P256Point, q: P256Point) -> Result<P256Point, Error> {
+    match p {
+        P256Point::AtInfinity => Ok(q),
+        P256Point::NonInf(p) => match q {
+            P256Point::AtInfinity => Ok(P256Point::AtInfinity),
+            P256Point::NonInf(q) => point_add_noninf(p, q).map(|res| P256Point::NonInf(res)),
+        },
+    }
+}
+
 #[allow(unused_assignments)]
-pub fn point_add(p: Affine, q: Affine) -> AffineResult {
+pub fn point_add_noninf(p: Affine, q: Affine) -> AffineResult {
     if p != q {
         point_add_distinct(p, q)
     } else {

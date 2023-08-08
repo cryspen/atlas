@@ -110,9 +110,8 @@ pub fn generate_proof(
     // the provided test vectors.
     let r = r.unwrap_or_else(random_scalar); // r = G.RandomScalar()
 
-    // TODO: Error conversion!
-    let t2 = p256_point_mul(r, A).unwrap(); // t2 = r * A
-    let t3 = p256_point_mul(r, M).unwrap(); // t3 = r * M
+    let t2 = p256_point_mul(r, A)?; // t2 = r * A
+    let t3 = p256_point_mul(r, M)?; // t3 = r * M
 
     let Bm = serialize_element(&B); // Bm = G.SerializeElement(B)
     let a0 = serialize_element(&M); // a0 = G.SerializeElement(M)
@@ -233,12 +232,10 @@ fn compute_composites_fast(
         // di = G.HashToScalar(challengeTranscript)
         let di = crate::p256_sha256::hash_to_scalar(&composite_transcript, context_string);
 
-        // TODO: Error conversion!
-        M = p256::point_add(M, p256_point_mul(di, C[i]).unwrap()).unwrap(); // M = di * C[i] + M
+        M = p256::point_add_noninf(M, p256_point_mul(di, C[i])?)?; // M = di * C[i] + M
     }
 
-    // TODO: Error conversion!
-    let Z = p256_point_mul(k, M).unwrap(); // Z = k * M
+    let Z = p256_point_mul(k, M)?; // Z = k * M
 
     Ok((M, Z)) // return (M,Z)
 }
@@ -309,8 +306,8 @@ pub fn verify_proof(
     let (M, Z) = compute_composites(B, C, D, context_string)?;
     let (c, s) = proof;
 
-    let t2 = p256::point_add(p256_point_mul(s, A).unwrap(), p256_point_mul(c, B).unwrap()).unwrap();
-    let t3 = p256::point_add(p256_point_mul(s, M).unwrap(), p256_point_mul(c, Z).unwrap()).unwrap();
+    let t2 = p256::point_add_noninf(p256_point_mul(s, A)?, p256_point_mul(c, B)?)?;
+    let t3 = p256::point_add_noninf(p256_point_mul(s, M)?, p256_point_mul(c, Z)?)?;
 
     let Bm = serialize_element(&B); // Bm = G.SerializeElement(B)
     let a0 = serialize_element(&M); // a0 = G.SerializeElement(M)
@@ -425,9 +422,8 @@ fn compute_composites(
         // di = G.HashToScalar(challengeTranscript)
         let di = crate::p256_sha256::hash_to_scalar(&composite_transcript, context_string);
 
-        // TODO: Error conversion!
-        M = p256::point_add(M, p256_point_mul(di, C[i]).unwrap()).unwrap(); // M = di * C[i] + M
-        Z = p256::point_add(Z, p256_point_mul(di, D[i]).unwrap()).unwrap(); // M = di * C[i] + M
+        M = p256::point_add_noninf(M, p256_point_mul(di, C[i])?)?; // M = di * C[i] + M
+        Z = p256::point_add_noninf(Z, p256_point_mul(di, D[i])?)?; // M = di * C[i] + M
     }
 
     Ok((M, Z)) // return (M,Z)

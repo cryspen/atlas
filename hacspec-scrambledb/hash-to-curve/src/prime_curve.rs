@@ -38,8 +38,8 @@ pub trait PrimeField<const LEN: usize>: NatMod<{ LEN }> {
 pub trait PrimeCurve: Sized {
     type BaseField;
 
-    fn clear_cofactor(self) -> (Self::BaseField, Self::BaseField);
-    fn point_add(lhs: Self, rhs: Self) -> Result<(Self::BaseField, Self::BaseField), Error>;
+    fn clear_cofactor(self) -> Result<Self, Error>;
+    fn point_add(lhs: Self, rhs: Self) -> Result<Self, Error>;
 }
 
 pub trait Constructor<const LEN: usize, Fp: PrimeField<{ LEN }>> {

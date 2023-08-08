@@ -22,6 +22,8 @@ mod hacspec_helper;
 pub enum Error {
     InvalidEll,
     InvalidAddition,
+
+    PointAtInfinity,
 }
 
 pub mod expand_message;
