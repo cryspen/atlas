@@ -58,7 +58,7 @@
 //!   output = Finalize(input, blind, evaluatedElement,
 //! 					blindedElement, pkS, proof)
 //!
-//! 	   Figure 2: VOPRF protocol overview with additional proof
+//! Figure 2: VOPRF protocol overview with additional proof
 //! ```
 //!
 //! The POPRF mode extends the VOPRF mode such that the client and server
@@ -78,13 +78,15 @@
 //! 												 info)
 //! ```
 //!
+//! ```text
 //! 						 evaluatedElement, proof
 //! 							   <----------
 //!
 //!   output = Finalize(input, blind, evaluatedElement,
 //! 					blindedElement, proof, info, tweakedKey)
 //!
-//! 	Figure 3: POPRF protocol overview with additional public input
+//! Figure 3: POPRF protocol overview with additional public input
+//! ```
 //!
 //! Each protocol consists of an offline setup phase and an online phase,
 //! described in Section 3.2 and Section 3.3, respectively.
@@ -97,5 +99,5 @@ type ServerPrivateKey = P256Scalar;
 type ServerPublicKey = P256Point;
 
 pub mod configuration;
-pub mod setup;
 pub mod online;
+pub mod setup;

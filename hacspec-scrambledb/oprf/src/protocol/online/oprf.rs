@@ -46,9 +46,9 @@ pub fn blind(input: &[u8], context_string: &[u8]) -> Result<(P256Scalar, P256Poi
         return Err(Error::InvalidInputError);
     }
 
-    let blindedElement = p256::p256_point_mul(blind, inputElement)?;
+    let blindedElement = p256::p256_point_mul(blind, inputElement.into())?;
 
-    Ok((blind, blindedElement))
+    Ok((blind, blindedElement.into()))
 }
 
 /// Upon receipt, servers process blindedElement using
@@ -77,8 +77,8 @@ pub fn blind_evaluate(
     skS: ServerPrivateKey,
     blindedElement: P256Point,
 ) -> Result<P256Point, Error> {
-    let evaluatedElement = p256::p256_point_mul(skS, blindedElement)?;
-    Ok(evaluatedElement)
+    let evaluatedElement = p256::p256_point_mul(skS, blindedElement.into())?;
+    Ok(evaluatedElement.into())
 }
 
 /// Upon receipt of evaluatedElement, clients process it to complete the
@@ -114,8 +114,8 @@ pub fn finalize(
     evaluatedElement: P256Point,
 ) -> Result<Vec<u8>, Error> {
     use crate::util::i2osp;
-    let n = p256::p256_point_mul(p256_sha256::scalar_inverse(blind), evaluatedElement)?;
-    let unblindedElement = p256_sha256::serialize_element(&n);
+    let n = p256::p256_point_mul(p256_sha256::scalar_inverse(blind), evaluatedElement.into())?;
+    let unblindedElement = p256_sha256::serialize_element(&n.into());
 
     let mut hashInput = Vec::new();
     hashInput.extend_from_slice(&i2osp(input.len(), 2));
@@ -171,9 +171,9 @@ pub fn evaluate(
         return Err(Error::InvalidInputError);
     }
 
-    let evaluatedElement = p256::p256_point_mul(skS, inputElement)?;
+    let evaluatedElement = p256::p256_point_mul(skS, inputElement.into())?;
 
-    let issuedElement = p256_sha256::serialize_element(&evaluatedElement);
+    let issuedElement = p256_sha256::serialize_element(&evaluatedElement.into());
 
     let mut hashInput = Vec::new();
     hashInput.extend_from_slice(&i2osp(input.len(), 2));

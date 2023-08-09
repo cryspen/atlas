@@ -110,14 +110,14 @@ pub fn generate_proof(
     // the provided test vectors.
     let r = r.unwrap_or_else(random_scalar); // r = G.RandomScalar()
 
-    let t2 = p256_point_mul(r, A)?; // t2 = r * A
-    let t3 = p256_point_mul(r, M)?; // t3 = r * M
+    let t2 = p256_point_mul(r, A.into())?; // t2 = r * A
+    let t3 = p256_point_mul(r, M.into())?; // t3 = r * M
 
     let Bm = serialize_element(&B); // Bm = G.SerializeElement(B)
     let a0 = serialize_element(&M); // a0 = G.SerializeElement(M)
     let a1 = serialize_element(&Z); // a1 = G.SerializeElement(Z)
-    let a2 = serialize_element(&t2); // a2 = G.SerializeElement(t2)
-    let a3 = serialize_element(&t3); // a3 = G.SerializeElement(t3)
+    let a2 = serialize_element(&t2.into()); // a2 = G.SerializeElement(t2)
+    let a3 = serialize_element(&t3.into()); // a3 = G.SerializeElement(t3)
 
     let mut challenge_transcript = Vec::new(); // challengeTranscript =
     challenge_transcript.extend_from_slice(&i2osp(Bm.len(), 2)); //        I2OSP(len(Bm), 2) || Bm ||
@@ -232,12 +232,13 @@ fn compute_composites_fast(
         // di = G.HashToScalar(challengeTranscript)
         let di = crate::p256_sha256::hash_to_scalar(&composite_transcript, context_string);
 
-        M = p256::point_add_noninf(M, p256_point_mul(di, C[i])?)?; // M = di * C[i] + M
+        M = p256::point_add_noninf(M.into(), p256_point_mul(di, C[i].into())?)?.into();
+        // M = di * C[i] + M
     }
 
-    let Z = p256_point_mul(k, M)?; // Z = k * M
+    let Z = p256_point_mul(k, M.into())?; // Z = k * M
 
-    Ok((M, Z)) // return (M,Z)
+    Ok((M, Z.into())) // return (M,Z)
 }
 
 /// ### 2.2.2.  Proof Verification
@@ -306,8 +307,10 @@ pub fn verify_proof(
     let (M, Z) = compute_composites(B, C, D, context_string)?;
     let (c, s) = proof;
 
-    let t2 = p256::point_add_noninf(p256_point_mul(s, A)?, p256_point_mul(c, B)?)?;
-    let t3 = p256::point_add_noninf(p256_point_mul(s, M)?, p256_point_mul(c, Z)?)?;
+    let t2 =
+        p256::point_add_noninf(p256_point_mul(s, A.into())?, p256_point_mul(c, B.into())?)?.into();
+    let t3 =
+        p256::point_add_noninf(p256_point_mul(s, M.into())?, p256_point_mul(c, Z.into())?)?.into();
 
     let Bm = serialize_element(&B); // Bm = G.SerializeElement(B)
     let a0 = serialize_element(&M); // a0 = G.SerializeElement(M)
@@ -422,8 +425,9 @@ fn compute_composites(
         // di = G.HashToScalar(challengeTranscript)
         let di = crate::p256_sha256::hash_to_scalar(&composite_transcript, context_string);
 
-        M = p256::point_add_noninf(M, p256_point_mul(di, C[i])?)?; // M = di * C[i] + M
-        Z = p256::point_add_noninf(Z, p256_point_mul(di, D[i])?)?; // M = di * C[i] + M
+        M = p256::point_add_noninf(M.into(), p256_point_mul(di, C[i].into())?)?.into(); // M = di * C[i] + M
+        Z = p256::point_add_noninf(Z.into(), p256_point_mul(di, D[i].into())?)?.into();
+        // M = di * C[i] + M
     }
 
     Ok((M, Z)) // return (M,Z)

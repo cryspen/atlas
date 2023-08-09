@@ -19,6 +19,17 @@ pub enum ModeID {
     modePOPRF = 0x02,
 }
 
+impl Into<ModeID> for u32 {
+    fn into(self) -> ModeID {
+        match self {
+            0 => ModeID::modeOPRF,
+            1 => ModeID::modeVOPRF,
+            2 => ModeID::modePOPRF,
+            _ => panic!("Invalid mode ID."),
+        }
+    }
+}
+
 /// Additionally, each protocol variant is instantiated with a
 /// ciphersuite, or suite.  Each ciphersuite is identified with an ASCII
 /// string identifier, referred to as identifier; see Section 4 for the
@@ -33,10 +44,10 @@ pub enum ModeID {
 ///      return "OPRFV1-" || I2OSP(mode, 1) || "-" || identifier
 /// ```
 pub fn create_context_string(mode: ModeID, identifier: &[u8]) -> Vec<u8> {
-    let mut res = b"OPRFV1-".to_vec();                 // "OPRVV1-"
-    res.extend_from_slice(&i2osp(mode as usize, 1));  //    || I2OSP(mode, 1)
-    res.extend_from_slice(b"-".as_slice());                    //    || "-"
-    res.extend_from_slice(identifier);                         //    || identifier
+    let mut res = b"OPRFV1-".to_vec(); // "OPRVV1-"
+    res.extend_from_slice(&i2osp(mode as usize, 1)); //    || I2OSP(mode, 1)
+    res.extend_from_slice(b"-"); //    || "-"
+    res.extend_from_slice(identifier); //    || identifier
 
     res
 }

@@ -1,6 +1,6 @@
 //! ## 3.2.  Key Generation and Context Setup
 
-use crate::p256_sha256::hash_to_scalar;
+use crate::p256_sha256::{hash_to_scalar, hash_to_scalar_dst};
 use crate::protocol::configuration::{create_context_string, ModeID};
 use crate::protocol::{ServerPrivateKey, ServerPublicKey};
 use crate::util::*;
@@ -35,7 +35,7 @@ use p256::NatMod;
 pub fn generate_key_pair() -> Result<(ServerPrivateKey, ServerPublicKey), Error> {
     let skS = random_scalar();
     let pkS = p256::p256_point_mul_base(skS)?;
-    Ok((skS, pkS))
+    Ok((skS, pkS.into()))
 }
 
 /// Also during the offline setup phase, both the client and server
@@ -188,7 +188,7 @@ pub fn setup_poprf_client(identifier: &[u8], pkS: ServerPublicKey) -> POPRFClien
 /// 	if counter > 255:
 /// 	  raise DeriveKeyPairError
 /// 	skS = G.HashToScalar(deriveInput || I2OSP(counter, 1),
-/// 						  DST = "DeriveKeyPair" || contextString)
+///                          DST = "DeriveKeyPair" || contextString)
 /// 	counter = counter + 1
 ///   pkS = G.ScalarMultGen(skS)
 ///   return skS, pkS
@@ -202,26 +202,22 @@ pub fn derive_key_pair(
     deriveInput.extend_from_slice(&i2osp(info.len(), 2));
     deriveInput.extend_from_slice(&info);
 
-    let mut counter = 0usize;
     let mut skS = ServerPrivateKey::zero();
 
-    while skS == ServerPrivateKey::zero() {
-        if counter > 255 {
-            return Err(Error::DeriveKeyPairError);
-        }
-
+    for counter in 0..u8::MAX {
         let mut payload = deriveInput.clone();
-        payload.extend_from_slice(&i2osp(counter, 1));
+        payload.extend_from_slice(&counter.to_be_bytes());
 
-        let mut dst = b"DeriveKeyPair".to_vec();
-        dst.extend_from_slice(context_string);
-
-        skS = hash_to_scalar(&payload, &dst);
-
-        counter = counter + 1;
+        skS = hash_to_scalar_dst(&payload, b"DeriveKeyPair", context_string);
+        if skS != ServerPrivateKey::zero() {
+            break;
+        }
+    }
+    if skS == ServerPrivateKey::zero() {
+        return Err(Error::DeriveKeyPairError);
     }
 
     let pkS = p256::p256_point_mul_base(skS)?;
 
-    Ok((skS, pkS))
+    Ok((skS, pkS.into()))
 }

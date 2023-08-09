@@ -1,6 +1,11 @@
+use p256::NatMod;
+use p256::P256Point;
+
+use crate::expand_message;
 use crate::prime_curve::Constructor;
 use crate::prime_curve::PrimeField;
 use crate::Error;
+use crate::ExpandMessageType;
 
 pub trait Ciphersuite {
     /// The SuiteID.
@@ -148,11 +153,29 @@ pub trait HashToCurve: Ciphersuite {
 //     fn clear_cofactor();
 // }
 // struct Point{}
+
+struct HtcCiphersuite {
+    expand_message_type: ExpandMessageType,
+    l: usize,
+    m: usize,
+}
+
+// fn map_to_curve(fe: &P256Point) -> _ {
+//     crate::mappings::map_to_curve_simple_swu(
+//         &fe,
+//         &<P256FieldElement as FieldArithmetic>::from_u128(3u128).neg(),
+//         &P256FieldElement::from_hex(
+//             "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+//         ),
+//         <P256FieldElement as FieldArithmetic>::from_u128(10u128).neg(),
+//     )
+// }
+
 // /// hash_to_curve(msg)
-// /// 
+// ///
 // /// Input: msg, an arbitrary-length byte string.
 // /// Output: P, a point in G.
-// /// 
+// ///
 // /// Steps:
 // /// 1. u = hash_to_field(msg, 2)
 // /// 2. Q0 = map_to_curve(u[0])
@@ -160,10 +183,22 @@ pub trait HashToCurve: Ciphersuite {
 // /// 4. R = Q0 + Q1              # Point addition
 // /// 5. P = clear_cofactor(R)
 // /// 6. return P
-// fn hash_to_curve<C: Curve>(msg: &[u8], dst: &[u8]) -> Result<Point, Error> {
-//     let u = C::hash_to_field();
-//     // ...
-//     todo!()
+// fn p256_sha256_hash_to_curve(
+//     msg: &[u8],
+//     dst: &[u8],
+// ) -> Result<P256Point, Error> {
+//     let u = hash_to_field(
+//         ExpandMessageType::P256_SHA256,
+//         msg,
+//         dst,
+//         2,
+//         48,
+//         1,
+//     )?;
+//     let q0 = u[0].map_to_curve();
+//     let q1 = u[1].map_to_curve();
+//     let r = p256::point_add(q0, q1)?;
+//     Ok(r)
 // }
 
 /// ## 5.2.  hash_to_field implementation
@@ -207,27 +242,27 @@ pub trait HashToCurve: Ciphersuite {
 /// 8.   u_i = (e_0, ..., e_(m - 1))
 /// 9. return (u_0, ..., u_(count - 1))
 ///```
-pub fn hash_to_field<const LEN: usize, Fp: PrimeField<{ LEN }>, Fpn: Constructor<{ LEN }, Fp>>(
+pub fn hash_to_field<const LEN: usize, Fp: NatMod<{ LEN }>>(
+    expand_message_type: crate::ExpandMessageType,
     msg: &[u8],
     dst: &[u8],
     count: usize,
     l: usize,
     m: usize,
-    expand_message: fn(&[u8], &[u8], usize) -> Result<Vec<u8>, Error>,
-) -> Result<Vec<Fpn>, Error> {
+) -> Result<Vec<Vec<Fp>>, Error> {
     let len_in_bytes = count * m * l;
-    let uniform_bytes = expand_message(msg, dst, len_in_bytes)?;
-    let mut u = Vec::new();
+    let uniform_bytes = expand_message(expand_message_type, msg, dst, len_in_bytes)?;
+    let mut u_i = Vec::new();
     for i in 0..count {
-        let mut u_i = Vec::new();
+        let mut e_j = Vec::new();
         for j in 0..m {
             let elm_offset = l * (j + i * m);
             let tv = &uniform_bytes[elm_offset..elm_offset + l];
-            u_i.push(Fp::from_be_bytes(tv))
+            e_j.push(Fp::from_be_bytes(tv))
         }
-        u.push(Fpn::from_coeffs(u_i))
+        u_i.push(e_j)
     }
-    Ok(u)
+    Ok(u_i)
 }
 
 // // XXX: This is a specialization of the generic function given in the draft.

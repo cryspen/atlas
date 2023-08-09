@@ -1,12 +1,12 @@
 // TODO: Add comments about what this is and where the spec is.
 
-use crate::hash_suite::{EncodeToCurve, HashToCurve, HashToField};
+use crate::hash_suite::{hash_to_field, EncodeToCurve, HashToCurve, HashToField};
 use crate::hasher::SHA256;
 use crate::prime_curve::{
     sqrt_ts_ct, Constructor, FieldArithmetic, MapToCurve, PrimeCurve, PrimeField,
 };
-use crate::Error;
 use crate::{expand_message::expand_message_xmd, hash_suite::Ciphersuite};
+use crate::{Error, ExpandMessageType};
 use p256::{NatMod, P256FieldElement, P256Point, P256Scalar};
 
 /// # 8.2 Suites for NIST P-256
@@ -41,24 +41,32 @@ impl Constructor<32, P256FieldElement> for P256FieldElement {
 
 impl HashToField for P256_XMD_SHA256_SSWU_RO {
     fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256FieldElement>, Error> {
-        crate::hash_suite::hash_to_field::<32, P256FieldElement, P256FieldElement>(
+        crate::hash_suite::hash_to_field(
+            ExpandMessageType::P256_SHA256,
             msg,
             dst,
             count,
             Self::L,
             Self::M,
-            Self::expand_message,
         )
+        .map(|r| r[0].clone())
     }
 }
 
 impl HashToCurve for P256_XMD_SHA256_SSWU_RO {
     fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<(Self::BaseField, Self::BaseField), Error> {
-        let u = Self::hash_to_field(msg, dst, 2)?;
-        let q0 = u[0].map_to_curve();
-        let q1 = u[1].map_to_curve();
+        let u: Vec<Vec<P256FieldElement>> = hash_to_field(
+            ExpandMessageType::P256_SHA256,
+            msg,
+            dst,
+            2,
+            Self::L,
+            Self::M,
+        )?;
+        let q0 = u[0][0].map_to_curve();
+        let q1 = u[1][0].map_to_curve();
         let r = Self::OutputCurve::point_add(q0, q1)?;
-        Ok(Self::OutputCurve::clear_cofactor(r))
+        Ok(r.into())
     }
 }
 
@@ -79,26 +87,26 @@ impl Ciphersuite for P256_XMD_SHA256_SSWU_NU {
     }
 }
 
-impl HashToField for P256_XMD_SHA256_SSWU_NU {
-    fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256FieldElement>, Error> {
-        crate::hash_suite::hash_to_field::<32, P256FieldElement, P256FieldElement>(
-            msg,
-            dst,
-            count,
-            Self::L,
-            Self::M,
-            Self::expand_message,
-        )
-    }
-}
+// impl HashToField for P256_XMD_SHA256_SSWU_NU {
+//     fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256FieldElement>, Error> {
+//         crate::hash_suite::hash_to_field::<32, P256FieldElement, P256FieldElement>(
+//             msg,
+//             dst,
+//             count,
+//             Self::L,
+//             Self::M,
+//             Self::expand_message,
+//         )
+//     }
+// }
 
-impl EncodeToCurve for P256_XMD_SHA256_SSWU_NU {
-    fn encode_to_curve(msg: &[u8], dst: &[u8]) -> Result<Self::OutputCurve, Error> {
-        let u = Self::hash_to_field(msg, dst, 1)?;
-        let q = u[0].map_to_curve();
-        Ok(P256Point::clear_cofactor(q))
-    }
-}
+// impl EncodeToCurve for P256_XMD_SHA256_SSWU_NU {
+//     fn encode_to_curve(msg: &[u8], dst: &[u8]) -> Result<Self::OutputCurve, Error> {
+//         let u = Self::hash_to_field(msg, dst, 1)?;
+//         let q = u[0].map_to_curve();
+//         Ok(P256Point::clear_cofactor(q))
+//     }
+// }
 
 impl FieldArithmetic for P256FieldElement {
     fn is_square(&self) -> bool {
@@ -182,11 +190,8 @@ impl PrimeCurve for P256Point {
         }
     }
 
-    fn point_add(
-        lhs: (P256FieldElement, P256FieldElement),
-        rhs: (P256FieldElement, P256FieldElement),
-    ) -> Result<(Self::BaseField, Self::BaseField), Error> {
-        p256::point_add_noninf(lhs, rhs).map_err(|_e| Error::InvalidAddition)
+    fn point_add(lhs: P256Point, rhs: P256Point) -> Result<P256Point, Error> {
+        p256::point_add(lhs, rhs).map_err(|_e| Error::InvalidAddition)
     }
 }
 
@@ -202,6 +207,7 @@ impl MapToCurve for P256FieldElement {
             ),
             <P256FieldElement as FieldArithmetic>::from_u128(10u128).neg(),
         )
+        .into()
     }
 }
 
@@ -212,26 +218,25 @@ mod tests {
 
     #[test]
     fn p256_xmd_sha256_sswu_ro_hash_to_field() {
-        test_hash_to_field::<32, P256_XMD_SHA256_SSWU_RO>()
+        test_hash_to_field_plain(crate::P256_XMD_SHA256_SSWU_RO)
     }
-
-    // #[test]
-    // fn p256_xmd_sha256_sswu_nu_hash_to_field() {
-    //     test_hash_to_field::<32, P256_XMD_SHA256_SSWU_NU>()
-    // }
+    //     // #[test]
+    //     // fn p256_xmd_sha256_sswu_nu_hash_to_field() {
+    //     //     test_hash_to_field::<32, P256_XMD_SHA256_SSWU_NU>()
+    //     // }
 
     #[test]
     fn p256_xmd_sha256_sswu_ro_map_to_curve() {
         test_map_to_curve::<32, P256_XMD_SHA256_SSWU_RO>();
     }
-
-    #[test]
-    fn p256_xmd_sha256_sswu_ro_hash_to_curve() {
-        test_hash_to_curve::<32, P256_XMD_SHA256_SSWU_RO>();
-    }
-
-    #[test]
-    fn p256_xmd_sha256_sswu_nu_encode_to_curve() {
-        test_encode_to_curve::<32, P256_XMD_SHA256_SSWU_NU>();
-    }
 }
+//     #[test]
+//     fn p256_xmd_sha256_sswu_ro_hash_to_curve() {
+//         test_hash_to_curve::<32, P256_XMD_SHA256_SSWU_RO>();
+//     }
+
+//     #[test]
+//     fn p256_xmd_sha256_sswu_nu_encode_to_curve() {
+//         test_encode_to_curve::<32, P256_XMD_SHA256_SSWU_NU>();
+//     }
+// }

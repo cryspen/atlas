@@ -6,6 +6,7 @@
 //!
 
 use crate::Error;
+use hash_to_curve::ExpandMessageType;
 use p256::{P256Point, P256Scalar};
 
 #[allow(non_upper_case_globals)]
@@ -24,7 +25,7 @@ pub type P256SerializedPoint = [u8; 33];
 ///
 pub fn serialize_element(p: &P256Point) -> P256SerializedPoint {
     use p256::NatMod;
-    let (x, y) = p;
+    let (x, y) = p256::Affine::from(*p);
 
     let x_serialized = x.to_be_bytes();
 
@@ -49,23 +50,19 @@ pub fn scalar_inverse(s: P256Scalar) -> P256Scalar {
 
 /// HashToScalar(): Use hash_to_field from [I-D.irtf-cfrg-hash-to-curve] using L = 48, expand_message_xmd with SHA-256, DST = "HashToScalar-" || contextString, and prime modulus equal to Group.Order().
 pub fn hash_to_scalar(bytes: &[u8], context_string: &[u8]) -> P256Scalar {
-    use hash_to_curve::expand_message::expand_message_xmd;
-    use hash_to_curve::hash_suite::hash_to_field;
-    use hash_to_curve::hasher::SHA256;
+    let mut dst: Vec<u8> = "HashToScalar-".into(); // DST = "HashToScalar-" || contextString
+    dst.extend_from_slice(context_string);
+    hash_to_scalar_dst(bytes, &dst, context_string)
+}
 
-    let mut dst: Vec<u8> = "HashToScalar".into(); // DST = "HashToScalar" || contextString
+pub fn hash_to_scalar_dst(bytes: &[u8], dst: &[u8], context_string: &[u8]) -> P256Scalar {
+    use hash_to_curve::hash_suite::hash_to_field;
+
+    let mut dst = dst.to_vec();
     dst.extend_from_slice(context_string);
 
-    // XXX: `PrimeField` impl for `P256Scalar` should move from `hash-to-curve` to `p256`
-    hash_to_field::<32, P256Scalar, P256Scalar>(
-        bytes,
-        &dst,
-        1,
-        48,
-        1,
-        expand_message_xmd::<SHA256>,
-    );
-    todo!()
+    hash_to_field::<32, P256Scalar>(ExpandMessageType::P256_SHA256, bytes, &dst, 1, 48, 1).unwrap()
+        [0][0]
 }
 
 /// HashToGroup(): Use hash_to_curve with suite P256_XMD:SHA-256_SSWU_RO_ [I-D.irtf-cfrg-hash-to-curve] and DST = "HashToGroup-" || contextString.
@@ -76,5 +73,7 @@ pub fn hash_to_group(bytes: &[u8], context_string: &[u8]) -> Result<P256Point, E
     let mut dst: Vec<u8> = b"HashToGroup-".to_vec();
     dst.extend_from_slice(context_string);
 
-    P256_XMD_SHA256_SSWU_RO::hash_to_curve(bytes, &dst).map_err(|e| e.into())
+    P256_XMD_SHA256_SSWU_RO::hash_to_curve(bytes, &dst)
+        .map_err(|e| e.into())
+        .map(|r| r.into())
 }

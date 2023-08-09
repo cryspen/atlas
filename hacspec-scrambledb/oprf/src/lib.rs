@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types, non_snake_case)]
 /*!
 # Oblivious Pseudorandom Functions (OPRFs) using Prime-Order Groups
 
@@ -83,3 +84,7 @@ pub mod oprf_suite;
 mod p256_sha256;
 
 mod util;
+
+#[cfg(test)]
+mod test_util;
+

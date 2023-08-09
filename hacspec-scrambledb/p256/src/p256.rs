@@ -21,9 +21,25 @@ pub type AffineResult = Result<Affine, Error>;
 type P256Jacobian = (P256FieldElement, P256FieldElement, P256FieldElement);
 type JacobianResult = Result<P256Jacobian, Error>;
 
+#[derive(Clone, Copy, PartialEq)]
 pub enum P256Point {
     NonInf(Affine),
     AtInfinity,
+}
+
+impl From<P256Point> for Affine {
+    fn from(value: P256Point) -> Self {
+        match value {
+            P256Point::AtInfinity => panic!("No affine representation of Point at Infinity."),
+            P256Point::NonInf(affine) => affine,
+        }
+    }
+}
+
+impl From<Affine> for P256Point {
+    fn from(value: Affine) -> Self {
+        P256Point::NonInf(value)
+    }
 }
 
 pub fn jacobian_to_affine(p: P256Jacobian) -> Affine {
@@ -81,7 +97,7 @@ fn s1_equal_s2(s1: P256FieldElement, s2: P256FieldElement) -> JacobianResult {
     if s1 == s2 {
         JacobianResult::Err(Error::InvalidAddition)
     } else {
-        JacobianResult::Ok((
+        Ok((
             P256FieldElement::from_u128(0),
             P256FieldElement::from_u128(1),
             P256FieldElement::from_u128(0),
@@ -90,10 +106,10 @@ fn s1_equal_s2(s1: P256FieldElement, s2: P256FieldElement) -> JacobianResult {
 }
 
 pub fn point_add_jacob(p: P256Jacobian, q: P256Jacobian) -> JacobianResult {
-    let mut result = JacobianResult::Ok(q);
+    let mut result = Ok(q);
     if !is_point_at_infinity(p) {
         if is_point_at_infinity(q) {
-            result = JacobianResult::Ok(p);
+            result = Ok(p);
         } else {
             let (x1, y1, z1) = p;
             let (x2, y2, z2) = q;
@@ -123,7 +139,7 @@ pub fn point_add_jacob(p: P256Jacobian, q: P256Jacobian) -> JacobianResult {
 
                 let z3_ = (z1 + z2).pow(2);
                 let z3 = (z3_ - (z1z1 + z2z2)) * h;
-                result = JacobianResult::Ok((x3, y3, z3));
+                result = Ok((x3, y3, z3));
             }
         }
     };
@@ -142,12 +158,12 @@ fn ltr_mul(k: P256Scalar, p: P256Jacobian) -> JacobianResult {
             q = point_add_jacob(q, p)?;
         }
     }
-    JacobianResult::Ok(q)
+    Ok(q)
 }
 
 pub fn p256_point_mul(k: P256Scalar, p: Affine) -> AffineResult {
     let jac = ltr_mul(k, affine_to_jacobian(p))?;
-    AffineResult::Ok(jacobian_to_affine(jac))
+    Ok(jacobian_to_affine(jac))
 }
 
 pub fn p256_point_mul_base(k: P256Scalar) -> AffineResult {
@@ -168,7 +184,7 @@ pub fn p256_point_mul_base(k: P256Scalar) -> AffineResult {
 
 fn point_add_distinct(p: Affine, q: Affine) -> AffineResult {
     let r = point_add_jacob(affine_to_jacobian(p), affine_to_jacobian(q))?;
-    AffineResult::Ok(jacobian_to_affine(r))
+    Ok(jacobian_to_affine(r))
 }
 
 pub fn point_add(p: P256Point, q: P256Point) -> Result<P256Point, Error> {
@@ -181,12 +197,11 @@ pub fn point_add(p: P256Point, q: P256Point) -> Result<P256Point, Error> {
     }
 }
 
-#[allow(unused_assignments)]
 pub fn point_add_noninf(p: Affine, q: Affine) -> AffineResult {
     if p != q {
         point_add_distinct(p, q)
     } else {
-        AffineResult::Ok(jacobian_to_affine(point_double(affine_to_jacobian(p))))
+        Ok(jacobian_to_affine(point_double(affine_to_jacobian(p))))
     }
 }
 
