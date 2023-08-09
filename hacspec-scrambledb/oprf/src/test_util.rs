@@ -195,3 +195,40 @@ fn oprf_evaluate() {
         }
     }
 }
+
+#[test]
+fn oprf_evaluate_blinded() {
+    use crate::protocol::online::oprf::blind;
+    use p256::{NatMod, P256Scalar};
+
+    let tests = load_vectors("allVectors.json");
+
+    for test in tests {
+        if test.identifier == "P256-SHA256" && test.mode == 0 {
+            let skS = P256Scalar::from_be_bytes(&test.skSm);
+            let context_string =
+                create_context_string(test.mode.into(), test.identifier.as_bytes());
+
+            for batch in test.vectors {
+                let Inputs: Vec<Vec<u8>> = batch
+                    .Input
+                    .split(",")
+                    .map(|i| hex::decode(i).unwrap())
+                    .collect();
+                let expectedOutputs: Vec<Vec<u8>> = batch
+                    .Output
+                    .split(",")
+                    .map(|o| hex::decode(o).unwrap())
+                    .collect();
+
+                for case in 0..batch.Batch {
+                    let (blind, blindedElement) = blind(&Inputs[case], &context_string).unwrap();
+                    let evaluatedElement = blind_evaluate(skS, blindedElement).unwrap();
+                    let output = finalize(&Inputs[case], blind, evaluatedElement).unwrap();
+
+                    assert_eq!(output, expectedOutputs[case]);
+                }
+            }
+        }
+    }
+}
