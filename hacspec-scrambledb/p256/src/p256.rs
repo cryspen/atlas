@@ -21,7 +21,7 @@ pub type AffineResult = Result<Affine, Error>;
 type P256Jacobian = (P256FieldElement, P256FieldElement, P256FieldElement);
 type JacobianResult = Result<P256Jacobian, Error>;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum P256Point {
     NonInf(Affine),
     AtInfinity,
