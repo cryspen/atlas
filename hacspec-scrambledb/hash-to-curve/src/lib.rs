@@ -20,7 +20,7 @@ pub mod hash_suite;
 pub mod hasher;
 pub mod mappings;
 
-pub(crate) mod prime_curve;
+pub mod prime_curve;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_snake_case)]

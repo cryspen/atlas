@@ -5,9 +5,9 @@
 //! "P256-SHA256".
 //!
 
-use crate::Error;
+use crate::{util::random_scalar, Error};
 use hash_to_curve::ExpandMessageType;
-use p256::{P256Point, P256Scalar};
+use p256::{P256FieldElement, P256Point, P256Scalar};
 
 #[allow(non_upper_case_globals)]
 const identifier: &'static [u8] = b"P256-SHA256";
@@ -25,21 +25,59 @@ pub type P256SerializedPoint = [u8; 33];
 ///
 pub fn serialize_element(p: &P256Point) -> P256SerializedPoint {
     use p256::NatMod;
-    let (x, y) = p256::Affine::from(*p);
-
-    let x_serialized = x.to_be_bytes();
-
     let mut out = [0u8; 33];
-    for (to, from) in out.iter_mut().zip(x_serialized.iter()) {
-        *to = *from
-    }
-    out[32] = if y.bit(0) { 2 } else { 3 };
+    match p {
+        P256Point::AtInfinity => out,
+        P256Point::NonInf((x, y)) => {
+            let x_serialized = x.to_be_bytes();
 
-    out
+            for (to, from) in out.iter_mut().skip(1).zip(x_serialized.iter()) {
+                *to = *from
+            }
+            out[0] = if y.bit(0) { 3 } else { 2 };
+
+            out
+        }
+    }
+}
+
+pub fn deserialize_element(pm: P256SerializedPoint) -> Result<P256Point, Error> {
+    use hash_to_curve::prime_curve::PrimeField;
+    use p256::NatMod;
+    if pm == [0u8; 33] {
+        return Err(Error::DeserializeError);
+    }
+
+    let x = P256FieldElement::from_be_bytes(&pm[1..33]);
+
+    let ym = pm[0];
+    let yp_sign: bool;
+    let y: P256FieldElement;
+
+    match ym {
+        0x02 => yp_sign = false,
+        0x03 => yp_sign = true,
+        _ => return Err(Error::DeserializeError),
+    }
+
+    let a = P256FieldElement::from_u128(3u128).neg();
+    let b = P256FieldElement::from_hex(
+        "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+    );
+
+    let alpha = x.pow(3) + a * x + b;
+    let beta = alpha.sqrt();
+
+    if beta.bit(0) == yp_sign {
+        y = beta;
+    } else {
+        y = beta.neg();
+    }
+
+    Ok((x, y).into())
 }
 
 pub fn identity() -> P256Point {
-    // XXX: For P-256, this is the point at infinity, which our implementation does not expose.
     P256Point::AtInfinity
 }
 
@@ -76,4 +114,11 @@ pub fn hash_to_group(bytes: &[u8], context_string: &[u8]) -> Result<P256Point, E
     P256_XMD_SHA256_SSWU_RO::hash_to_curve(bytes, &dst)
         .map_err(|e| e.into())
         .map(|r| r.into())
+}
+
+#[test]
+fn serialize_deserialize() {
+    let p: P256Point = p256::p256_point_mul_base(random_scalar()).unwrap().into();
+
+    assert_eq!(p, deserialize_element(serialize_element(&p)).unwrap());
 }
