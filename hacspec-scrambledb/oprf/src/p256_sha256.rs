@@ -5,12 +5,12 @@
 //! "P256-SHA256".
 //!
 
-use crate::{util::random_scalar, Error};
+use crate::Error;
 use hash_to_curve::ExpandMessageType;
 use p256::{P256FieldElement, P256Point, P256Scalar};
 
-#[allow(non_upper_case_globals)]
-const identifier: &'static [u8] = b"P256-SHA256";
+#[allow(non_upper_case_globals, unused)]
+const identifier: &[u8] = b"P256-SHA256";
 
 pub fn hash(payload: &[u8]) -> Vec<u8> {
     use libcrux::digest::{hash, Algorithm};
@@ -41,6 +41,7 @@ pub fn serialize_element(p: &P256Point) -> P256SerializedPoint {
     }
 }
 
+#[allow(unused)]
 pub fn deserialize_element(pm: P256SerializedPoint) -> Result<P256Point, Error> {
     use hash_to_curve::prime_curve::PrimeField;
     use p256::NatMod;
@@ -51,14 +52,11 @@ pub fn deserialize_element(pm: P256SerializedPoint) -> Result<P256Point, Error> 
     let x = P256FieldElement::from_be_bytes(&pm[1..33]);
 
     let ym = pm[0];
-    let yp_sign: bool;
-    let y: P256FieldElement;
-
-    match ym {
-        0x02 => yp_sign = false,
-        0x03 => yp_sign = true,
+    let yp_sign: bool = match ym {
+        0x02 => false,
+        0x03 => true,
         _ => return Err(Error::DeserializeError),
-    }
+    };
 
     let a = P256FieldElement::from_u128(3u128).neg();
     let b = P256FieldElement::from_hex(
@@ -68,11 +66,11 @@ pub fn deserialize_element(pm: P256SerializedPoint) -> Result<P256Point, Error> 
     let alpha = x.pow(3) + a * x + b;
     let beta = alpha.sqrt();
 
-    if beta.bit(0) == yp_sign {
-        y = beta;
+    let y: P256FieldElement = if beta.bit(0) == yp_sign {
+        beta
     } else {
-        y = beta.neg();
-    }
+        beta.neg()
+    };
 
     Ok((x, y).into())
 }
@@ -118,6 +116,7 @@ pub fn hash_to_group(bytes: &[u8], context_string: &[u8]) -> Result<P256Point, E
 
 #[test]
 fn serialize_deserialize() {
+    use crate::util::random_scalar;
     let p: P256Point = p256::p256_point_mul_base(random_scalar()).unwrap().into();
 
     assert_eq!(p, deserialize_element(serialize_element(&p)).unwrap());

@@ -38,6 +38,7 @@ pub const P256_XMD_SHA256_SSWU_RO: Ciphersuite = Ciphersuite {
     M: 1,
 };
 
+#[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExpandMessageType {
     P256_SHA256,

@@ -1,6 +1,6 @@
 //! ## 3.1. Configuration
 
-use crate::util::i2osp;
+use scrambledb_util::i2osp;
 
 ///  Each of the three protocol variants are identified with a one-byte
 ///    value (in hexadecimal):
@@ -19,13 +19,13 @@ pub enum ModeID {
     modePOPRF = 0x02,
 }
 
-impl Into<ModeID> for u32 {
-    fn into(self) -> ModeID {
-        match self {
+impl From<u32> for ModeID {
+    fn from(value: u32) -> Self {
+        match value {
             0 => ModeID::modeOPRF,
             1 => ModeID::modeVOPRF,
             2 => ModeID::modePOPRF,
-            _ => panic!("Invalid mode ID."),
+            _ => panic!("Invalid ModeID."),
         }
     }
 }

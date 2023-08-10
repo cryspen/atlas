@@ -4,7 +4,7 @@ use crate::protocol::{configuration::create_context_string, online::oprf::finali
 use std::fs::read_to_string;
 
 use serde::Deserialize;
-
+#[allow(unused)]
 #[derive(Deserialize)]
 pub struct TestVector {
     #[serde(with = "hex")]
@@ -21,6 +21,7 @@ pub struct TestVector {
     vectors: Vec<Batch>,
 }
 
+#[allow(unused)]
 #[derive(Deserialize)]
 pub struct Batch {
     Batch: usize,
@@ -33,6 +34,7 @@ pub struct Batch {
     Proof: Option<Proof>,
 }
 
+#[allow(unused)]
 #[derive(Deserialize)]
 pub struct Proof {
     #[serde(with = "hex")]

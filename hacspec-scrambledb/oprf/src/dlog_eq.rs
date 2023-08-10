@@ -32,6 +32,7 @@ use crate::util::*;
 use crate::Error;
 use libcrux::digest::{hash, Algorithm};
 use p256::{p256_point_mul, P256Point, P256Scalar};
+use scrambledb_util::i2osp;
 
 /// ### 2.2.1.  Proof Generation
 ///
@@ -79,12 +80,12 @@ use p256::{p256_point_mul, P256Point, P256Scalar};
 ///   a3 = G.SerializeElement(t3)
 ///
 ///   challengeTranscript =
-/// 	I2OSP(len(Bm), 2) || Bm ||
-/// 	I2OSP(len(a0), 2) || a0 ||
-/// 	I2OSP(len(a1), 2) || a1 ||
-/// 	I2OSP(len(a2), 2) || a2 ||
-/// 	I2OSP(len(a3), 2) || a3 ||
-/// 	"Challenge"
+///     I2OSP(len(Bm), 2) || Bm ||
+///     I2OSP(len(a0), 2) || a0 ||
+///     I2OSP(len(a1), 2) || a1 ||
+///     I2OSP(len(a2), 2) || a2 ||
+///     I2OSP(len(a3), 2) || a3 ||
+///     "Challenge"
 ///
 ///   c = G.HashToScalar(challengeTranscript)
 ///   s = r - c * k
@@ -166,22 +167,22 @@ pub fn generate_proof(
 ///   Bm = G.SerializeElement(B)
 ///   seedDST = "Seed-" || contextString
 ///   seedTranscript =
-/// 	I2OSP(len(Bm), 2) || Bm ||
-/// 	I2OSP(len(seedDST), 2) || seedDST
+///     I2OSP(len(Bm), 2) || Bm ||
+///     I2OSP(len(seedDST), 2) || seedDST
 ///   seed = Hash(seedTranscript)
 ///
 ///   M = G.Identity()
 ///   for i in range(m):
-/// 	Ci = G.SerializeElement(C[i])
-/// 	Di = G.SerializeElement(D[i])
-/// 	compositeTranscript =
-/// 	  I2OSP(len(seed), 2) || seed || I2OSP(i, 2) ||
-/// 	  I2OSP(len(Ci), 2) || Ci ||
-/// 	  I2OSP(len(Di), 2) || Di ||
-/// 	  "Composite"
+///     Ci = G.SerializeElement(C[i])
+///     Di = G.SerializeElement(D[i])
+///     compositeTranscript =
+///       I2OSP(len(seed), 2) || seed || I2OSP(i, 2) ||
+///       I2OSP(len(Ci), 2) || Ci ||
+///       I2OSP(len(Di), 2) || Di ||
+///       "Composite"
 ///
-/// 	di = G.HashToScalar(compositeTranscript)
-/// 	M = di * C[i] + M
+///     di = G.HashToScalar(compositeTranscript)
+///     M = di * C[i] + M
 ///
 ///   Z = k * M
 ///
@@ -283,12 +284,12 @@ fn compute_composites_fast(
 ///   a3 = G.SerializeElement(t3)
 ///
 ///   challengeTranscript =
-/// 	I2OSP(len(Bm), 2) || Bm ||
-/// 	I2OSP(len(a0), 2) || a0 ||
-/// 	I2OSP(len(a1), 2) || a1 ||
-/// 	I2OSP(len(a2), 2) || a2 ||
-/// 	I2OSP(len(a3), 2) || a3 ||
-/// 	"Challenge"
+///     I2OSP(len(Bm), 2) || Bm ||
+///     I2OSP(len(a0), 2) || a0 ||
+///     I2OSP(len(a1), 2) || a1 ||
+///     I2OSP(len(a2), 2) || a2 ||
+///     I2OSP(len(a3), 2) || a3 ||
+///     "Challenge"
 ///
 ///   expectedC = G.HashToScalar(challengeTranscript)
 ///   verified = (expectedC == c)
@@ -360,24 +361,24 @@ pub fn verify_proof(
 ///   Bm = G.SerializeElement(B)
 ///   seedDST = "Seed-" || contextString
 ///   seedTranscript =
-/// 	I2OSP(len(Bm), 2) || Bm ||
-/// 	I2OSP(len(seedDST), 2) || seedDST
+///     I2OSP(len(Bm), 2) || Bm ||
+///     I2OSP(len(seedDST), 2) || seedDST
 ///   seed = Hash(seedTranscript)
 ///
 ///   M = G.Identity()
 ///   Z = G.Identity()
 ///   for i in range(m):
-/// 	Ci = G.SerializeElement(C[i])
-/// 	Di = G.SerializeElement(D[i])
-/// 	compositeTranscript =
-/// 	  I2OSP(len(seed), 2) || seed || I2OSP(i, 2) ||
-/// 	  I2OSP(len(Ci), 2) || Ci ||
-/// 	  I2OSP(len(Di), 2) || Di ||
-/// 	  "Composite"
+///     Ci = G.SerializeElement(C[i])
+///     Di = G.SerializeElement(D[i])
+///     compositeTranscript =
+///       I2OSP(len(seed), 2) || seed || I2OSP(i, 2) ||
+///       I2OSP(len(Ci), 2) || Ci ||
+///       I2OSP(len(Di), 2) || Di ||
+///       "Composite"
 ///
-/// 	di = G.HashToScalar(compositeTranscript)
-/// 	M = di * C[i] + M
-/// 	Z = di * D[i] + Z
+///     di = G.HashToScalar(compositeTranscript)
+///     M = di * C[i] + M
+///     Z = di * D[i] + Z
 ///
 ///   return (M, Z)
 /// ```

@@ -8,9 +8,10 @@ edition = "2021"
 [dependencies]
 natmod = { path = "../natmod" }
 p256 = { path = "../p256" }
+scrambledb-util = { path = "../scrambledb-util" }
 libcrux = { git = "https://github.com/cryspen/libcrux" }
 hash-to-curve = { path = "../hash-to-curve" }
-rand = "0.8.5"
+
 
 [dev-dependencies]
 serde_json = { version = "1.0.102" }

@@ -1,11 +1,12 @@
 //! ## 3.2.  Key Generation and Context Setup
 
-use crate::p256_sha256::{hash_to_scalar_dst};
+use crate::p256_sha256::hash_to_scalar_dst;
 use crate::protocol::configuration::{create_context_string, ModeID};
 use crate::protocol::{ServerPrivateKey, ServerPublicKey};
 use crate::util::*;
 use crate::Error;
 use p256::NatMod;
+use scrambledb_util::i2osp;
 
 /// In the offline setup phase, the server generates a fresh, random key
 /// pair (skS, pkS).  There are two ways to generate this key pair.  The
@@ -44,30 +45,31 @@ pub fn generate_key_pair() -> Result<(ServerPrivateKey, ServerPublicKey), Error>
 /// such as OPRFServerContext, is an implementation-specific data
 /// structure that stores a context string and the relevant key material
 /// for each party.
+#[allow(unused)]
 pub struct OPRFServerContext {
     context_string: Vec<u8>,
     skS: ServerPrivateKey,
 }
-
+#[allow(unused)]
 pub struct OPRFClientContext {
     context_string: Vec<u8>,
 }
-
+#[allow(unused)]
 pub struct VOPRFServerContext {
     context_string: Vec<u8>,
     skS: ServerPrivateKey,
 }
-
+#[allow(unused)]
 pub struct VOPRFClientContext {
     context_string: Vec<u8>,
     pkS: ServerPublicKey,
 }
-
+#[allow(unused)]
 pub struct POPRFServerContext {
     context_string: Vec<u8>,
     skS: ServerPrivateKey,
 }
-
+#[allow(unused)]
 pub struct POPRFClientContext {
     context_string: Vec<u8>,
     pkS: ServerPublicKey,
@@ -185,11 +187,11 @@ pub fn setup_poprf_client(identifier: &[u8], pkS: ServerPublicKey) -> POPRFClien
 ///   counter = 0
 ///   skS = 0
 ///   while skS == 0:
-/// 	if counter > 255:
-/// 	  raise DeriveKeyPairError
-/// 	skS = G.HashToScalar(deriveInput || I2OSP(counter, 1),
+///     if counter > 255:
+///       raise DeriveKeyPairError
+///     skS = G.HashToScalar(deriveInput || I2OSP(counter, 1),
 ///                          DST = "DeriveKeyPair" || contextString)
-/// 	counter = counter + 1
+///     counter = counter + 1
 ///   pkS = G.ScalarMultGen(skS)
 ///   return skS, pkS
 /// ```
@@ -200,7 +202,7 @@ pub fn derive_key_pair(
 ) -> Result<(ServerPrivateKey, ServerPublicKey), Error> {
     let mut deriveInput = seed.to_vec();
     deriveInput.extend_from_slice(&i2osp(info.len(), 2));
-    deriveInput.extend_from_slice(&info);
+    deriveInput.extend_from_slice(info);
 
     let mut skS = ServerPrivateKey::zero();
 

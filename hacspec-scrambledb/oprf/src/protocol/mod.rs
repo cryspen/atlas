@@ -15,21 +15,21 @@
 //! learns nothing.  This interaction is shown below.
 //!
 //! ``` text
-//! 	Client(input)                                        Server(skS)
+//!     Client(input)                                        Server(skS)
 //!   -------------------------------------------------------------------
 //!   blind, blindedElement = Blind(input)
 //!
-//! 							 blindedElement
-//! 							   ---------->
+//!                                                      blindedElement
+//!                                                        ---------->
 //!
-//! 				evaluatedElement = BlindEvaluate(skS, blindedElement)
+//!                             evaluatedElement = BlindEvaluate(skS, blindedElement)
 //!
-//! 							 evaluatedElement
-//! 							   <----------
+//!                                                      evaluatedElement
+//!                                                        <----------
 //!
 //!   output = Finalize(input, blind, evaluatedElement)
 //!
-//! 				   Figure 1: OPRF protocol overview
+//!                                Figure 1: OPRF protocol overview
 //! ```
 //!
 //! In the VOPRF mode, the client additionally receives proof that the
@@ -42,21 +42,21 @@
 //! is shown below.
 //!
 //! ``` text
-//! 	Client(input, pkS)       <---- pkS ------        Server(skS, pkS)
+//!     Client(input, pkS)       <---- pkS ------        Server(skS, pkS)
 //!   -------------------------------------------------------------------
 //!   blind, blindedElement = Blind(input)
 //!
-//! 							 blindedElement
-//! 							   ---------->
+//!                                                      blindedElement
+//!                                                        ---------->
 //!
-//! 			  evaluatedElement, proof = BlindEvaluate(skS, pkS,
-//! 													  blindedElement)
+//!                       evaluatedElement, proof = BlindEvaluate(skS, pkS,
+//!                                                                                                       blindedElement)
 //!
-//! 						 evaluatedElement, proof
-//! 							   <----------
+//!                                              evaluatedElement, proof
+//!                                                        <----------
 //!
 //!   output = Finalize(input, blind, evaluatedElement,
-//! 					blindedElement, pkS, proof)
+//!                                     blindedElement, pkS, proof)
 //!
 //! Figure 2: VOPRF protocol overview with additional proof
 //! ```
@@ -67,23 +67,23 @@
 //! interact to compute output = F(skS, input, info) as is shown below.
 //!
 //! ``` text
-//! 	Client(input, pkS, info) <---- pkS ------  Server(skS, pkS, info)
+//!     Client(input, pkS, info) <---- pkS ------  Server(skS, pkS, info)
 //!   -------------------------------------------------------------------
 //!   blind, blindedElement, tweakedKey = Blind(input, info, pkS)
 //!
-//! 							 blindedElement
-//! 							   ---------->
+//!                                                      blindedElement
+//!                                                        ---------->
 //!
-//! 		 evaluatedElement, proof = BlindEvaluate(skS, blindedElement,
-//! 												 info)
+//!              evaluatedElement, proof = BlindEvaluate(skS, blindedElement,
+//!                                                                                              info)
 //! ```
 //!
 //! ```text
-//! 						 evaluatedElement, proof
-//! 							   <----------
+//!                                              evaluatedElement, proof
+//!                                                        <----------
 //!
 //!   output = Finalize(input, blind, evaluatedElement,
-//! 					blindedElement, proof, info, tweakedKey)
+//!                                     blindedElement, proof, info, tweakedKey)
 //!
 //! Figure 3: POPRF protocol overview with additional public input
 //! ```

@@ -1,11 +1,9 @@
 use p256::NatMod;
-use p256::P256Point;
 
 use crate::expand_message;
-use crate::prime_curve::Constructor;
+
 use crate::prime_curve::PrimeField;
 use crate::Error;
-use crate::ExpandMessageType;
 
 pub trait Ciphersuite {
     /// The SuiteID.
@@ -153,7 +151,6 @@ pub trait HashToCurve: Ciphersuite {
 //     fn clear_cofactor();
 // }
 // struct Point{}
-
 
 // fn map_to_curve(fe: &P256Point) -> _ {
 //     crate::mappings::map_to_curve_simple_swu(

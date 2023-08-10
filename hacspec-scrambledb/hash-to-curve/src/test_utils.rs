@@ -1,17 +1,16 @@
 use std::fs::read_to_string;
 
 use crate::{
-    expand_message,
     hash_suite::{hash_to_field, Ciphersuite, EncodeToCurve, HashToCurve, HashToField},
     prime_curve::MapToCurve,
     ExpandMessageType,
 };
-use p256::{NatMod, P256FieldElement, P256Point};
+use p256::{NatMod, P256FieldElement};
 use serde_json::Value;
 
-    pub fn load_vectors(path: &std::path::Path) -> Value {
-        serde_json::from_str(&read_to_string(path).expect("File not found.")).unwrap()
-    }
+pub fn load_vectors(path: &std::path::Path) -> Value {
+    serde_json::from_str(&read_to_string(path).expect("File not found.")).unwrap()
+}
 
 pub fn test_hash_to_field_plain(ciphersuite: crate::Ciphersuite) {
     let mut vector_path = std::path::Path::new("vectors").join(ciphersuite.ID);
@@ -65,6 +64,7 @@ pub fn test_hash_to_field_plain(ciphersuite: crate::Ciphersuite) {
     }
 }
 
+#[allow(unused)]
 pub fn test_hash_to_field<const LEN: usize, C>()
 where
     C: HashToField,
@@ -148,6 +148,7 @@ where
     }
 }
 
+#[allow(unused)]
 pub fn test_hash_to_curve<const LEN: usize, C>()
 where
     C: HashToCurve,
@@ -179,6 +180,7 @@ where
     }
 }
 
+#[allow(unused)]
 pub fn test_encode_to_curve<const LEN: usize, C>()
 where
     C: EncodeToCurve,

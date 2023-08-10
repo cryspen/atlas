@@ -1,6 +1,6 @@
 // TODO: Add comments about what this is and where the spec is.
 
-use crate::hash_suite::{hash_to_field, HashToField};
+use crate::hash_suite::{hash_to_field, HashToCurve, HashToField};
 use crate::hasher::SHA256;
 use crate::prime_curve::{
     sqrt_ts_ct, Constructor, FieldArithmetic, MapToCurve, PrimeCurve, PrimeField,

@@ -10,6 +10,7 @@ use crate::p256_sha256::hash;
 use crate::Error;
 use crate::{p256_sha256, protocol::ServerPrivateKey, util::random_scalar};
 use p256::{P256Point, P256Scalar};
+use scrambledb_util::i2osp;
 
 /// ``` text
 /// Input:
@@ -31,7 +32,7 @@ use p256::{P256Point, P256Scalar};
 ///   blind = G.RandomScalar()
 ///   inputElement = G.HashToGroup(input)
 ///   if inputElement == G.Identity():
-/// 	raise InvalidInputError
+///     raise InvalidInputError
 ///   blindedElement = blind * inputElement
 ///
 ///   return blind, blindedElement
@@ -104,8 +105,8 @@ pub fn blind_evaluate(
 ///   unblindedElement = G.SerializeElement(N)
 ///
 ///   hashInput = I2OSP(len(input), 2) || input ||
-/// 			  I2OSP(len(unblindedElement), 2) || unblindedElement ||
-/// 			  "Finalize"
+///                       I2OSP(len(unblindedElement), 2) || unblindedElement ||
+///                       "Finalize"
 ///   return Hash(hashInput)
 /// ```
 pub fn finalize(
@@ -113,13 +114,12 @@ pub fn finalize(
     blind: P256Scalar,
     evaluatedElement: P256Point,
 ) -> Result<Vec<u8>, Error> {
-    use crate::util::i2osp;
     let n = p256::p256_point_mul(p256_sha256::scalar_inverse(blind), evaluatedElement.into())?;
     let unblindedElement = p256_sha256::serialize_element(&n.into());
 
     let mut hashInput = Vec::new();
     hashInput.extend_from_slice(&i2osp(input.len(), 2));
-    hashInput.extend_from_slice(&input);
+    hashInput.extend_from_slice(input);
     hashInput.extend_from_slice(&i2osp(unblindedElement.len(), 2));
     hashInput.extend_from_slice(&unblindedElement);
     hashInput.extend_from_slice(b"Finalize".as_slice());
@@ -149,13 +149,13 @@ pub fn finalize(
 /// def Evaluate(skS, input):
 ///   inputElement = G.HashToGroup(input)
 ///   if inputElement == G.Identity():
-/// 	raise InvalidInputError
+///     raise InvalidInputError
 ///   evaluatedElement = skS * inputElement
 ///   issuedElement = G.SerializeElement(evaluatedElement)
 ///
 ///   hashInput = I2OSP(len(input), 2) || input ||
-/// 			  I2OSP(len(issuedElement), 2) || issuedElement ||
-/// 			  "Finalize"
+///                       I2OSP(len(issuedElement), 2) || issuedElement ||
+///                       "Finalize"
 ///   return Hash(hashInput)
 /// ```
 pub fn evaluate(
@@ -163,8 +163,6 @@ pub fn evaluate(
     input: &[u8],
     context_string: &[u8],
 ) -> Result<Vec<u8>, Error> {
-    use crate::util::i2osp;
-
     let inputElement = p256_sha256::hash_to_group(input, context_string)?;
 
     if inputElement == p256_sha256::identity() {
@@ -177,7 +175,7 @@ pub fn evaluate(
 
     let mut hashInput = Vec::new();
     hashInput.extend_from_slice(&i2osp(input.len(), 2));
-    hashInput.extend_from_slice(&input);
+    hashInput.extend_from_slice(input);
     hashInput.extend_from_slice(&i2osp(issuedElement.len(), 2));
     hashInput.extend_from_slice(&issuedElement);
     hashInput.extend_from_slice(b"Finalize".as_slice());
