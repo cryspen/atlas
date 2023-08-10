@@ -2,11 +2,11 @@
 
 members = [
 	#	"scrambledb",
-	#	"elgamal",
+	"elgamal",
 	#	"coprf",
 	#	"prp",
 	#	"renc",
 	"hash-to-curve",
 	"p256",
-	"oprf"
+	"oprf",
 ]
