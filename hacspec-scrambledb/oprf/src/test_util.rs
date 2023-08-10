@@ -3,8 +3,6 @@ use crate::protocol::setup::derive_key_pair;
 use crate::protocol::{configuration::create_context_string, online::oprf::finalize};
 use std::fs::read_to_string;
 
-use p256::{NatMod, P256Point};
-use serde::de::IntoDeserializer;
 use serde::Deserialize;
 
 #[derive(Deserialize)]

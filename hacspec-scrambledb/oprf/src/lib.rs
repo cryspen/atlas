@@ -57,13 +57,13 @@ pub enum Error {
 }
 
 impl From<p256::Error> for Error {
-    fn from(value: p256::Error) -> Self {
+    fn from(_: p256::Error) -> Self {
         Self::CurveError
     }
 }
 
 impl From<hash_to_curve::Error> for Error {
-    fn from(value: hash_to_curve::Error) -> Self {
+    fn from(_: hash_to_curve::Error) -> Self {
         Self::HashToCurveError
     }
 }

@@ -154,11 +154,6 @@ pub trait HashToCurve: Ciphersuite {
 // }
 // struct Point{}
 
-struct HtcCiphersuite {
-    expand_message_type: ExpandMessageType,
-    l: usize,
-    m: usize,
-}
 
 // fn map_to_curve(fe: &P256Point) -> _ {
 //     crate::mappings::map_to_curve_simple_swu(

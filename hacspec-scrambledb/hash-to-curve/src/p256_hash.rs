@@ -1,6 +1,6 @@
 // TODO: Add comments about what this is and where the spec is.
 
-use crate::hash_suite::{hash_to_field, EncodeToCurve, HashToCurve, HashToField};
+use crate::hash_suite::{hash_to_field, HashToField};
 use crate::hasher::SHA256;
 use crate::prime_curve::{
     sqrt_ts_ct, Constructor, FieldArithmetic, MapToCurve, PrimeCurve, PrimeField,
@@ -186,7 +186,7 @@ impl PrimeCurve for P256Point {
     fn clear_cofactor(self) -> Result<Self, Error> {
         match self {
             Self::AtInfinity => Err(Error::PointAtInfinity),
-            Self::NonInf(a) => Ok(self),
+            Self::NonInf(_) => Ok(self),
         }
     }
 

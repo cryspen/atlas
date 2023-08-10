@@ -1,6 +1,6 @@
 //! ## 3.2.  Key Generation and Context Setup
 
-use crate::p256_sha256::{hash_to_scalar, hash_to_scalar_dst};
+use crate::p256_sha256::{hash_to_scalar_dst};
 use crate::protocol::configuration::{create_context_string, ModeID};
 use crate::protocol::{ServerPrivateKey, ServerPublicKey};
 use crate::util::*;
