@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types, non_snake_case)]
 /*!
 # Oblivious Pseudorandom Functions (OPRFs) using Prime-Order Groups
 
@@ -44,10 +45,27 @@ The following terms are used throughout this document.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
-    InvalidScalarMult,
-    InvalidPointAdd,
+    VerifyError,
     DeserializeError,
-    InvalidExpansion,
+    InputValidationError,
+    InvalidInputError,
+    InverseError,
+    DeriveKeyPairError,
+
+    CurveError,
+    HashToCurveError,
+}
+
+impl From<p256::Error> for Error {
+    fn from(_: p256::Error) -> Self {
+        Self::CurveError
+    }
+}
+
+impl From<hash_to_curve::Error> for Error {
+    fn from(_: hash_to_curve::Error) -> Self {
+        Self::HashToCurveError
+    }
 }
 
 // 2.1 Prime-Order Group
@@ -57,7 +75,7 @@ pub mod prime_order_group;
 pub mod dlog_eq;
 
 // 3. Protocol
-pub mod oprf;
+pub mod protocol;
 
 // 4. Ciphersuites
 pub mod oprf_suite;
@@ -66,3 +84,7 @@ pub mod oprf_suite;
 mod p256_sha256;
 
 mod util;
+
+#[cfg(test)]
+mod test_util;
+
