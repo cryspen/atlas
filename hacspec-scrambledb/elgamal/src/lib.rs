@@ -1,8 +1,12 @@
+<<<<<<< Updated upstream
 //! # Elgamal Public Key Encryption
 //!
 //! This document represents an executable specification of the Elgamal Public Key Encryption scheme.
 //!
 //! At the basis of the encryption scheme is a prime order group $`\mathbb{G}`$.
+=======
+#![warn(missing_docs)]
+>>>>>>> Stashed changes
 
 use p256::{p256_point_mul, p256_point_mul_base, point_add, NatMod, P256Point, P256Scalar};
 use scrambledb_util::random_scalar;
@@ -85,9 +89,36 @@ pub fn rerandomize(
     Ok((c0prime, c1prime))
 }
 
+<<<<<<< Updated upstream
 #[cfg(test)]
 mod test {
     use super::*;
+=======
+pub fn add_ciphertexts(ctx0: Ciphertext, ctx1: Ciphertext) -> Result<Ciphertext, Error> {
+    let (ctx0_0, ctx0_1) = ctx0;
+    let (ctx1_0, ctx1_1) = ctx1;
+
+    let c0 = p256::point_add(ctx0_0, ctx1_0)?;
+    let c1 = p256::point_add(ctx0_1, ctx1_1)?;
+
+    Ok((c0, c1))
+}
+
+pub fn scalar_mul_ciphertext(k: P256Scalar, ctx: Ciphertext) -> Result<Ciphertext, Error> {
+    let (ctx0, ctx1) = ctx;
+
+    let c0 = p256_point_mul(k, ctx0.into())?.into();
+    let c1 = p256_point_mul(k, ctx1.into())?.into();
+
+    Ok((c0, c1))
+}
+
+#[test]
+fn test_correctness() {
+    let msg = random_element().unwrap();
+    let randomizer = random_scalar();
+    let (dk, ek) = generate_keys().unwrap();
+>>>>>>> Stashed changes
 
     #[test]
     fn test_correctness() {
