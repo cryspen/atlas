@@ -10,13 +10,16 @@ use scrambledb_util::i2osp;
 /// | modeOPRF  | 0x00  |
 /// | modeVOPRF | 0x01  |
 /// | modePOPRF | 0x02  |
+/// |           |       |
+/// | modecoPRF | 0x03  |
 ///
-///
+/// **Note:** `modecoPRF` is not part of the original draft document, but belongs to our Convertible OPRF extension.
 #[allow(non_camel_case_types)]
 pub enum ModeID {
     modeOPRF = 0x00,
     modeVOPRF = 0x01,
     modePOPRF = 0x02,
+    modecoPRF = 0x03,
 }
 
 impl From<u32> for ModeID {
@@ -25,6 +28,7 @@ impl From<u32> for ModeID {
             0 => ModeID::modeOPRF,
             1 => ModeID::modeVOPRF,
             2 => ModeID::modePOPRF,
+            3 => ModeID::modecoPRF,
             _ => panic!("Invalid ModeID."),
         }
     }

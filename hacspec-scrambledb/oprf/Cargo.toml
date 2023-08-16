@@ -11,6 +11,7 @@ p256 = { path = "../p256" }
 scrambledb-util = { path = "../scrambledb-util" }
 libcrux = { git = "https://github.com/cryspen/libcrux" }
 hash-to-curve = { path = "../hash-to-curve" }
+elgamal = { path = "../elgamal" }
 
 
 [dev-dependencies]
