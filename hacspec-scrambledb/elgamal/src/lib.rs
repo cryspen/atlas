@@ -1,12 +1,9 @@
-<<<<<<< Updated upstream
 //! # Elgamal Public Key Encryption
 //!
 //! This document represents an executable specification of the Elgamal Public Key Encryption scheme.
 //!
 //! At the basis of the encryption scheme is a prime order group $`\mathbb{G}`$.
-=======
 #![warn(missing_docs)]
->>>>>>> Stashed changes
 
 use p256::{p256_point_mul, p256_point_mul_base, point_add, NatMod, P256Point, P256Scalar};
 use scrambledb_util::random_scalar;
@@ -89,11 +86,6 @@ pub fn rerandomize(
     Ok((c0prime, c1prime))
 }
 
-<<<<<<< Updated upstream
-#[cfg(test)]
-mod test {
-    use super::*;
-=======
 pub fn add_ciphertexts(ctx0: Ciphertext, ctx1: Ciphertext) -> Result<Ciphertext, Error> {
     let (ctx0_0, ctx0_1) = ctx0;
     let (ctx1_0, ctx1_1) = ctx1;
@@ -113,47 +105,50 @@ pub fn scalar_mul_ciphertext(k: P256Scalar, ctx: Ciphertext) -> Result<Ciphertex
     Ok((c0, c1))
 }
 
-#[test]
-fn test_correctness() {
-    let msg = random_element().unwrap();
-    let randomizer = random_scalar();
-    let (dk, ek) = generate_keys().unwrap();
->>>>>>> Stashed changes
-
+#[cfg(test)]
+mod test {
+    use super::*;
     #[test]
     fn test_correctness() {
         let msg = random_element().unwrap();
         let randomizer = random_scalar();
         let (dk, ek) = generate_keys().unwrap();
 
-        let ctx = encrypt(ek, msg, randomizer).unwrap();
-        let decryption = decrypt(dk, ctx).unwrap();
+        #[test]
+        fn test_correctness() {
+            let msg = random_element().unwrap();
+            let randomizer = random_scalar();
+            let (dk, ek) = generate_keys().unwrap();
 
-        assert_eq!(msg, decryption);
-    }
+            let ctx = encrypt(ek, msg, randomizer).unwrap();
+            let decryption = decrypt(dk, ctx).unwrap();
 
-    #[test]
-    fn test_rerandomize() {
-        let msg = random_element().unwrap();
-        let randomizer_enc = random_scalar();
-        let randomizer_rerand = random_scalar();
-        if randomizer_rerand == P256Scalar::one() {
-            panic!("Trivial randomizer");
+            assert_eq!(msg, decryption);
         }
-        let (dk, ek) = generate_keys().unwrap();
 
-        let ctx = encrypt(ek, msg, randomizer_enc).unwrap();
-        let rctx = rerandomize(ek, ctx, randomizer_rerand).unwrap();
-        let decryption = decrypt(dk, rctx).unwrap();
+        #[test]
+        fn test_rerandomize() {
+            let msg = random_element().unwrap();
+            let randomizer_enc = random_scalar();
+            let randomizer_rerand = random_scalar();
+            if randomizer_rerand == P256Scalar::one() {
+                panic!("Trivial randomizer");
+            }
+            let (dk, ek) = generate_keys().unwrap();
 
-        assert_eq!(msg, decryption);
-        assert_ne!(ctx, rctx);
-    }
+            let ctx = encrypt(ek, msg, randomizer_enc).unwrap();
+            let rctx = rerandomize(ek, ctx, randomizer_rerand).unwrap();
+            let decryption = decrypt(dk, rctx).unwrap();
 
-    fn random_element() -> Result<P256Point, Error> {
-        let rand = random_scalar();
-        let res = p256_point_mul_base(rand)?.into();
+            assert_eq!(msg, decryption);
+            assert_ne!(ctx, rctx);
+        }
 
-        Ok(res)
+        fn random_element() -> Result<P256Point, Error> {
+            let rand = random_scalar();
+            let res = p256_point_mul_base(rand)?.into();
+
+            Ok(res)
+        }
     }
 }
