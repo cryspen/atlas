@@ -1,5 +1,5 @@
 #![warn(missing_docs)]
-//! ## EXT.2. CoPRF Online Protocol
+//! ## E.2. CoPRF Online Protocol
 //! ```text
 //!     Requester(bpk, input)                                        Evaluator(k)                                   Receiver(bpk, bsk)
 //!   --------------------------------------------------------------------------------------------------------------------------------
