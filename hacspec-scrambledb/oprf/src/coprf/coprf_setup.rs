@@ -28,7 +28,7 @@ pub type BlindingPublicKey = elgamal::EncryptionKey;
 pub type BlindingPrivateKey = elgamal::DecryptionKey;
 
 pub type CoPRFMasterSecret = [u8; 64]; // FIXME: What is the right size here?
-pub type CoPRFKeyID = Vec<u8>; // FIXME: Constrain length?
+pub type CoPRFKeyID = Vec<u8>;
 pub type CoPRFKey = P256Scalar;
 
 #[allow(unused)]
