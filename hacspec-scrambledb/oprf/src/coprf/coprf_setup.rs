@@ -1,4 +1,4 @@
-//! # EXT.1. CoPRF Setup
+//! ## E.1. CoPRF Setup
 //!
 //! This part of the document describes an extension to the OPRF protocol
 //! called convertible PRF (coPRF) introduced in [Lehmann].
@@ -51,7 +51,7 @@ pub struct CoPRFReceiverContext {
     bsk: BlindingPrivateKey,
 }
 
-/// ### EXT.1.1 Requester Setup
+/// ### E.1.1. Requester Setup
 /// The requesting party requires the blinding public key of the receiving
 /// party on whose behalf PRF evaluation queries should be carried out.
 pub fn setup_coprf_requester(identifier: &[u8], bpk: BlindingPublicKey) -> CoPRFRequesterContext {
@@ -61,7 +61,7 @@ pub fn setup_coprf_requester(identifier: &[u8], bpk: BlindingPublicKey) -> CoPRF
     }
 }
 
-/// ### EXT.1.2. Evaluator Setup
+/// ### E.1.2. Evaluator Setup
 /// The coPRF evaluator holds the master secret as well as any PRF evaluation keys derived from it.
 pub fn setup_coprf_evaluator(identifier: &[u8], msk: CoPRFMasterSecret) -> CoPRFEvaluatorContext {
     CoPRFEvaluatorContext {
@@ -71,7 +71,7 @@ pub fn setup_coprf_evaluator(identifier: &[u8], msk: CoPRFMasterSecret) -> CoPRF
     }
 }
 
-/// ### EXT.1.3. Receiver Setup
+/// ### E.1.3. Receiver Setup
 /// The coPRF receiver holds a pair of corresponding blinding and unblinding keys.
 pub fn setup_coprf_receiver(
     identifier: &[u8],
@@ -85,7 +85,7 @@ pub fn setup_coprf_receiver(
     }
 }
 
-/// ### EXT.1.4. Blinding Key Generation
+/// ### E.1.4. Blinding Key Generation
 /// Following the instantiation presented by [Lehmann], blinding is
 /// implemented using a rerandomizable homomorphic encryption scheme, in
 /// this case the Elgamal public key encryption scheme.
@@ -99,7 +99,7 @@ pub fn generate_blinding_key_pair() -> Result<(BlindingPrivateKey, BlindingPubli
     Ok((bsk, bpk))
 }
 
-/// ### EXT.1.5. Evaluation Key Derivation
+/// ### E.1.5. Evaluation Key Derivation
 /// [Lehman] recommends a key derivation procedure using an underlying PRF
 /// which maps from bitstrings to a finite field, such that the field is
 /// compatible with the homomorphism afforded by the encryption scheme.
