@@ -122,7 +122,7 @@ pub fn derive_key(msk: CoPRFMasterSecret, key_id: CoPRFKeyID) -> Result<CoPRFKey
         KDF::HKDF_SHA256,
         suite_id.clone(),
         b"",
-        label.clone(),
+        label,
         &key_material,
     )?;
 
