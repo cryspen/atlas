@@ -94,8 +94,8 @@ pub fn setup_coprf_receiver(
 /// decryption using the encryption scheme, hence blinding key generation
 /// is the key generation procedure for the encryption scheme.
 ///
-pub fn generate_blinding_key_pair() -> Result<(BlindingPrivateKey, BlindingPublicKey), Error> {
-    let (bsk, bpk) = elgamal::generate_keys()?;
+pub fn generate_blinding_key_pair(uniform_bytes: &[u8]) -> Result<(BlindingPrivateKey, BlindingPublicKey), Error> {
+    let (bsk, bpk) = elgamal::generate_keys(uniform_bytes)?;
     Ok((bsk, bpk))
 }
 
