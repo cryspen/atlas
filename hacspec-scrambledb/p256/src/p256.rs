@@ -61,6 +61,16 @@ impl std::ops::Neg for P256FieldElement {
     }
 }
 
+impl std::ops::Neg for P256Point {
+    type Output = P256Point;
+    fn neg(self) -> Self::Output {
+        match self {
+            P256Point::AtInfinity => self,
+            P256Point::NonInf((x, y)) => (x, hacspec_helper::NatMod::neg(y)).into(),
+        }
+    }
+}
+
 pub fn affine_to_jacobian(p: Affine) -> P256Jacobian {
     let (x, y) = p;
     (x, y, P256FieldElement::from_u128(1))
