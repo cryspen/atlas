@@ -17,8 +17,9 @@
 //! CoPRFs are defined in a multi-key setting, such that CoPRF evaluation
 //! keys are derived from a master secret.
 
-use libcrux::hmac::hmac;
-use p256::{NatMod, P256Scalar};
+use libcrux::hpke::kdf::{LabeledExpand, LabeledExtract, KDF};
+use p256::{p256_validate_private_key, NatMod, P256Scalar};
+use scrambledb_util::i2osp;
 use std::collections::HashMap;
 
 use crate::protocol::configuration::{create_context_string, ModeID};
@@ -27,7 +28,16 @@ use crate::Error;
 pub type BlindingPublicKey = elgamal::EncryptionKey;
 pub type BlindingPrivateKey = elgamal::DecryptionKey;
 
-pub type CoPRFMasterSecret = [u8; 64]; // FIXME: What is the right size here?
+/// The master secret for generating coPRF keys. It is fixed to a
+/// length 32 bytes since that is the number of bytes necessary as an
+/// input for HPKE-style key derivation when targeting scalars in
+/// P256.  Per the HPKE RFC [RFC9180] it is crucial that a minimum of
+/// `Nsk` bytes of entropy is provided to the key derivation
+/// algorithm, where `Nsk` is the number of bytes to represent a valid
+/// private key, i.e. a P256 scalar in our case.
+pub type CoPRFMasterSecret = [u8; 32];
+
+///
 pub type CoPRFKeyID = Vec<u8>;
 pub type CoPRFKey = P256Scalar;
 
@@ -107,12 +117,41 @@ pub fn generate_blinding_key_pair(
 /// compatible with the homomorphism afforded by the encryption scheme.
 ///
 /// Concretely in our case, PRF evaluation keys should be scalars in
-/// P256. To achieve this, we take the approach of evaluating HMAC-SHA256
-/// on the identifier of the key to be generated, keyed by the master
-/// secret. The resulting bytestring is interpreted as a serialized scalar
-/// and deserialized to obtain a key in the set of scalars.
-pub fn derive_key(msk: CoPRFMasterSecret, key_id: CoPRFKeyID) -> CoPRFKey {
-    use libcrux::hmac;
-    let bytes = hmac(hmac::Algorithm::Sha256, &msk, &key_id, None);
-    P256Scalar::from_be_bytes(&bytes)
+/// P256. To achieve this, we use the rejection sampling method outlined in [RFC9180].
+pub fn derive_key(msk: CoPRFMasterSecret, key_id: CoPRFKeyID) -> Result<CoPRFKey, Error> {
+    let mut key_material = msk.to_vec();
+    key_material.extend_from_slice(&key_id);
+    let suite_id = b"coPRF-P256-SHA256".to_vec();
+    let label = b"dkp_prk".to_vec();
+    let candidate_label = b"candidate".to_vec();
+
+    let dkp_prk = LabeledExtract(
+        KDF::HKDF_SHA256,
+        suite_id.clone(),
+        b"",
+        label.clone(),
+        &key_material,
+    )?;
+
+    let mut sk = P256Scalar::zero();
+
+    for counter in 0..255 {
+        let mut bytes = LabeledExpand(
+            KDF::HKDF_SHA256,
+            suite_id.clone(),
+            &dkp_prk,
+            candidate_label.clone(),
+            &i2osp(counter, 1),
+            32,
+        )?;
+        bytes[0] = bytes[0] & 0xffu8;
+        if p256_validate_private_key(&bytes) {
+            sk = P256Scalar::from_be_bytes(&bytes);
+        }
+    }
+    if sk == P256Scalar::zero() {
+        Err(Error::DeriveKeyPairError)
+    } else {
+        Ok(sk)
+    }
 }
