@@ -54,6 +54,7 @@ pub enum Error {
 
     CurveError,
     HashToCurveError,
+    ElgamalError,
 }
 
 impl From<p256::Error> for Error {
@@ -65,6 +66,12 @@ impl From<p256::Error> for Error {
 impl From<hash_to_curve::Error> for Error {
     fn from(_: hash_to_curve::Error) -> Self {
         Self::HashToCurveError
+    }
+}
+
+impl From<elgamal::Error> for Error {
+    fn from(_: elgamal::Error) -> Self {
+        Self::ElgamalError
     }
 }
 
@@ -83,8 +90,9 @@ pub mod oprf_suite;
 // 4.2 OPRF(P-256, SHA-256)
 mod p256_sha256;
 
+pub mod coprf;
+
 mod util;
 
 #[cfg(test)]
 mod test_util;
-
