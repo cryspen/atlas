@@ -127,3 +127,16 @@ pub fn convert(key_i: CoPRFKey, key_j: CoPRFKey, y: P256Point) -> Result<P256Poi
 
     Ok(result)
 }
+/// Blind conversion is performed using the homomorphic properties of the Elgamal ciphertext.
+/// Like all other ciphertexts received by the evaluator, the blinded output is rerandomized to provide collusion-resistance.
+pub fn blind_convert(
+    bpk: BlindingPublicKey,
+    key_i: CoPRFKey,
+    key_j: CoPRFKey,
+    ctx: BlindedElement,
+    randomizer: P256Scalar,
+) -> Result<BlindedElement, Error> {
+    let delta = key_j * key_i.inv();
+    let ctx_rerandomized = elgamal::rerandomize(bpk, ctx, randomizer)?;
+    elgamal::scalar_mul_ciphertext(delta, ctx_rerandomized).map_err(|e| e.into())
+}
