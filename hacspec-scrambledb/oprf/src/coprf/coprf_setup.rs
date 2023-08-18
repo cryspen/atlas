@@ -1,42 +1,50 @@
-//! # EXT.1. CoPRF Setup
-//!
-//! This part of the document describes an extension to the OPRF protocol
-//! called convertible PRF (coPRF) introduced in [Lehmann].
-//!
-//! A coPRF is a protocol for blind evaluation of a PRF between three
-//! parties, as opposed to the two parties in the regular OPRF setting.  A
-//! **requester** wishes the PRF to be evaluated blindly under the key
-//! held by the **evaluator**. Unlike in the two-party OPRF setting, the
-//! blinded evaluation result is not returned to the requester, but to a
-//! third party, the **receiver**. Only the receiver can unblind the
-//! evaluation result and thus receive the PRF output.
-//!
-//! CoPRFs further provide the possiblity of converting PRF outputs, both
-//! in blinded and unblinded form, from one PRF key to another.
+#![warn(missing_docs)]
+//! ## E.1. CoPRF Setup
 //!
 //! CoPRFs are defined in a multi-key setting, such that CoPRF evaluation
 //! keys are derived from a master secret.
 
-use libcrux::hmac::hmac;
-use p256::{NatMod, P256Scalar};
+use libcrux::hpke::kdf::{LabeledExpand, LabeledExtract, KDF};
+use p256::{p256_validate_private_key, NatMod, P256Scalar};
+use scrambledb_util::i2osp;
 use std::collections::HashMap;
 
 use crate::protocol::configuration::{create_context_string, ModeID};
 use crate::Error;
 
+/// As blinding is performed by Elgamal encryption, the blinding public
+/// key is an Elgamal encryption key.
 pub type BlindingPublicKey = elgamal::EncryptionKey;
+/// As unblinding is performed by Elgamal decryption, the unblinding
+/// private key is an Elgamal decryption key.
 pub type BlindingPrivateKey = elgamal::DecryptionKey;
 
-pub type CoPRFMasterSecret = [u8; 64]; // FIXME: What is the right size here?
-pub type CoPRFKeyID = Vec<u8>; // FIXME: Constrain length?
+/// The master secret for generating coPRF keys. It is fixed to a
+/// length 32 bytes since that is the number of bytes necessary as an
+/// input for HPKE-style key derivation when targeting scalars in
+/// P256.  Per the HPKE RFC [RFC9180] it is crucial that a minimum of
+/// `Nsk` bytes of entropy is provided to the key derivation
+/// algorithm, where `Nsk` is the number of bytes to represent a valid
+/// private key, i.e. a P256 scalar in our case.
+pub type CoPRFMasterSecret = [u8; 32];
+
+/// A coPRF evaluation key is identified by a bytestring of arbitrary
+/// length.
+pub type CoPRFKeyID = Vec<u8>;
+/// A coPRF evaluation key is a scalar for the base group of the scheme,
+/// in our case P256.
 pub type CoPRFKey = P256Scalar;
 
+/// The coPRF requester requires the blinding public key of the intended
+/// receiver of the PRF output.
 #[allow(unused)]
 pub struct CoPRFRequesterContext {
     context_string: Vec<u8>,
     bpk: BlindingPublicKey,
 }
 
+/// The coPRF evaluator holds the coPRF master secret, as well as any
+/// evaluation keys derived from it.
 #[allow(unused)]
 pub struct CoPRFEvaluatorContext {
     context_string: Vec<u8>,
@@ -44,6 +52,8 @@ pub struct CoPRFEvaluatorContext {
     keys: HashMap<CoPRFKeyID, CoPRFKey>,
 }
 
+/// The coPRF receiver needs an unblinding private key in order to obtain
+/// the final coPRF output from the blinded evaluation result.
 #[allow(unused)]
 pub struct CoPRFReceiverContext {
     context_string: Vec<u8>,
@@ -51,7 +61,7 @@ pub struct CoPRFReceiverContext {
     bsk: BlindingPrivateKey,
 }
 
-/// ### EXT.1.1 Requester Setup
+/// ### E.1.1. Requester Setup
 /// The requesting party requires the blinding public key of the receiving
 /// party on whose behalf PRF evaluation queries should be carried out.
 pub fn setup_coprf_requester(identifier: &[u8], bpk: BlindingPublicKey) -> CoPRFRequesterContext {
@@ -61,8 +71,9 @@ pub fn setup_coprf_requester(identifier: &[u8], bpk: BlindingPublicKey) -> CoPRF
     }
 }
 
-/// ### EXT.1.2. Evaluator Setup
-/// The coPRF evaluator holds the master secret as well as any PRF evaluation keys derived from it.
+/// ### E.1.2. Evaluator Setup
+/// The coPRF evaluator holds the master secret as well as any PRF
+/// evaluation keys derived from it.
 pub fn setup_coprf_evaluator(identifier: &[u8], msk: CoPRFMasterSecret) -> CoPRFEvaluatorContext {
     CoPRFEvaluatorContext {
         context_string: create_context_string(ModeID::modecoPRF, identifier),
@@ -71,7 +82,7 @@ pub fn setup_coprf_evaluator(identifier: &[u8], msk: CoPRFMasterSecret) -> CoPRF
     }
 }
 
-/// ### EXT.1.3. Receiver Setup
+/// ### E.1.3. Receiver Setup
 /// The coPRF receiver holds a pair of corresponding blinding and unblinding keys.
 pub fn setup_coprf_receiver(
     identifier: &[u8],
@@ -85,7 +96,7 @@ pub fn setup_coprf_receiver(
     }
 }
 
-/// ### EXT.1.4. Blinding Key Generation
+/// ### E.1.4. Blinding Key Generation
 /// Following the instantiation presented by [Lehmann], blinding is
 /// implemented using a rerandomizable homomorphic encryption scheme, in
 /// this case the Elgamal public key encryption scheme.
@@ -94,23 +105,54 @@ pub fn setup_coprf_receiver(
 /// decryption using the encryption scheme, hence blinding key generation
 /// is the key generation procedure for the encryption scheme.
 ///
-pub fn generate_blinding_key_pair() -> Result<(BlindingPrivateKey, BlindingPublicKey), Error> {
-    let (bsk, bpk) = elgamal::generate_keys()?;
+pub fn generate_blinding_key_pair(
+    uniform_bytes: &[u8],
+) -> Result<(BlindingPrivateKey, BlindingPublicKey), Error> {
+    let (bsk, bpk) = elgamal::generate_keys(uniform_bytes)?;
     Ok((bsk, bpk))
 }
 
-/// ### EXT.1.5. Evaluation Key Derivation
+/// ### E.1.5. Evaluation Key Derivation
 /// [Lehman] recommends a key derivation procedure using an underlying PRF
 /// which maps from bitstrings to a finite field, such that the field is
 /// compatible with the homomorphism afforded by the encryption scheme.
 ///
 /// Concretely in our case, PRF evaluation keys should be scalars in
-/// P256. To achieve this, we take the approach of evaluating HMAC-SHA256
-/// on the identifier of the key to be generated, keyed by the master
-/// secret. The resulting bytestring is interpreted as a serialized scalar
-/// and deserialized to obtain a key in the set of scalars.
-pub fn derive_key(msk: CoPRFMasterSecret, key_id: CoPRFKeyID) -> CoPRFKey {
-    use libcrux::hmac;
-    let bytes = hmac(hmac::Algorithm::Sha256, &msk, &key_id, None);
-    P256Scalar::from_be_bytes(&bytes)
+/// P256. To achieve this, we use the rejection sampling method outlined in [RFC9180].
+pub fn derive_key(msk: CoPRFMasterSecret, key_id: CoPRFKeyID) -> Result<CoPRFKey, Error> {
+    let mut key_material = msk.to_vec();
+    key_material.extend_from_slice(&key_id);
+    let suite_id = b"coPRF-P256-SHA256".to_vec();
+    let label = b"dkp_prk".to_vec();
+    let candidate_label = b"candidate".to_vec();
+
+    let dkp_prk = LabeledExtract(
+        KDF::HKDF_SHA256,
+        suite_id.clone(),
+        b"",
+        label,
+        &key_material,
+    )?;
+
+    let mut sk = P256Scalar::zero();
+
+    for counter in 0..255 {
+        let mut bytes = LabeledExpand(
+            KDF::HKDF_SHA256,
+            suite_id.clone(),
+            &dkp_prk,
+            candidate_label.clone(),
+            &i2osp(counter, 1),
+            32,
+        )?;
+        bytes[0] = bytes[0] & 0xffu8;
+        if p256_validate_private_key(&bytes) {
+            sk = P256Scalar::from_be_bytes(&bytes);
+        }
+    }
+    if sk == P256Scalar::zero() {
+        Err(Error::DeriveKeyPairError)
+    } else {
+        Ok(sk)
+    }
 }

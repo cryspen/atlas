@@ -57,6 +57,12 @@ pub enum Error {
     ElgamalError,
 }
 
+impl From<libcrux::hpke::errors::HpkeError> for Error {
+    fn from(_value: libcrux::hpke::errors::HpkeError) -> Self {
+        Self::DeriveKeyPairError
+    }
+}
+
 impl From<p256::Error> for Error {
     fn from(_: p256::Error) -> Self {
         Self::CurveError
