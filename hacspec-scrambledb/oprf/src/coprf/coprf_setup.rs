@@ -12,9 +12,11 @@ use std::collections::HashMap;
 use crate::protocol::configuration::{create_context_string, ModeID};
 use crate::Error;
 
-/// As blinding is performed by Elgamal encryption, the blinding public key is an Elgamal encryption key.
+/// As blinding is performed by Elgamal encryption, the blinding public
+/// key is an Elgamal encryption key.
 pub type BlindingPublicKey = elgamal::EncryptionKey;
-/// As unblinding is performed by Elgamal decryption, the unblinding private key is an Elgamal decryption key.
+/// As unblinding is performed by Elgamal decryption, the unblinding
+/// private key is an Elgamal decryption key.
 pub type BlindingPrivateKey = elgamal::DecryptionKey;
 
 /// The master secret for generating coPRF keys. It is fixed to a
@@ -26,19 +28,23 @@ pub type BlindingPrivateKey = elgamal::DecryptionKey;
 /// private key, i.e. a P256 scalar in our case.
 pub type CoPRFMasterSecret = [u8; 32];
 
-/// A coPRF evaluation key is identified by a bytestring of arbitrary length.
+/// A coPRF evaluation key is identified by a bytestring of arbitrary
+/// length.
 pub type CoPRFKeyID = Vec<u8>;
-/// A coPRF evaluation key is a scalar for the base group of the scheme, in our case P256.
+/// A coPRF evaluation key is a scalar for the base group of the scheme,
+/// in our case P256.
 pub type CoPRFKey = P256Scalar;
 
-/// The coPRF requester requires the blinding public key of the intended receiver of the PRF output.
+/// The coPRF requester requires the blinding public key of the intended
+/// receiver of the PRF output.
 #[allow(unused)]
 pub struct CoPRFRequesterContext {
     context_string: Vec<u8>,
     bpk: BlindingPublicKey,
 }
 
-/// The coPRF evaluator holds the coPRF master secret, as well as any evaluation keys derived from it.
+/// The coPRF evaluator holds the coPRF master secret, as well as any
+/// evaluation keys derived from it.
 #[allow(unused)]
 pub struct CoPRFEvaluatorContext {
     context_string: Vec<u8>,
@@ -46,7 +52,8 @@ pub struct CoPRFEvaluatorContext {
     keys: HashMap<CoPRFKeyID, CoPRFKey>,
 }
 
-/// The coPRF receiver needs an unblinding private key in order to obtain the final coPRF output from the blinded evaluation result.
+/// The coPRF receiver needs an unblinding private key in order to obtain
+/// the final coPRF output from the blinded evaluation result.
 #[allow(unused)]
 pub struct CoPRFReceiverContext {
     context_string: Vec<u8>,
@@ -65,7 +72,8 @@ pub fn setup_coprf_requester(identifier: &[u8], bpk: BlindingPublicKey) -> CoPRF
 }
 
 /// ### E.1.2. Evaluator Setup
-/// The coPRF evaluator holds the master secret as well as any PRF evaluation keys derived from it.
+/// The coPRF evaluator holds the master secret as well as any PRF
+/// evaluation keys derived from it.
 pub fn setup_coprf_evaluator(identifier: &[u8], msk: CoPRFMasterSecret) -> CoPRFEvaluatorContext {
     CoPRFEvaluatorContext {
         context_string: create_context_string(ModeID::modecoPRF, identifier),
