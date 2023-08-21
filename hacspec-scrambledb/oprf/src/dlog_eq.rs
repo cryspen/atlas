@@ -100,6 +100,7 @@ pub fn generate_proof(
     C: Vec<P256Point>,
     D: Vec<P256Point>,
     r: Option<P256Scalar>,
+    seed: &[u8; 32],
     context_string: &[u8],
 ) -> Result<(P256Scalar, P256Scalar), Error> {
     // C and D must be of the same length
@@ -109,7 +110,7 @@ pub fn generate_proof(
     // NOTE: Allowing to pass in the random scalar instead of
     // generating it freshly, so we can test proof generation using
     // the provided test vectors.
-    let r = r.unwrap_or_else(random_scalar); // r = G.RandomScalar()
+    let r = r.unwrap_or(random_scalar(seed)); // r = G.RandomScalar()
 
     let t2 = p256_point_mul(r, A.into())?; // t2 = r * A
     let t3 = p256_point_mul(r, M.into())?; // t3 = r * M

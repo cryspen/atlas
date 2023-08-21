@@ -222,7 +222,8 @@ fn oprf_evaluate_blinded() {
                     .collect();
 
                 for case in 0..batch.Batch {
-                    let (blind, blindedElement) = blind(&Inputs[case], &context_string).unwrap();
+                    let (blind, blindedElement) =
+                        blind(&Inputs[case], &context_string, &[0xde; 32]).unwrap();
                     let evaluatedElement = blind_evaluate(skS, blindedElement).unwrap();
                     let output = finalize(&Inputs[case], blind, evaluatedElement).unwrap();
 

@@ -118,7 +118,7 @@ mod test {
         rand::thread_rng().fill_bytes(&mut uniform_bytes);
         let (dk, ek) = generate_keys(&uniform_bytes).unwrap();
 
-        let randomizer = random_scalar();
+        let randomizer = random_scalar(&[0xab; 32]).unwrap();
 
         let ctx = encrypt(ek, msg, randomizer).unwrap();
         let decryption = decrypt(dk, ctx).unwrap();
@@ -129,8 +129,8 @@ mod test {
     #[test]
     fn test_rerandomize() {
         let msg = random_element().unwrap();
-        let randomizer_enc = random_scalar();
-        let randomizer_rerand = random_scalar();
+        let randomizer_enc = random_scalar(&[0xab; 32]).unwrap();
+        let randomizer_rerand = random_scalar(&[0xab; 32]).unwrap();
         if randomizer_rerand == P256Scalar::one() {
             panic!("Trivial randomizer");
         }
@@ -147,7 +147,7 @@ mod test {
     }
 
     fn random_element() -> Result<P256Point, Error> {
-        let rand = random_scalar();
+        let rand = random_scalar(&[0xab; 32]).unwrap();
         let res = p256_point_mul_base(rand)?.into();
 
         Ok(res)

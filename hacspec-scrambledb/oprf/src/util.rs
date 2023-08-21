@@ -11,6 +11,6 @@ use p256::P256Scalar;
 /// For P-256:
 /// ceil(log2(G.Order())) = 256
 /// ceil(((3 * 256) / 2) / 8) = 48
-pub fn random_scalar() -> P256Scalar {
-    scrambledb_util::random_scalar()
+pub fn random_scalar(seed: &[u8; 32]) -> P256Scalar {
+    scrambledb_util::random_scalar(seed).unwrap()
 }
