@@ -14,6 +14,8 @@ use std::ops::Neg;
 /// * `c1` is the result of multiplying the  target public encryption key the same randomizer `r` and adding the result to the message `M` that is to be encrypted.
 pub type Ciphertext = (P256Point, P256Point);
 
+pub type Plaintext = P256Point;
+
 #[derive(Debug)]
 /// Any of the given algorithms may fail if the given arguments result in invalid group operations.
 pub enum Error {
@@ -47,7 +49,7 @@ pub fn generate_keys(uniform_bytes: &[u8]) -> Result<(DecryptionKey, EncryptionK
 
 pub fn encrypt(
     enc_key: P256Point,
-    message: P256Point,
+    message: Plaintext,
     randomizer: P256Scalar,
 ) -> Result<Ciphertext, Error> {
     let blinded_message = p256::point_add(
@@ -59,7 +61,7 @@ pub fn encrypt(
 }
 
 /// To decrypt an Elgamal ciphertext, the holder of the decryption key can multiply the auxillary component of the ciphertext by the decryption key, thus reproducing the blinding element that was calculated during encryption. Adding the negation of this blinding to the blinded message component of the ciphertext recovers the encrypted message.
-pub fn decrypt(dec_key: P256Scalar, ctx: Ciphertext) -> Result<P256Point, Error> {
+pub fn decrypt(dec_key: P256Scalar, ctx: Ciphertext) -> Result<Plaintext, Error> {
     let blinding: P256Point = p256::p256_point_mul(dec_key, ctx.0.into())?.into();
 
     p256::point_add(ctx.1, blinding.neg()).map_err(|e| e.into())
