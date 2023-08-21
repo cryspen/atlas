@@ -22,6 +22,12 @@ use super::coprf_setup::{BlindingPrivateKey, BlindingPublicKey, CoPRFKey};
 use crate::{p256_sha256, Error};
 use p256::{NatMod, P256Point, P256Scalar};
 
+pub type Input<'a> = &'a [u8];
+pub type Output = P256Point;
+
+pub type BlindInput = elgamal::Ciphertext;
+pub type BlindOutput = elgamal::Ciphertext;
+
 // =========== Unblinded Operations ===========
 
 /// The clear evaluation of the PRF based on the PRF by Naor, Pinkas, and Reingold:
@@ -37,11 +43,7 @@ use p256::{NatMod, P256Point, P256Scalar};
 /// * `X` is the set of inputs, in our case arbitrary bitstrings,
 /// * `G` is a group where DDH problem is assumed to be computationally hard, in our case P-256,
 /// * `H` is a random oracle mapping bitstring to `G`, in our case as specified in [hash-to-curve].
-pub fn evaluate(
-    key: CoPRFKey,
-    input: &[u8],
-    context_string: &[u8],
-) -> Result<p256::P256Point, Error> {
+pub fn evaluate(key: CoPRFKey, input: Input, context_string: &[u8]) -> Result<Output, Error> {
     let inputElement = p256_sha256::hash_to_group(input, context_string)?;
 
     if inputElement == p256_sha256::identity() {
@@ -62,22 +64,25 @@ pub fn evaluate(
 /// evaluate(k_j, x) = convert(k_i, k_j, evaluate(k_i, x))
 /// ```
 ///
-/// In our instantiation based on the Naor-Pinkas-Reingold PRF, conversion is performed by first computing a `delta` scalar from both evaluation keys, which when mulitplied with the output to convert will cancel out the original evaluation key and multiply by the target evaluation key.
-pub fn convert(key_i: CoPRFKey, key_j: CoPRFKey, y: P256Point) -> Result<P256Point, Error> {
+/// In our instantiation based on the Naor-Pinkas-Reingold PRF, conversion
+/// is performed by first computing a `delta` scalar from both evaluation
+/// keys, which when mulitplied with the output to convert will cancel out
+/// the original evaluation key and multiply by the target evaluation key.
+pub fn convert(key_i: CoPRFKey, key_j: CoPRFKey, y: Output) -> Result<Output, Error> {
     let delta = key_j * key_i.inv();
     let result = p256::p256_point_mul(delta, y.into())?.into();
 
     Ok(result)
 }
 
-type BlindedElement = Ciphertext;
+pub type BlindedElement = Ciphertext;
 
 // =========== Unblinded Operations ===========
 
 /// The requester blinds a query for blind evaluation by Elgamal encryption with the blinding public key of the target receiver after applying the RO-mapping into the base group used by the encryption scheme to the input bytes.
 pub fn blind(
     bpk: BlindingPublicKey,
-    input: &[u8],
+    input: Input,
     context_string: &[u8],
     randomizer: p256::P256Scalar,
 ) -> Result<BlindedElement, Error> {
@@ -96,24 +101,25 @@ pub fn blind(
 pub fn blind_evaluate(
     key: CoPRFKey,
     bpk: BlindingPublicKey,
-    ctx: BlindedElement,
+    blind_input: BlindInput,
     randomizer: p256::P256Scalar,
-) -> Result<BlindedElement, Error> {
-    let ctx_rerandomized = elgamal::rerandomize(bpk, ctx, randomizer)?;
-    elgamal::scalar_mul_ciphertext(key, ctx_rerandomized).map_err(|e| e.into())
+) -> Result<BlindOutput, Error> {
+    let input_rerandomized = elgamal::rerandomize(bpk, blind_input, randomizer)?;
+    elgamal::scalar_mul_ciphertext(key, input_rerandomized).map_err(|e| e.into())
 }
 
-/// To recover the PRF output, the receiver performs unblinding of the blind evaluation result by Elgamal decryption.
-pub fn finalize(bsk: BlindingPrivateKey, ctx: BlindedElement) -> Result<P256Point, Error> {
-    elgamal::decrypt(bsk, ctx).map_err(|e| e.into())
+/// To recover the PRF output, the receiver performs unblinding of the
+/// blind evaluation result by Elgamal decryption.
+pub fn finalize(bsk: BlindingPrivateKey, blind_output: BlindOutput) -> Result<Output, Error> {
+    elgamal::decrypt(bsk, blind_output).map_err(|e| e.into())
 }
 
 /// A PRF output can be blinded for blind conversion by perfoming an Elgamal encryption of it under the target blinding public key.
 pub fn prepare_blind_convert(
     bpk: BlindingPublicKey,
-    y: P256Point,
+    y: Output,
     randomizer: P256Scalar,
-) -> Result<BlindedElement, Error> {
+) -> Result<BlindInput, Error> {
     elgamal::encrypt(bpk, y, randomizer).map_err(|e| e.into())
 }
 
@@ -123,10 +129,10 @@ pub fn blind_convert(
     bpk: BlindingPublicKey,
     key_i: CoPRFKey,
     key_j: CoPRFKey,
-    ctx: BlindedElement,
+    blind_input: BlindInput,
     randomizer: P256Scalar,
-) -> Result<BlindedElement, Error> {
+) -> Result<BlindOutput, Error> {
     let delta = key_j * key_i.inv();
-    let ctx_rerandomized = elgamal::rerandomize(bpk, ctx, randomizer)?;
+    let ctx_rerandomized = elgamal::rerandomize(bpk, blind_input, randomizer)?;
     elgamal::scalar_mul_ciphertext(delta, ctx_rerandomized).map_err(|e| e.into())
 }

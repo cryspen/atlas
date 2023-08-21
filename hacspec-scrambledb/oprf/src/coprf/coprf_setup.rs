@@ -34,16 +34,16 @@ pub type CoPRFKey = P256Scalar;
 /// The coPRF requester requires the blinding public key of the intended receiver of the PRF output.
 #[allow(unused)]
 pub struct CoPRFRequesterContext {
-    context_string: Vec<u8>,
-    bpk: BlindingPublicKey,
+    pub context_string: Vec<u8>,
+    pub bpk: BlindingPublicKey,
 }
 
 /// The coPRF evaluator holds the coPRF master secret, as well as any evaluation keys derived from it.
 #[allow(unused)]
 pub struct CoPRFEvaluatorContext {
-    context_string: Vec<u8>,
-    msk: CoPRFMasterSecret,
-    keys: HashMap<CoPRFKeyID, CoPRFKey>,
+    pub context_string: Vec<u8>,
+    pub msk: CoPRFMasterSecret,
+    pub keys: HashMap<CoPRFKeyID, CoPRFKey>,
 }
 
 /// The coPRF receiver needs an unblinding private key in order to obtain the final coPRF output from the blinded evaluation result.
@@ -111,9 +111,9 @@ pub fn generate_blinding_key_pair(
 ///
 /// Concretely in our case, PRF evaluation keys should be scalars in
 /// P256. To achieve this, we use the rejection sampling method outlined in [RFC9180].
-pub fn derive_key(msk: CoPRFMasterSecret, key_id: CoPRFKeyID) -> Result<CoPRFKey, Error> {
+pub fn derive_key(msk: CoPRFMasterSecret, key_id: &[u8]) -> Result<CoPRFKey, Error> {
     let mut key_material = msk.to_vec();
-    key_material.extend_from_slice(&key_id);
+    key_material.extend_from_slice(key_id);
     let suite_id = b"coPRF-P256-SHA256".to_vec();
     let label = b"dkp_prk".to_vec();
     let candidate_label = b"candidate".to_vec();
