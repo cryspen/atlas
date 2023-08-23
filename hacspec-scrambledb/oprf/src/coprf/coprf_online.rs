@@ -25,8 +25,8 @@ use p256::{NatMod, P256Point, P256Scalar};
 pub type Input<'a> = &'a [u8];
 pub type Output = P256Point;
 
-pub type BlindInput = elgamal::Ciphertext;
-pub type BlindOutput = elgamal::Ciphertext;
+pub type BlindInput = Ciphertext;
+pub type BlindOutput = Ciphertext;
 
 // =========== Unblinded Operations ===========
 

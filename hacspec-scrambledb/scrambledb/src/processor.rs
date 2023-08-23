@@ -1,18 +1,25 @@
 use std::collections::HashMap;
 
-use elgamal::{generate_keys, DecryptionKey, EncryptionKey};
-use oprf::coprf::coprf_setup::{generate_blinding_key_pair, BlindingPrivateKey, BlindingPublicKey};
-use scrambledb_util::get_subbytes;
+use elgamal::{decrypt, generate_keys, DecryptionKey, EncryptionKey};
+use libcrux::aead::{self, encrypt_detached, Algorithm, Key};
+use oprf::{
+    coprf::{
+        coprf_online::finalize,
+        coprf_setup::{generate_blinding_key_pair, BlindingPrivateKey, BlindingPublicKey},
+    },
+    p256_sha256::serialize_element,
+};
+use scrambledb_util::subbytes;
 
 use crate::{
-    types::table::{JoinedTable, ProcessorInputTable, TableKey},
-    Error, RANDBYTES_SCALAR,
+    table::{JoinedTable, ProcessorInputTable, TableKey},
+    Error, JOIN_ID, RANDBYTES_SCALAR,
 };
 
 pub struct ProcessorContext {
     bsk: BlindingPrivateKey,
     dk: DecryptionKey,
-    k_prf: libcrux::aead::Key,
+    k_prf: Key,
 }
 
 pub fn setup_processor(
@@ -20,19 +27,18 @@ pub fn setup_processor(
 ) -> Result<(ProcessorContext, (BlindingPublicKey, EncryptionKey)), Error> {
     let mut rand_offset = 0usize;
     let (bsk, bpk) =
-        generate_blinding_key_pair(get_subbytes(randomness, rand_offset, RANDBYTES_SCALAR))
-            .unwrap();
+        generate_blinding_key_pair(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
     rand_offset += RANDBYTES_SCALAR;
 
-    let (dk, ek) = generate_keys(get_subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
+    let (dk, ek) = generate_keys(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
     rand_offset += RANDBYTES_SCALAR;
 
-    let k_prf = libcrux::aead::Key::from_bytes(
-        libcrux::aead::Algorithm::Chacha20Poly1305,
-        get_subbytes(
+    let k_prf = Key::from_bytes(
+        Algorithm::Chacha20Poly1305,
+        subbytes(
             randomness,
             rand_offset,
-            libcrux::aead::Algorithm::Chacha20Poly1305.key_size(),
+            Algorithm::Chacha20Poly1305.key_size(),
         )
         .to_vec(),
     )
@@ -50,22 +56,20 @@ pub fn finalize_join_request(
         let mut joined_column_inner = Vec::new();
 
         for (blinded_pseudonym, encrypted_value) in table.entries() {
-            let raw_pseudoymn =
-                oprf::coprf::coprf_online::finalize(processor_context.bsk, *blinded_pseudonym)
-                    .unwrap();
+            let raw_pseudonym = finalize(processor_context.bsk, *blinded_pseudonym).unwrap();
 
-            let pseudonym = oprf::p256_sha256::serialize_element(&raw_pseudoymn).to_vec();
+            let pseudonym = serialize_element(&raw_pseudonym).to_vec();
 
-            let pseudonym: TableKey = libcrux::aead::encrypt_detached(
+            let pseudonym: TableKey = encrypt_detached(
                 &processor_context.k_prf,
                 pseudonym,
-                libcrux::aead::Iv::new(b"").unwrap(),
+                aead::Iv::new(b"").unwrap(),
                 b"",
             )
             .unwrap()
             .into();
 
-            let value = elgamal::decrypt(processor_context.dk, *encrypted_value).unwrap();
+            let value = decrypt(processor_context.dk, *encrypted_value).unwrap();
 
             joined_column_inner.push((pseudonym, value));
         }

@@ -1,16 +1,23 @@
-use elgamal::{generate_keys, DecryptionKey, EncryptionKey};
-use oprf::coprf::coprf_setup::{generate_blinding_key_pair, BlindingPrivateKey, BlindingPublicKey};
-use scrambledb_util::get_subbytes;
+use elgamal::{decrypt, encrypt, generate_keys, DecryptionKey, EncryptionKey};
+use libcrux::aead::{decrypt_detached, encrypt_detached, Key};
+use oprf::{
+    coprf::{
+        coprf_online::{finalize, prepare_blind_convert},
+        coprf_setup::{generate_blinding_key_pair, BlindingPrivateKey, BlindingPublicKey},
+    },
+    p256_sha256::{deserialize_element, serialize_element},
+};
+use scrambledb_util::{random_scalar, subbytes};
 
 use crate::{
-    types::table::{LakeInputTable, LakeOutputTable, LakeTable, TableKey},
+    table::{LakeInputTable, LakeOutputTable, LakeTable, TableKey},
     Error, RANDBYTES_SCALAR,
 };
 
 pub struct LakeContext {
     bsk: BlindingPrivateKey,
     dk: DecryptionKey,
-    k_prp: libcrux::aead::Key,
+    k_prp: Key,
 }
 
 pub fn setup_lake(
@@ -18,16 +25,15 @@ pub fn setup_lake(
 ) -> Result<(LakeContext, (BlindingPublicKey, EncryptionKey)), Error> {
     let mut rand_offset = 0usize;
     let (bsk, bpk) =
-        generate_blinding_key_pair(get_subbytes(randomness, rand_offset, RANDBYTES_SCALAR))
-            .unwrap();
+        generate_blinding_key_pair(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
     rand_offset += RANDBYTES_SCALAR;
 
-    let (dk, ek) = generate_keys(get_subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
+    let (dk, ek) = generate_keys(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
     rand_offset += RANDBYTES_SCALAR;
 
-    let k_prp = libcrux::aead::Key::from_bytes(
+    let k_prp = Key::from_bytes(
         libcrux::aead::Algorithm::Chacha20Poly1305,
-        get_subbytes(
+        subbytes(
             randomness,
             rand_offset,
             libcrux::aead::Algorithm::Chacha20Poly1305.key_size(),
@@ -48,13 +54,11 @@ pub fn finalize_pseudonymization_request(
         let mut lake_table_inner = Vec::new();
 
         for &(blinded_pseudonym, encrypted_value) in table.entries() {
-            let unblinded_raw_pseudonym =
-                oprf::coprf::coprf_online::finalize(lake_context.bsk, blinded_pseudonym).unwrap();
+            let unblinded_raw_pseudonym = finalize(lake_context.bsk, blinded_pseudonym).unwrap();
 
-            let mut pseudonym =
-                oprf::p256_sha256::serialize_element(&unblinded_raw_pseudonym).to_vec();
+            let mut pseudonym = serialize_element(&unblinded_raw_pseudonym).to_vec();
 
-            let pseudonym = libcrux::aead::encrypt_detached(
+            let pseudonym = encrypt_detached(
                 &lake_context.k_prp,
                 &mut pseudonym,
                 libcrux::aead::Iv::new(b"").unwrap(),
@@ -63,7 +67,7 @@ pub fn finalize_pseudonymization_request(
             .unwrap()
             .into();
 
-            let table_value = elgamal::decrypt(lake_context.dk, encrypted_value).unwrap();
+            let table_value = decrypt(lake_context.dk, encrypted_value).unwrap();
 
             lake_table_inner.push((pseudonym, table_value));
         }
@@ -114,36 +118,21 @@ pub fn join_request(
             )
             .unwrap();
 
-            let raw_pseudonym = oprf::p256_sha256::deserialize_element(
-                raw_pseudonym_compressed.try_into().unwrap(),
-            )
-            .unwrap();
+            let raw_pseudonym =
+                deserialize_element(raw_pseudonym_compressed.try_into().unwrap()).unwrap();
 
-            let randomizer_coprf = scrambledb_util::random_scalar(get_subbytes(
-                randomness,
-                rand_offset,
-                RANDBYTES_SCALAR,
-            ))
-            .unwrap();
+            let randomizer_coprf =
+                random_scalar(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
             rand_offset += RANDBYTES_SCALAR;
 
-            let blinded_pseudonym = oprf::coprf::coprf_online::prepare_blind_convert(
-                bpk_processor,
-                raw_pseudonym,
-                randomizer_coprf,
-            )
-            .unwrap();
+            let blinded_pseudonym =
+                prepare_blind_convert(bpk_processor, raw_pseudonym, randomizer_coprf).unwrap();
 
-            let randomizer_enc = scrambledb_util::random_scalar(get_subbytes(
-                randomness,
-                rand_offset,
-                RANDBYTES_SCALAR,
-            ))
-            .unwrap();
+            let randomizer_enc =
+                random_scalar(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
             rand_offset += RANDBYTES_SCALAR;
 
-            let encrypted_value =
-                elgamal::encrypt(ek_processor, *table_value, randomizer_enc).unwrap();
+            let encrypted_value = encrypt(ek_processor, *table_value, randomizer_enc).unwrap();
 
             output_table_inner.push((blinded_pseudonym, encrypted_value));
         }

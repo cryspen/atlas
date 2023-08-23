@@ -1,12 +1,13 @@
-use crate::types::table::{
-    LakeInputTable, LakeOutputTable, ProcessorInputTable, SourceOutputTable,
+use crate::{
+    table::{LakeInputTable, LakeOutputTable, ProcessorInputTable, SourceOutputTable},
+    Error, COPRF_SUITE_ID, RANDBYTES_SCALAR, SECPAR_BYTES,
 };
-use crate::{Error, RANDBYTES_SCALAR, SECPAR_BYTES};
 use elgamal::EncryptionKey;
-use oprf::coprf::coprf_online;
-use oprf::coprf::coprf_setup::{self, BlindingPublicKey};
-use oprf::coprf::coprf_setup::{setup_coprf_evaluator, CoPRFEvaluatorContext};
-use scrambledb_util::get_subbytes;
+use oprf::coprf::{
+    coprf_online::{blind_convert, blind_evaluate},
+    coprf_setup::{derive_key, setup_coprf_evaluator, BlindingPublicKey, CoPRFEvaluatorContext},
+};
+use scrambledb_util::{random_scalar, subbytes};
 
 pub struct ConverterContext {
     coprf_context: CoPRFEvaluatorContext,
@@ -43,17 +44,12 @@ pub fn handle_pseudonymization_request(
     let mut lake_input_tables = Vec::new();
     for attribute in table.attributes() {
         let mut lake_input_table_inner = Vec::new();
-        let coprf_key =
-            coprf_setup::derive_key(converter_context.coprf_context.msk, attribute).unwrap();
+        let coprf_key = derive_key(converter_context.coprf_context.msk, attribute).unwrap();
 
         let column = table.get_column(attribute).unwrap();
         for (table_key, table_value) in column.iter() {
-            let randomizer_value = scrambledb_util::random_scalar(get_subbytes(
-                &randomness,
-                rand_offset,
-                RANDBYTES_SCALAR,
-            ))
-            .unwrap();
+            let randomizer_value =
+                random_scalar(subbytes(&randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
             rand_offset += RANDBYTES_SCALAR;
 
             let rerandomized_value =
@@ -61,15 +57,11 @@ pub fn handle_pseudonymization_request(
                     .unwrap();
 
             // eval coprf on key
-            let randomizer_coprf = scrambledb_util::random_scalar(get_subbytes(
-                &randomness,
-                rand_offset,
-                RANDBYTES_SCALAR,
-            ))
-            .unwrap();
+            let randomizer_coprf =
+                random_scalar(subbytes(&randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
             rand_offset += RANDBYTES_SCALAR;
 
-            let blinded_pseudonym = coprf_online::blind_evaluate(
+            let blinded_pseudonym = blind_evaluate(
                 coprf_key,
                 converter_context.bpk_lake,
                 *table_key,
@@ -98,9 +90,9 @@ pub fn handle_join_request(
     assert_eq!(randomness.len(), SECPAR_BYTES);
     let mut rand_offset = 0usize;
 
-    let coprf_join_key = coprf_setup::derive_key(
+    let coprf_join_key = derive_key(
         converter_context.coprf_context.msk,
-        get_subbytes(&randomness, rand_offset, SECPAR_BYTES),
+        subbytes(&randomness, rand_offset, SECPAR_BYTES),
     )
     .unwrap();
     rand_offset += SECPAR_BYTES;
@@ -109,18 +101,13 @@ pub fn handle_join_request(
     for table in tables {
         let mut processor_input_table_inner = Vec::new();
         let attribute = table.attr();
-        let coprf_table_key =
-            coprf_setup::derive_key(converter_context.coprf_context.msk, attribute).unwrap();
+        let coprf_table_key = derive_key(converter_context.coprf_context.msk, attribute).unwrap();
         for &(blind_pseudonym, encrypted_value) in table.entries() {
-            let randomizer_coprf = scrambledb_util::random_scalar(get_subbytes(
-                &randomness,
-                rand_offset,
-                RANDBYTES_SCALAR,
-            ))
-            .unwrap();
+            let randomizer_coprf =
+                random_scalar(subbytes(&randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
             rand_offset += RANDBYTES_SCALAR;
 
-            let converted_pseudonym = coprf_online::blind_convert(
+            let converted_pseudonym = blind_convert(
                 bpk_processor,
                 coprf_table_key,
                 coprf_join_key,
@@ -130,12 +117,8 @@ pub fn handle_join_request(
             .unwrap();
 
             // rerandomize entry value
-            let randomizer_value = scrambledb_util::random_scalar(get_subbytes(
-                &randomness,
-                rand_offset,
-                RANDBYTES_SCALAR,
-            ))
-            .unwrap();
+            let randomizer_value =
+                random_scalar(subbytes(&randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
             rand_offset += RANDBYTES_SCALAR;
 
             let rerandomized_value =
