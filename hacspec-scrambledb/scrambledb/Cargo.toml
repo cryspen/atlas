@@ -9,4 +9,4 @@ edition = "2021"
 oprf = { path = "../oprf" }
 scrambledb-util = { path = "../scrambledb-util" }
 elgamal = { path = "../elgamal" }
-libcrux = { git = "https://github.com/cryspen/libcrux" }
+libcrux = { workspace = true }
