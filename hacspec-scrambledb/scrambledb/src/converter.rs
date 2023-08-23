@@ -21,7 +21,7 @@ pub fn setup_converter(
     ek_lake: EncryptionKey,
 ) -> Result<ConverterContext, Error> {
     Ok(ConverterContext {
-        coprf_context: setup_coprf_evaluator(b"coPRF-P256-SHA256", msk),
+        coprf_context: setup_coprf_evaluator(COPRF_SUITE_ID, msk),
         bpk_lake,
         ek_lake,
     })

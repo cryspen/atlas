@@ -83,5 +83,5 @@ pub fn finalize_join_request(
         joined_table_inner.insert(table.attr().to_vec(), joined_column_inner);
     }
 
-    Ok(JoinedTable::new(b"Join".to_vec(), joined_table_inner))
+    Ok(JoinedTable::new(JOIN_ID.to_vec(), joined_table_inner))
 }
