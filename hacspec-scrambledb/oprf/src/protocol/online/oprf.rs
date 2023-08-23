@@ -40,8 +40,12 @@ use scrambledb_util::i2osp;
 ///
 /// Clients store blind locally, and send blindedElement to the server
 /// for evaluation.
-pub fn blind(input: &[u8], context_string: &[u8]) -> Result<(P256Scalar, P256Point), Error> {
-    let blind = random_scalar();
+pub fn blind(
+    input: &[u8],
+    context_string: &[u8],
+    seed: &[u8; 32],
+) -> Result<(P256Scalar, P256Point), Error> {
+    let blind = random_scalar(seed);
     let inputElement = p256_sha256::hash_to_group(input, context_string)?;
     if inputElement == p256_sha256::identity() {
         return Err(Error::InvalidInputError);

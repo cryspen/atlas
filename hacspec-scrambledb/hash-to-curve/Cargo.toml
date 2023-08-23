@@ -6,11 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# XXX: Copied the natmod here for now so that it compiles
 natmod = { path = "../natmod" }
-# XXX: Added the P256 spec so you don't need it in here
 p256 = { path = "../p256" }
-libcrux = { git = "https://github.com/cryspen/libcrux" }
+libcrux = { workspace = true }
 
 
 [dev-dependencies]

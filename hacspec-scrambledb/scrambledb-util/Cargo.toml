@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 p256 = { path = "../p256" }
 rand = "0.8.5"
+libcrux = { workspace = true }

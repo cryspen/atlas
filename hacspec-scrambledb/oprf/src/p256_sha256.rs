@@ -117,7 +117,7 @@ pub fn hash_to_group(bytes: &[u8], context_string: &[u8]) -> Result<P256Point, E
 #[test]
 fn serialize_deserialize() {
     use crate::util::random_scalar;
-    let p: P256Point = p256::p256_point_mul_base(random_scalar()).unwrap().into();
+    let p: P256Point = p256::p256_point_mul_base(random_scalar(&[0xab; 32])).unwrap().into();
 
     assert_eq!(p, deserialize_element(serialize_element(&p)).unwrap());
 }

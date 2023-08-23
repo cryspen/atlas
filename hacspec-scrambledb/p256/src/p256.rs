@@ -10,6 +10,7 @@ pub enum Error {
 
 const BITS: u128 = 256;
 
+#[derive(Hash, PartialOrd, Ord)]
 #[nat_mod("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff", 32)]
 pub struct P256FieldElement {}
 
@@ -21,7 +22,7 @@ pub type AffineResult = Result<Affine, Error>;
 type P256Jacobian = (P256FieldElement, P256FieldElement, P256FieldElement);
 type JacobianResult = Result<P256Jacobian, Error>;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum P256Point {
     NonInf(Affine),
     AtInfinity,

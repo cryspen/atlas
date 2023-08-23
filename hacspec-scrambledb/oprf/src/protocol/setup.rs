@@ -33,8 +33,8 @@ use scrambledb_util::i2osp;
 /// The second way to generate the key pair is via the deterministic key
 /// generation function DeriveKeyPair described in Section 3.2.1.
 /// Applications and implementations can use either method in practice.
-pub fn generate_key_pair() -> Result<(ServerPrivateKey, ServerPublicKey), Error> {
-    let skS = random_scalar();
+pub fn generate_key_pair(seed: &[u8; 32]) -> Result<(ServerPrivateKey, ServerPublicKey), Error> {
+    let skS = random_scalar(seed);
     let pkS = p256::p256_point_mul_base(skS)?;
     Ok((skS, pkS.into()))
 }

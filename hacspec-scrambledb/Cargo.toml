@@ -1,12 +1,5 @@
 [workspace]
+members = ["scrambledb", "elgamal", "hash-to-curve", "p256", "oprf"]
 
-members = [
-        #"scrambledb",
-        "elgamal",
-        #"coprf",
-        #"prp",
-        #"renc",
-        "hash-to-curve",
-        "p256",
-        "oprf",
-]
+[workspace.dependencies]
+libcrux = { git = "https://github.com/cryspen/libcrux" }

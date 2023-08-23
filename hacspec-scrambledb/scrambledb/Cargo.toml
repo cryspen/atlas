@@ -1,12 +1,12 @@
 [package]
-name = "elgamal"
+name = "scrambledb"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-p256 = { path = "../p256" }
+oprf = { path = "../oprf" }
 scrambledb-util = { path = "../scrambledb-util" }
-[dev-dependencies]
-rand = "0.8.5"
+elgamal = { path = "../elgamal" }
+libcrux = { workspace = true }

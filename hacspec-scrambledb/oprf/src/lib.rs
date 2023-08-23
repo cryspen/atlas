@@ -94,7 +94,7 @@ pub mod protocol;
 pub mod oprf_suite;
 
 // 4.2 OPRF(P-256, SHA-256)
-mod p256_sha256;
+pub mod p256_sha256;
 
 pub mod coprf;
 
