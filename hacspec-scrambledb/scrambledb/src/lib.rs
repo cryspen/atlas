@@ -11,4 +11,4 @@ pub mod converter;
 pub mod lake;
 pub mod processor;
 pub mod source;
-pub mod types;
+mod table;
