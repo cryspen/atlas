@@ -12,7 +12,6 @@ impl From<libcrux::hpke::errors::HpkeError> for Error {
     }
 }
 
-// TODO: Pass in context for strings etc
 pub fn random_scalar(ikm: &[u8]) -> Result<P256Scalar, Error> {
     let suite_id = b"coPRF-P256-SHA256".to_vec();
     let label = b"dkp_prk".to_vec();
@@ -66,6 +65,6 @@ pub fn i2osp(x: usize, x_len: usize) -> Vec<u8> {
     Vec::from(&x.to_be_bytes()[(8 - x_len)..8])
 }
 
-pub fn get_subbytes(bytes: &[u8], offset: usize, count: usize) -> &[u8] {
+pub fn subbytes(bytes: &[u8], offset: usize, count: usize) -> &[u8] {
     &bytes[offset..offset + count]
 }
