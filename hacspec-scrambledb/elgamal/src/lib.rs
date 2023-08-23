@@ -5,7 +5,7 @@
 //! At the basis of the encryption scheme is a prime order group $`\mathbb{G}`$ with the same interface as defined in [draft-oprf].
 #![warn(missing_docs)]
 
-use p256::{p256_point_mul, p256_point_mul_base, point_add, NatMod, P256Point, P256Scalar};
+use p256::{p256_point_mul, p256_point_mul_base, point_add, P256Point, P256Scalar};
 
 use std::ops::Neg;
 
