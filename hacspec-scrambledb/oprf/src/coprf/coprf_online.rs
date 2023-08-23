@@ -70,14 +70,11 @@ pub fn evaluate(key: CoPRFKey, input: Input, context_string: &[u8]) -> Result<Ou
 /// the original evaluation key and multiply by the target evaluation key.
 
 pub fn convert(key_i: CoPRFKey, key_j: CoPRFKey, y: Output) -> Result<Output, Error> {
-
     let delta = key_j * key_i.inv();
     let result = p256::p256_point_mul(delta, y.into())?.into();
 
     Ok(result)
 }
-
-pub type BlindedElement = Ciphertext;
 
 // =========== Unblinded Operations ===========
 
@@ -90,16 +87,16 @@ pub fn blind(
     input: Input,
     context_string: &[u8],
     randomizer: p256::P256Scalar,
-) -> Result<BlindedElement, Error> {
+) -> Result<BlindInput, Error> {
     let inputElement = p256_sha256::hash_to_group(input, context_string)?;
 
     if inputElement == p256_sha256::identity() {
         return Err(Error::InvalidInputError);
     }
 
-    let blindedElement = elgamal::encrypt(bpk, inputElement, randomizer)?;
+    let blindInput = elgamal::encrypt(bpk, inputElement, randomizer)?;
 
-    Ok(blindedElement)
+    Ok(blindInput)
 }
 
 /// Blind PRF Evaluation is performed using the homomorphic properties of
@@ -120,7 +117,6 @@ pub fn blind_evaluate(
 /// blind evaluation result by Elgamal decryption.
 pub fn finalize(bsk: BlindingPrivateKey, blind_output: BlindOutput) -> Result<Output, Error> {
     elgamal::decrypt(bsk, blind_output).map_err(|e| e.into())
-
 }
 
 /// A PRF output can be blinded for blind conversion by perfoming an
