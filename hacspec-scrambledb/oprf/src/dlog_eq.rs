@@ -92,6 +92,10 @@ use scrambledb_util::i2osp;
 ///
 ///   return [c, s]
 /// ```
+///
+/// **NOTE**: We allow passing in the random scalar as a function argument instead of
+/// generating it from the given seed, so we can test proof generation using
+/// the provided test vectors.
 #[allow(non_snake_case)]
 pub fn generate_proof(
     k: P256Scalar,
