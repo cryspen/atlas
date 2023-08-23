@@ -102,10 +102,10 @@ pub fn join_request(
         for (pseudonym, table_value) in table.entries() {
             let (tag, pseudonym) = match pseudonym {
                 TableKey::Pseudonym(tag, pseudonym) => (tag, pseudonym),
-                _ => panic!("Invalid Table Key"),
+                _ => return Err(Error::JoinError),
             };
 
-            let raw_pseudonym_compressed = libcrux::aead::decrypt_detached(
+            let raw_pseudonym_compressed = decrypt_detached(
                 &lake_context.k_prp,
                 pseudonym,
                 libcrux::aead::Iv::new(b"").unwrap(),

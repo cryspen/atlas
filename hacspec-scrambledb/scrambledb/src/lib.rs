@@ -2,6 +2,7 @@
 pub enum Error {
     ConverterSetupError,
     PseudonomizationError,
+    JoinError,
 }
 
 const SECPAR_BYTES: usize = 16; // security parameter in bytes;
