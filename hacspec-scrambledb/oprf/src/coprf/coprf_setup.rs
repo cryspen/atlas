@@ -145,7 +145,7 @@ pub fn derive_key(msk: CoPRFMasterSecret, key_id: &[u8]) -> Result<CoPRFKey, Err
             &i2osp(counter, 1),
             32,
         )?;
-        bytes[0] = bytes[0] & 0xffu8;
+        bytes[0] &= 0xffu8;
         if p256_validate_private_key(&bytes) {
             sk = P256Scalar::from_be_bytes(&bytes);
         }

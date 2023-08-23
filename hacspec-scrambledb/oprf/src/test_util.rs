@@ -60,7 +60,7 @@ fn oprf_blind_evaluate() {
             for batch in test.vectors {
                 let blindedElements: Vec<p256::P256Point> = batch
                     .BlindedElement
-                    .split(",")
+                    .split(',')
                     .map(|b| {
                         crate::p256_sha256::deserialize_element(
                             hex::decode(b).unwrap().try_into().unwrap_or_else(|_| {
@@ -77,7 +77,7 @@ fn oprf_blind_evaluate() {
 
                 let expected_evaluatedElements: Vec<p256::P256Point> = batch
                     .EvaluationElement
-                    .split(",")
+                    .split(',')
                     .map(|e| {
                         crate::p256_sha256::deserialize_element(
                             hex::decode(e)
@@ -127,17 +127,17 @@ fn oprf_finalize() {
             for batch in test.vectors {
                 let Inputs: Vec<Vec<u8>> = batch
                     .Input
-                    .split(",")
+                    .split(',')
                     .map(|i| hex::decode(i).unwrap())
                     .collect();
                 let Blinds: Vec<P256Scalar> = batch
                     .Blind
-                    .split(",")
+                    .split(',')
                     .map(|b| P256Scalar::from_be_bytes(&hex::decode(b).unwrap()))
                     .collect();
                 let evaluatedElements: Vec<p256::P256Point> = batch
                     .EvaluationElement
-                    .split(",")
+                    .split(',')
                     .map(|e| {
                         crate::p256_sha256::deserialize_element(
                             hex::decode(e)
@@ -150,7 +150,7 @@ fn oprf_finalize() {
                     .collect();
                 let expectedOutputs: Vec<Vec<u8>> = batch
                     .Output
-                    .split(",")
+                    .split(',')
                     .map(|o| hex::decode(o).unwrap())
                     .collect();
 
@@ -178,12 +178,12 @@ fn oprf_evaluate() {
             for batch in test.vectors {
                 let Inputs: Vec<Vec<u8>> = batch
                     .Input
-                    .split(",")
+                    .split(',')
                     .map(|i| hex::decode(i).unwrap())
                     .collect();
                 let expectedOutputs: Vec<Vec<u8>> = batch
                     .Output
-                    .split(",")
+                    .split(',')
                     .map(|o| hex::decode(o).unwrap())
                     .collect();
 
@@ -212,12 +212,12 @@ fn oprf_evaluate_blinded() {
             for batch in test.vectors {
                 let Inputs: Vec<Vec<u8>> = batch
                     .Input
-                    .split(",")
+                    .split(',')
                     .map(|i| hex::decode(i).unwrap())
                     .collect();
                 let expectedOutputs: Vec<Vec<u8>> = batch
                     .Output
-                    .split(",")
+                    .split(',')
                     .map(|o| hex::decode(o).unwrap())
                     .collect();
 

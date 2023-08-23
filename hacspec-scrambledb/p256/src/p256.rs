@@ -6,6 +6,7 @@ pub use hacspec_helper::*;
 #[derive(Debug)]
 pub enum Error {
     InvalidAddition,
+    DeserializeError,
 }
 
 const BITS: u128 = 256;
@@ -60,6 +61,21 @@ impl std::ops::Neg for P256FieldElement {
     fn neg(self) -> Self::Output {
         hacspec_helper::NatMod::neg(self)
     }
+}
+
+pub fn is_square(x: &P256FieldElement) -> bool {
+    let exp = P256FieldElement::from_u128(1).neg() * P256FieldElement::from_u128(2).inv();
+    let test = x.pow_felem(&exp);
+    test == P256FieldElement::zero() || test == P256FieldElement::one()
+}
+
+pub fn sgn0(x: &P256FieldElement) -> bool {
+    x.bit(0)
+}
+
+pub fn sqrt(x: &P256FieldElement) -> P256FieldElement {
+    let c1 = P256FieldElement::one() * P256FieldElement::from_u128(4).inv();
+    x.pow_felem(&c1)
 }
 
 impl std::ops::Neg for P256Point {
@@ -170,6 +186,61 @@ fn ltr_mul(k: P256Scalar, p: P256Jacobian) -> JacobianResult {
         }
     }
     Ok(q)
+}
+
+pub type P256SerializedPoint = [u8; 33];
+
+/// SerializeElement(A): Implemented using the compressed Elliptic-
+///     Curve-Point-to-Octet-String method according to [SEC1]; Ne =
+///     33.
+///
+pub fn serialize_point(p: &P256Point) -> P256SerializedPoint {
+    let mut out = [0u8; 33];
+    match p {
+        P256Point::AtInfinity => out,
+        P256Point::NonInf((x, y)) => {
+            let x_serialized = x.to_be_bytes();
+
+            for (to, from) in out.iter_mut().skip(1).zip(x_serialized.iter()) {
+                *to = *from
+            }
+            out[0] = if y.bit(0) { 3 } else { 2 };
+
+            out
+        }
+    }
+}
+
+#[allow(unused)]
+pub fn deserialize_point(pm: P256SerializedPoint) -> Result<P256Point, Error> {
+    if pm == [0u8; 33] {
+        return Err(Error::DeserializeError);
+    }
+
+    let x = P256FieldElement::from_be_bytes(&pm[1..33]);
+
+    let ym = pm[0];
+    let yp_sign: bool = match ym {
+        0x02 => false,
+        0x03 => true,
+        _ => return Err(Error::DeserializeError),
+    };
+
+    let a = P256FieldElement::from_u128(3u128).neg();
+    let b = P256FieldElement::from_hex(
+        "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+    );
+
+    let alpha = x.pow(3) + a * x + b;
+    let beta = sqrt(&alpha);
+
+    let y: P256FieldElement = if beta.bit(0) == yp_sign {
+        beta
+    } else {
+        beta.neg()
+    };
+
+    Ok((x, y).into())
 }
 
 pub fn p256_point_mul(k: P256Scalar, p: Affine) -> AffineResult {
