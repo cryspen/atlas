@@ -1,48 +1,43 @@
 use elgamal::{decrypt, encrypt, generate_keys, DecryptionKey, EncryptionKey};
-use libcrux::aead::{decrypt_detached, encrypt_detached, Key};
-use oprf::{
-    coprf::{
-        coprf_online::{finalize, prepare_blind_convert},
-        coprf_setup::{generate_blinding_key_pair, BlindingPrivateKey, BlindingPublicKey},
-    },
-    p256_sha256::{deserialize_element, serialize_element},
+use hacspec_lib::Randomness;
+use oprf::coprf::{
+    coprf_online::{finalize, prepare_blind_convert},
+    coprf_setup::{BlindingPublicKey, CoPRFReceiverContext},
 };
-use scrambledb_util::{random_scalar, subbytes};
+use p256::P256Point;
+use prp::prp;
 
 use crate::{
     table::{LakeInputTable, LakeOutputTable, LakeTable, TableKey},
-    Error, RANDBYTES_SCALAR,
+    Error,
 };
 
 pub struct LakeContext {
-    bsk: BlindingPrivateKey,
+    coprf_receiver_context: CoPRFReceiverContext,
+    ek: EncryptionKey,
     dk: DecryptionKey,
-    k_prp: Key,
+    k_prp: [u8; 32],
 }
 
-pub fn setup_lake(
-    randomness: &[u8],
-) -> Result<(LakeContext, (BlindingPublicKey, EncryptionKey)), Error> {
-    let mut rand_offset = 0usize;
-    let (bsk, bpk) =
-        generate_blinding_key_pair(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
-    rand_offset += RANDBYTES_SCALAR;
+impl LakeContext {
+    pub fn get_public_keys(&self) -> (EncryptionKey, BlindingPublicKey) {
+        (self.ek, self.coprf_receiver_context.get_bpk())
+    }
+}
 
-    let (dk, ek) = generate_keys(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
-    rand_offset += RANDBYTES_SCALAR;
+pub fn setup_lake(mut randomness: Randomness) -> Result<LakeContext, Error> {
+    let receiver_context = CoPRFReceiverContext::new(&mut randomness);
 
-    let k_prp = Key::from_bytes(
-        libcrux::aead::Algorithm::Chacha20Poly1305,
-        subbytes(
-            randomness,
-            rand_offset,
-            libcrux::aead::Algorithm::Chacha20Poly1305.key_size(),
-        )
-        .to_vec(),
-    )
-    .unwrap();
+    let (dk, ek) = generate_keys(&mut randomness)?;
 
-    Ok((LakeContext { bsk, dk, k_prp }, (bpk, ek)))
+    let k_prp = randomness.bytes(32)?.try_into()?;
+
+    Ok(LakeContext {
+        coprf_receiver_context: receiver_context,
+        ek,
+        dk,
+        k_prp,
+    })
 }
 
 pub fn finalize_pseudonymization_request(
@@ -54,26 +49,21 @@ pub fn finalize_pseudonymization_request(
         let mut lake_table_inner = Vec::new();
 
         for &(blinded_pseudonym, encrypted_value) in table.entries() {
-            let unblinded_raw_pseudonym = finalize(lake_context.bsk, blinded_pseudonym).unwrap();
+            let unblinded_raw_pseudonym =
+                finalize(&lake_context.coprf_receiver_context, blinded_pseudonym)?;
 
-            let mut pseudonym = serialize_element(&unblinded_raw_pseudonym).to_vec();
-
-            let pseudonym = encrypt_detached(
+            let pseudonym = TableKey::Pseudonym(prp(
+                unblinded_raw_pseudonym.raw_bytes(),
                 &lake_context.k_prp,
-                &mut pseudonym,
-                libcrux::aead::Iv::new(b"").unwrap(),
-                b"",
-            )
-            .unwrap()
-            .into();
+            ));
 
-            let table_value = decrypt(lake_context.dk, encrypted_value).unwrap();
+            let table_value = decrypt(lake_context.dk, encrypted_value)?;
 
             lake_table_inner.push((pseudonym, table_value));
         }
         lake_table_inner.sort_by_key(|(pseudonym, _)| {
-            if let TableKey::Pseudonym(_, pseudonym) = pseudonym {
-                pseudonym.clone()
+            if let TableKey::Pseudonym(pseudonym) = pseudonym {
+                *pseudonym
             } else {
                 panic!("Invalid Table key instead of pseudonym")
             }
@@ -95,44 +85,24 @@ pub fn join_request(
     bpk_processor: BlindingPublicKey,
     ek_processor: EncryptionKey,
     lake_tables: Vec<LakeTable>,
-    randomness: &[u8],
+    randomness: &mut Randomness,
 ) -> Result<Vec<LakeOutputTable>, Error> {
-    let mut rand_offset = 0usize;
-
     let mut output_tables = Vec::new();
     for table in lake_tables {
         let mut output_table_inner = Vec::new();
 
         for (pseudonym, table_value) in table.entries() {
-            let (tag, pseudonym) = match pseudonym {
-                TableKey::Pseudonym(tag, pseudonym) => (tag, pseudonym),
-                _ => return Err(Error::JoinError),
+            let pseudonym = match pseudonym {
+                TableKey::Pseudonym(pseudonym) => pseudonym,
+                _ => return Err(Error::CorruptedData),
             };
 
-            let raw_pseudonym_compressed = decrypt_detached(
-                &lake_context.k_prp,
-                pseudonym,
-                libcrux::aead::Iv::new(b"").unwrap(),
-                b"",
-                tag,
-            )
-            .unwrap();
-
-            let raw_pseudonym =
-                deserialize_element(raw_pseudonym_compressed.try_into().unwrap()).unwrap();
-
-            let randomizer_coprf =
-                random_scalar(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
-            rand_offset += RANDBYTES_SCALAR;
+            let raw_pseudonym = P256Point::from_raw_bytes(prp(*pseudonym, &lake_context.k_prp))?;
 
             let blinded_pseudonym =
-                prepare_blind_convert(bpk_processor, raw_pseudonym, randomizer_coprf).unwrap();
+                prepare_blind_convert(bpk_processor, raw_pseudonym, randomness)?;
 
-            let randomizer_enc =
-                random_scalar(subbytes(randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
-            rand_offset += RANDBYTES_SCALAR;
-
-            let encrypted_value = encrypt(ek_processor, *table_value, randomizer_enc).unwrap();
+            let encrypted_value = encrypt(ek_processor, *table_value, randomness)?;
 
             output_table_inner.push((blinded_pseudonym, encrypted_value));
         }

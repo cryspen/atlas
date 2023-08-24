@@ -12,6 +12,7 @@ scrambledb-util = { path = "../scrambledb-util" }
 hash-to-curve = { path = "../hash-to-curve" }
 elgamal = { path = "../elgamal" }
 libcrux = { workspace = true }
+hacspec_lib.workspace = true
 
 [dev-dependencies]
 serde_json = { version = "1.0.102" }

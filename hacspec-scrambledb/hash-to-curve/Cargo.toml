@@ -9,6 +9,7 @@ edition = "2021"
 natmod = { path = "../natmod" }
 p256 = { path = "../p256" }
 libcrux = { workspace = true }
+hacspec_lib = { workspace = true }
 
 
 [dev-dependencies]

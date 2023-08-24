@@ -1,13 +1,13 @@
 use crate::{
     table::{LakeInputTable, LakeOutputTable, ProcessorInputTable, SourceOutputTable},
-    Error, COPRF_SUITE_ID, RANDBYTES_SCALAR, SECPAR_BYTES,
+    Error, SECPAR_BYTES,
 };
 use elgamal::EncryptionKey;
+use hacspec_lib::Randomness;
 use oprf::coprf::{
     coprf_online::{blind_convert, blind_evaluate},
-    coprf_setup::{derive_key, setup_coprf_evaluator, BlindingPublicKey, CoPRFEvaluatorContext},
+    coprf_setup::{derive_key, BlindingPublicKey, CoPRFEvaluatorContext},
 };
-use scrambledb_util::{random_scalar, subbytes};
 
 pub struct ConverterContext {
     coprf_context: CoPRFEvaluatorContext,
@@ -21,7 +21,7 @@ pub fn setup_converter(
     ek_lake: EncryptionKey,
 ) -> Result<ConverterContext, Error> {
     Ok(ConverterContext {
-        coprf_context: setup_coprf_evaluator(COPRF_SUITE_ID, msk),
+        coprf_context: CoPRFEvaluatorContext::new(msk),
         bpk_lake,
         ek_lake,
     })
@@ -44,38 +44,24 @@ pub fn setup_converter(
 pub fn handle_pseudonymization_request(
     converter_context: ConverterContext,
     table: &SourceOutputTable,
-    randomness: Vec<u8>,
+    randomness: &mut Randomness,
 ) -> Result<Vec<LakeInputTable>, Error> {
-    assert_eq!(randomness.len(), table.size() * 2 * RANDBYTES_SCALAR);
-    let mut rand_offset = 0usize;
-
     let mut lake_input_tables = Vec::new();
     for attribute in table.attributes() {
         let mut lake_input_table_inner = Vec::new();
-        let coprf_key = derive_key(converter_context.coprf_context.msk, attribute).unwrap();
+        let coprf_key = derive_key(&converter_context.coprf_context, attribute)?;
 
-        let column = table.get_column(attribute).unwrap();
+        let column = table.get_column(attribute).ok_or(Error::CorruptedData)?;
         for (table_key, table_value) in column.iter() {
-            let randomizer_value =
-                random_scalar(subbytes(&randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
-            rand_offset += RANDBYTES_SCALAR;
-
             let rerandomized_value =
-                elgamal::rerandomize(converter_context.ek_lake, *table_value, randomizer_value)
-                    .unwrap();
-
-            // eval coprf on key
-            let randomizer_coprf =
-                random_scalar(subbytes(&randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
-            rand_offset += RANDBYTES_SCALAR;
+                elgamal::rerandomize(converter_context.ek_lake, *table_value, randomness)?;
 
             let blinded_pseudonym = blind_evaluate(
                 coprf_key,
                 converter_context.bpk_lake,
                 *table_key,
-                randomizer_coprf,
-            )
-            .unwrap();
+                randomness,
+            )?;
             lake_input_table_inner.push((blinded_pseudonym, rerandomized_value));
         }
         // Shuffle by sorting based on the pseudorandom keys.
@@ -93,44 +79,29 @@ pub fn handle_join_request(
     bpk_processor: BlindingPublicKey,
     ek_processor: EncryptionKey,
     tables: Vec<LakeOutputTable>,
-    randomness: Vec<u8>,
+    randomness: &mut Randomness,
 ) -> Result<Vec<ProcessorInputTable>, Error> {
-    assert_eq!(randomness.len(), SECPAR_BYTES);
-    let mut rand_offset = 0usize;
-
     let coprf_join_key = derive_key(
-        converter_context.coprf_context.msk,
-        subbytes(&randomness, rand_offset, SECPAR_BYTES),
-    )
-    .unwrap();
-    rand_offset += SECPAR_BYTES;
+        &converter_context.coprf_context,
+        randomness.bytes(SECPAR_BYTES)?,
+    )?;
 
     let mut processor_input_tables = Vec::new();
     for table in tables {
         let mut processor_input_table_inner = Vec::new();
         let attribute = table.attr();
-        let coprf_table_key = derive_key(converter_context.coprf_context.msk, attribute).unwrap();
+        let coprf_table_key = derive_key(&converter_context.coprf_context, attribute)?;
         for &(blind_pseudonym, encrypted_value) in table.entries() {
-            let randomizer_coprf =
-                random_scalar(subbytes(&randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
-            rand_offset += RANDBYTES_SCALAR;
-
             let converted_pseudonym = blind_convert(
                 bpk_processor,
                 coprf_table_key,
                 coprf_join_key,
                 blind_pseudonym,
-                randomizer_coprf,
-            )
-            .unwrap();
-
-            // rerandomize entry value
-            let randomizer_value =
-                random_scalar(subbytes(&randomness, rand_offset, RANDBYTES_SCALAR)).unwrap();
-            rand_offset += RANDBYTES_SCALAR;
+                randomness,
+            )?;
 
             let rerandomized_value =
-                elgamal::rerandomize(ek_processor, encrypted_value, randomizer_value).unwrap();
+                elgamal::rerandomize(ek_processor, encrypted_value, randomness)?;
 
             processor_input_table_inner.push((converted_pseudonym, rerandomized_value));
         }

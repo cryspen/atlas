@@ -1,5 +1,5 @@
-use crate::hacspec_helper::FunctionalVec;
 use crate::Error;
+use hacspec_lib::{i2osp, FunctionalVec};
 use libcrux::digest::hash;
 use libcrux::digest::Algorithm::Sha256;
 use p256::{is_square, sgn0, sqrt, NatMod, P256FieldElement, P256Point, P256Scalar};
@@ -12,23 +12,24 @@ use p256::{is_square, sgn0, sqrt, NatMod, P256FieldElement, P256Point, P256Scala
 /// except that the encoding type is encode_to_curve (Section 3).
 #[allow(non_camel_case_types)]
 pub struct P256_XMD_SHA256_SSWU_RO {}
-const ID: &str = "P256_XMD:SHA-256_SSWU_RO_";
-const K: usize = 128;
-const L: usize = 48;
 
-const B_IN_BYTES: usize = libcrux::digest::digest_size(Sha256); // output size of H = SHA-256 in bytes
-const S_IN_BYTES: usize = 64; // input block size of H = SHA-256
+/// bytes to generate per field element in `expand_message`
+const L: usize = 48;
+/// Output size of H = SHA-256 in bytes
+const B_IN_BYTES: usize = libcrux::digest::digest_size(Sha256);
+/// Input block size of H = SHA-256
+const S_IN_BYTES: usize = 64;
 
 #[allow(non_snake_case)]
 fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Result<Vec<u8>, Error> {
     let ell = (len_in_bytes + B_IN_BYTES - 1) / B_IN_BYTES;
-    if ell > 255 || len_in_bytes > 65535 || dst.len() > 255 {
+    if ell > 255 || len_in_bytes > u16::MAX.into() || dst.len() > 255 {
         return Err(Error::InvalidEll);
     }
 
     let dst_prime = dst.concat_byte(dst.len() as u8);
     let z_pad = vec![0u8; S_IN_BYTES];
-    let l_i_b_str = (len_in_bytes as u16).to_be_bytes();
+    let l_i_b_str = i2osp(len_in_bytes, 2);
 
     // msg_prime = Z_pad || msg || l_i_b_str || 0 || dst_prime
     let msg_prime = z_pad
@@ -46,7 +47,7 @@ fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Result<Vec<u8>
     for i in 2..=ell {
         // i < 256 is checked before
         let payload_i = strxor(&b_0, &b_i).concat_byte(i as u8).concat(&dst_prime);
-        //H((b_0 ^ b_(i-1)) || 1 || dst_prime)
+        // H((b_0 ^ b_(i-1)) || 1 || dst_prime)
         b_i = hash(Sha256, &payload_i);
         uniform_bytes.extend_from_slice(&b_i);
     }
@@ -85,12 +86,13 @@ pub fn hash_to_scalar(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256Sc
     Ok(u)
 }
 
-fn sswu(
-    u: &P256FieldElement,
-    a: &P256FieldElement,
-    b: &P256FieldElement,
-    z: P256FieldElement,
-) -> (P256FieldElement, P256FieldElement) {
+/// SSWU
+fn map_to_curve(u: P256FieldElement) -> P256Point {
+    let a: &P256FieldElement = &P256FieldElement::from_u128(3u128).neg();
+    let b = &P256FieldElement::from_hex(
+        "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+    );
+    let z = P256FieldElement::from_u128(10u128).neg();
     let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
     let x1 = if tv1 == P256FieldElement::zero() {
         *b * (z * *a).inv()
@@ -108,23 +110,11 @@ fn sswu(
         (x2, sqrt(&gx2))
     };
 
-    if sgn0(u) != sgn0(&output.1) {
+    if sgn0(&u) != sgn0(&output.1) {
         output.1 = output.1.neg();
     }
 
-    output
-}
-
-fn map_to_curve(u: P256FieldElement) -> P256Point {
-    sswu(
-        &u,
-        &P256FieldElement::from_u128(3u128).neg(),
-        &P256FieldElement::from_hex(
-            "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
-        ),
-        P256FieldElement::from_u128(10u128).neg(),
-    )
-    .into()
+    output.into()
 }
 
 pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<P256Point, Error> {
@@ -139,7 +129,7 @@ pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<P256Point, Error> {
 mod tests {
     use super::*;
     use std::fs::read_to_string;
-
+    const ID: &str = "P256_XMD:SHA-256_SSWU_RO_";
     use serde_json::Value;
 
     pub fn load_vectors(path: &std::path::Path) -> Value {

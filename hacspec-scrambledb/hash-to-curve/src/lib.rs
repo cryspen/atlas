@@ -2,8 +2,6 @@
 // #![warn(missing_docs)]
 // #![warn(rustdoc::missing_crate_level_docs)]
 
-mod hacspec_helper;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     InvalidEll,

@@ -1,5 +1,14 @@
 [workspace]
-members = ["scrambledb", "elgamal", "hash-to-curve", "p256", "oprf"]
+members = [
+    "scrambledb",
+    "elgamal",
+    "hash-to-curve",
+    "p256",
+    "oprf",
+    "hacspec_lib",
+    "prp",
+]
 
 [workspace.dependencies]
 libcrux = { git = "https://github.com/cryspen/libcrux" }
+hacspec_lib = { path = "./hacspec_lib" }

@@ -1,3 +1,4 @@
+use hacspec_lib::Randomness;
 use libcrux::hpke::kdf::{LabeledExpand, LabeledExtract, KDF};
 use p256::{NatMod, P256Scalar};
 
@@ -12,12 +13,18 @@ impl From<libcrux::hpke::errors::HpkeError> for Error {
     }
 }
 
-pub fn random_scalar(ikm: &[u8]) -> Result<P256Scalar, Error> {
+pub fn random_scalar(randomness: &mut Randomness) -> Result<P256Scalar, Error> {
     let suite_id = b"coPRF-P256-SHA256".to_vec();
     let label = b"dkp_prk".to_vec();
     let candidate_label = b"candidate".to_vec();
 
-    let dkp_prk = LabeledExtract(KDF::HKDF_SHA256, suite_id.clone(), b"", label, ikm)?;
+    let dkp_prk = LabeledExtract(
+        KDF::HKDF_SHA256,
+        suite_id.clone(),
+        b"",
+        label,
+        randomness.bytes(32).unwrap(),
+    )?;
 
     let mut sk = P256Scalar::zero();
 
@@ -42,29 +49,7 @@ pub fn random_scalar(ikm: &[u8]) -> Result<P256Scalar, Error> {
     }
 }
 
-/// From [RFC8017]:
-///
-/// I2OSP converts a nonnegative integer to an octet string of a
-/// specified length.
-///
-/// ```text
-///    I2OSP (x, xLen)
-///
-///    Input:
-///
-///       x        nonnegative integer to be converted
-///
-///       xLen     intended length of the resulting octet string
-///
-///    Output:
-///
-///          X corresponding octet string of length xLen
-/// ```
 pub fn i2osp(x: usize, x_len: usize) -> Vec<u8> {
     assert!(x_len <= 8);
     Vec::from(&x.to_be_bytes()[(8 - x_len)..8])
-}
-
-pub fn subbytes(bytes: &[u8], offset: usize, count: usize) -> &[u8] {
-    &bytes[offset..offset + count]
 }

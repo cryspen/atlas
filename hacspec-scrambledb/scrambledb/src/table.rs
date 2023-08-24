@@ -16,13 +16,13 @@ pub type EncryptedValue = elgamal::Ciphertext;
 
 pub enum TableKey {
     Plain(Vec<u8>),
-    Pseudonym(libcrux::aead::Tag, Vec<u8>),
+    Pseudonym([u8; 64]),
 }
 pub type TableValue = elgamal::Plaintext;
 
-impl From<(libcrux::aead::Tag, Vec<u8>)> for TableKey {
-    fn from(value: (libcrux::aead::Tag, Vec<u8>)) -> Self {
-        Self::Pseudonym(value.0, value.1)
+impl From<[u8; 64]> for TableKey {
+    fn from(value: [u8; 64]) -> Self {
+        Self::Pseudonym(value)
     }
 }
 pub struct ClearTable {

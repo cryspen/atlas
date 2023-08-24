@@ -45,13 +45,8 @@ The following terms are used throughout this document.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
-    VerifyError,
-    DeserializeError,
-    InputValidationError,
     InvalidInputError,
-    InverseError,
     DeriveKeyPairError,
-
     CurveError,
     HashToCurveError,
     ElgamalError,
@@ -81,24 +76,18 @@ impl From<elgamal::Error> for Error {
     }
 }
 
-// 2.1 Prime-Order Group
-pub mod prime_order_group;
-
-// 2.2 Discrete Logarithm Equivalence Proofs
-pub mod dlog_eq;
+impl From<scrambledb_util::Error> for Error {
+    fn from(value: scrambledb_util::Error) -> Self {
+        match value {
+            scrambledb_util::Error::SamplingError => Self::DeriveKeyPairError,
+        }
+    }
+}
 
 // 3. Protocol
 pub mod protocol;
-
-// 4. Ciphersuites
-pub mod oprf_suite;
 
 // 4.2 OPRF(P-256, SHA-256)
 pub mod p256_sha256;
 
 pub mod coprf;
-
-mod util;
-
-#[cfg(test)]
-mod test_util;

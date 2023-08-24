@@ -7,6 +7,7 @@ pub use hacspec_helper::*;
 pub enum Error {
     InvalidAddition,
     DeserializeError,
+    PointAtInfinity,
 }
 
 const BITS: u128 = 256;
@@ -88,7 +89,7 @@ impl std::ops::Neg for P256Point {
     }
 }
 
-pub fn affine_to_jacobian(p: Affine) -> P256Jacobian {
+fn affine_to_jacobian(p: Affine) -> P256Jacobian {
     let (x, y) = p;
     (x, y, P256FieldElement::from_u128(1))
 }
@@ -132,7 +133,7 @@ fn s1_equal_s2(s1: P256FieldElement, s2: P256FieldElement) -> JacobianResult {
     }
 }
 
-pub fn point_add_jacob(p: P256Jacobian, q: P256Jacobian) -> JacobianResult {
+fn point_add_jacob(p: P256Jacobian, q: P256Jacobian) -> JacobianResult {
     let mut result = Ok(q);
     if !is_point_at_infinity(p) {
         if is_point_at_infinity(q) {
@@ -210,6 +211,43 @@ pub fn serialize_point(p: &P256Point) -> P256SerializedPoint {
         }
     }
 }
+impl P256Point {
+    pub fn raw_bytes(&self) -> [u8; 64] {
+        match self {
+            P256Point::NonInf((x, y)) => {
+                let mut out = [0u8; 64];
+                out[0..32].copy_from_slice(&x.to_be_bytes());
+                out[32..64].copy_from_slice(&y.to_be_bytes());
+                out
+            }
+            P256Point::AtInfinity => panic!("Tried to serialize point at infitiy"),
+        }
+    }
+
+    pub fn from_raw_bytes(bytes: [u8; 64]) -> Result<P256Point, Error> {
+        let x = P256FieldElement::from_be_bytes(&bytes[0..32]);
+        let y = P256FieldElement::from_be_bytes(&bytes[32..64]);
+        let candidate = P256Point::NonInf((x, y));
+        if p256_validate_public_key(candidate) {
+            Ok(candidate)
+        } else {
+            Err(Error::DeserializeError)
+        }
+    }
+
+    pub fn x_coord(&self) -> Result<P256FieldElement, Error> {
+        match self {
+            P256Point::NonInf((x, _)) => Ok(*x),
+            P256Point::AtInfinity => Err(Error::PointAtInfinity),
+        }
+    }
+    pub fn y_coord(&self) -> Result<P256FieldElement, Error> {
+        match self {
+            P256Point::NonInf((_, y)) => Ok(*y),
+            P256Point::AtInfinity => Err(Error::PointAtInfinity),
+        }
+    }
+}
 
 #[allow(unused)]
 pub fn deserialize_point(pm: P256SerializedPoint) -> Result<P256Point, Error> {
@@ -243,12 +281,12 @@ pub fn deserialize_point(pm: P256SerializedPoint) -> Result<P256Point, Error> {
     Ok((x, y).into())
 }
 
-pub fn p256_point_mul(k: P256Scalar, p: Affine) -> AffineResult {
-    let jac = ltr_mul(k, affine_to_jacobian(p))?;
-    Ok(jacobian_to_affine(jac))
+pub fn p256_point_mul(k: P256Scalar, p: P256Point) -> Result<P256Point, Error> {
+    let jac = ltr_mul(k, affine_to_jacobian(p.into()))?;
+    Ok(jacobian_to_affine(jac).into())
 }
 
-pub fn p256_point_mul_base(k: P256Scalar) -> AffineResult {
+pub fn p256_point_mul_base(k: P256Scalar) -> Result<P256Point, Error> {
     let base_point = (
         P256FieldElement::from_be_bytes(&[
             0x6Bu8, 0x17u8, 0xD1u8, 0xF2u8, 0xE1u8, 0x2Cu8, 0x42u8, 0x47u8, 0xF8u8, 0xBCu8, 0xE6u8,
@@ -260,7 +298,8 @@ pub fn p256_point_mul_base(k: P256Scalar) -> AffineResult {
             0x4Au8, 0x7Cu8, 0x0Fu8, 0x9Eu8, 0x16u8, 0x2Bu8, 0xCEu8, 0x33u8, 0x57u8, 0x6Bu8, 0x31u8,
             0x5Eu8, 0xCEu8, 0xCBu8, 0xB6u8, 0x40u8, 0x68u8, 0x37u8, 0xBFu8, 0x51u8, 0xF5u8,
         ]),
-    );
+    )
+        .into();
     p256_point_mul(k, base_point)
 }
 
@@ -279,7 +318,7 @@ pub fn point_add(p: P256Point, q: P256Point) -> Result<P256Point, Error> {
     }
 }
 
-pub fn point_add_noninf(p: Affine, q: Affine) -> AffineResult {
+fn point_add_noninf(p: Affine, q: Affine) -> AffineResult {
     if p != q {
         point_add_distinct(p, q)
     } else {
@@ -306,14 +345,14 @@ pub fn p256_validate_private_key(k: &[u8]) -> bool {
 }
 
 /// Verify that the point `p` is a valid public key.
-pub fn p256_validate_public_key(p: Affine) -> bool {
+pub fn p256_validate_public_key(p: P256Point) -> bool {
     let b = P256FieldElement::from_be_bytes(&[
         0x5au8, 0xc6u8, 0x35u8, 0xd8u8, 0xaau8, 0x3au8, 0x93u8, 0xe7u8, 0xb3u8, 0xebu8, 0xbdu8,
         0x55u8, 0x76u8, 0x98u8, 0x86u8, 0xbcu8, 0x65u8, 0x1du8, 0x06u8, 0xb0u8, 0xccu8, 0x53u8,
         0xb0u8, 0xf6u8, 0x3bu8, 0xceu8, 0x3cu8, 0x3eu8, 0x27u8, 0xd2u8, 0x60u8, 0x4bu8,
     ]);
-    let point_at_infinity = is_point_at_infinity(affine_to_jacobian(p));
-    let (x, y) = p;
+    let point_at_infinity = is_point_at_infinity(affine_to_jacobian(p.into()));
+    let (x, y) = p.into();
     let on_curve = y * y == x * x * x - P256FieldElement::from_u128(3) * x + b;
 
     !point_at_infinity && on_curve

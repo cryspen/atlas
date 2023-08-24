@@ -16,8 +16,8 @@ fn test_p256_base() {
         Ok(p) => p,
         Err(_) => panic!("Error p256_point_mul_base"),
     };
-    assert_eq!(point_computed.0, point_expected.0);
-    assert_eq!(point_computed.1, point_expected.1);
+    assert_eq!(point_computed.x_coord().unwrap(), point_expected.0);
+    assert_eq!(point_computed.y_coord().unwrap(), point_expected.1);
 
     let sk = P256Scalar::from_hex("018ebbb95eed0e13");
     let point_expected = (
@@ -33,8 +33,8 @@ fn test_p256_base() {
         Ok(p) => p,
         Err(_) => panic!("Error p256_point_mul_base"),
     };
-    assert_eq!(point_computed.0, point_expected.0);
-    assert_eq!(point_computed.1, point_expected.1);
+    assert_eq!(point_computed.x_coord().unwrap(), point_expected.0);
+    assert_eq!(point_computed.y_coord().unwrap(), point_expected.1);
 
     let sk =
         P256Scalar::from_hex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550");
@@ -51,8 +51,8 @@ fn test_p256_base() {
         Ok(p) => p,
         Err(_) => panic!("Error p256_point_mul_base"),
     };
-    assert_eq!(point_computed.0, point_expected.0);
-    assert_eq!(point_computed.1, point_expected.1);
+    assert_eq!(point_computed.x_coord().unwrap(), point_expected.0);
+    assert_eq!(point_computed.y_coord().unwrap(), point_expected.1);
 }
 
 use serde_json::Value;
@@ -124,7 +124,8 @@ fn test_wycheproof_plain() {
             let p = (
                 P256FieldElement::from_hex(&test.public[2..66]),
                 P256FieldElement::from_hex(&test.public[66..]),
-            );
+            )
+                .into();
             if not_on_curve {
                 assert!(!p256_validate_public_key(p));
                 tests_run += 1;
@@ -136,15 +137,19 @@ fn test_wycheproof_plain() {
                 Ok(s) => s,
                 Err(_) => panic!("Unexpected error in point_mul"),
             };
-            assert_eq!(shared.0, expected);
+            assert_eq!(shared.x_coord().unwrap(), expected);
 
             // Check w
-            let my_p = (p.0, p256_calculate_w(p.0));
+            let my_p = (p.x_coord().unwrap(), p256_calculate_w(p.x_coord().unwrap())).into();
             let shared = match p256_point_mul(k, my_p) {
                 Ok(s) => s,
                 Err(_) => panic!("Unexpected error in point_mul"),
             };
-            assert_eq!(shared.0, expected, "Error in ECDH using calculate w");
+            assert_eq!(
+                shared.x_coord().unwrap(),
+                expected,
+                "Error in ECDH using calculate w"
+            );
             // // The Y coordinate of the computed point (my_p) is either
             // // equal to y, or -y % p.
             // let other_y = my_p.1.neg();
@@ -191,7 +196,7 @@ fn point_validation() {
             "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
         ),
     );
-    assert!(!p256_validate_public_key(not_on_curve));
+    assert!(!p256_validate_public_key(not_on_curve.into()));
 
     let valid_point = (
         P256FieldElement::from_hex(
@@ -201,7 +206,7 @@ fn point_validation() {
             "43a1930189363bbde2ac4cbd1649cdc6f451add71dd2f16a8a867f2b17caa16b",
         ),
     );
-    assert!(p256_validate_public_key(valid_point));
+    assert!(p256_validate_public_key(valid_point.into()));
 
     let not_on_curve = (
         P256FieldElement::from_hex(
@@ -211,7 +216,7 @@ fn point_validation() {
             "0000000000000000000000000000000000000000000000000000000000000000",
         ),
     );
-    assert!(!p256_validate_public_key(not_on_curve));
+    assert!(!p256_validate_public_key(not_on_curve.into()));
 
     let not_on_curve = (
         P256FieldElement::from_hex(
@@ -221,7 +226,7 @@ fn point_validation() {
             "0000000000000000000000000000000000000000000000000000000000000001",
         ),
     );
-    assert!(!p256_validate_public_key(not_on_curve));
+    assert!(!p256_validate_public_key(not_on_curve.into()));
 }
 
 #[test]
@@ -231,7 +236,7 @@ fn test_p256_calculate_w() {
         let public_x = P256FieldElement::from_hex(gy_x);
         let expected_secret_x = P256FieldElement::from_hex(gxy_x);
 
-        let public = (public_x, p256_calculate_w(public_x));
+        let public = (public_x, p256_calculate_w(public_x)).into();
 
         // // Check the Y coordinate.
         // let other_y = public.1.neg();
@@ -239,7 +244,7 @@ fn test_p256_calculate_w() {
 
         // calculate the ECDH secret
         let my_secret_x = match p256_point_mul(private, public) {
-            Ok(p) => p.0,
+            Ok(p) => p.x_coord().unwrap(),
             Err(_) => panic!("Error test_ecdh"),
         };
 

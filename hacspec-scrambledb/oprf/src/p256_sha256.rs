@@ -6,8 +6,8 @@
 //!
 
 use crate::Error;
-use hash_to_curve::p256_hash::hash_to_curve;
-use p256::{P256FieldElement, P256Point, P256Scalar};
+
+use p256::{P256Point, P256Scalar};
 
 #[allow(non_upper_case_globals, unused)]
 const identifier: &[u8] = b"P256-SHA256";
@@ -42,17 +42,23 @@ pub fn scalar_inverse(s: P256Scalar) -> P256Scalar {
 }
 
 /// HashToScalar(): Use hash_to_field from [I-D.irtf-cfrg-hash-to-curve] using L = 48, expand_message_xmd with SHA-256, DST = "HashToScalar-" || contextString, and prime modulus equal to Group.Order().
-pub fn hash_to_scalar(bytes: &[u8], context_string: &[u8]) -> P256Scalar {
+pub fn hash_to_scalar(bytes: &[u8], context_string: &[u8]) -> Result<P256Scalar, Error> {
     let mut dst: Vec<u8> = "HashToScalar-".into(); // DST = "HashToScalar-" || contextString
     dst.extend_from_slice(context_string);
     hash_to_scalar_dst(bytes, &dst, context_string)
 }
 
-pub fn hash_to_scalar_dst(bytes: &[u8], dst: &[u8], context_string: &[u8]) -> P256Scalar {
+pub fn hash_to_scalar_dst(
+    bytes: &[u8],
+    dst: &[u8],
+    context_string: &[u8],
+) -> Result<P256Scalar, Error> {
     let mut dst = dst.to_vec();
     dst.extend_from_slice(context_string);
 
-    hash_to_curve::p256_hash::hash_to_scalar(bytes, &dst, 1).unwrap()[0]
+    hash_to_curve::p256_hash::hash_to_scalar(bytes, &dst, 1)
+        .map(|v| v[0])
+        .map_err(|e| e.into())
 }
 
 /// HashToGroup(): Use hash_to_curve with suite P256_XMD:SHA-256_SSWU_RO_ [I-D.irtf-cfrg-hash-to-curve] and DST = "HashToGroup-" || contextString.
@@ -65,10 +71,11 @@ pub fn hash_to_group(bytes: &[u8], context_string: &[u8]) -> Result<P256Point, E
 
 #[test]
 fn serialize_deserialize() {
-    use crate::util::random_scalar;
-    let p: P256Point = p256::p256_point_mul_base(random_scalar(&[0xab; 32]))
-        .unwrap()
-        .into();
+    use hacspec_lib::Randomness;
+    let p: P256Point = p256::p256_point_mul_base(
+        scrambledb_util::random_scalar(&mut Randomness::new(vec![0xab; 32])).unwrap(),
+    )
+    .unwrap();
 
     assert_eq!(p, deserialize_element(serialize_element(&p)).unwrap());
 }

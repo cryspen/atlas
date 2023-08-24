@@ -9,4 +9,7 @@ edition = "2021"
 oprf = { path = "../oprf" }
 scrambledb-util = { path = "../scrambledb-util" }
 elgamal = { path = "../elgamal" }
+prp = { path = "../prp" }
+p256 = { path = "../p256" }
 libcrux = { workspace = true }
+hacspec_lib.workspace = true
