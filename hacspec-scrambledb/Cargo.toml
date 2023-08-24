@@ -7,6 +7,8 @@ members = [
     "oprf",
     "hacspec_lib",
     "prp",
+    "sha256",
+    "hmac"
 ]
 
 [workspace.dependencies]
