@@ -12,11 +12,6 @@ use p256::{P256Point, P256Scalar};
 #[allow(non_upper_case_globals, unused)]
 const identifier: &[u8] = b"P256-SHA256";
 
-pub fn hash(payload: &[u8]) -> Vec<u8> {
-    use libcrux::digest::{hash, Algorithm};
-    hash(Algorithm::Sha256, payload)
-}
-
 pub type P256SerializedPoint = [u8; 33];
 
 /// SerializeElement(A): Implemented using the compressed Elliptic-
