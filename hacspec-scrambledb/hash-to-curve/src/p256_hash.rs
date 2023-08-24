@@ -1,8 +1,7 @@
 use crate::Error;
 use hacspec_lib::{i2osp, FunctionalVec};
-use libcrux::digest::hash;
-use libcrux::digest::Algorithm::Sha256;
 use p256::{is_square, sgn0, sqrt, NatMod, P256FieldElement, P256Point, P256Scalar};
+use sha256::hash;
 
 /// # 8.2 Suites for NIST P-256
 ///
@@ -16,7 +15,7 @@ pub struct P256_XMD_SHA256_SSWU_RO {}
 /// bytes to generate per field element in `expand_message`
 const L: usize = 48;
 /// Output size of H = SHA-256 in bytes
-const B_IN_BYTES: usize = libcrux::digest::digest_size(Sha256);
+const B_IN_BYTES: usize = sha256::HASH_SIZE;
 /// Input block size of H = SHA-256
 const S_IN_BYTES: usize = 64;
 
@@ -38,17 +37,17 @@ fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Result<Vec<u8>
         .concat(&[0u8; 1])
         .concat(&dst_prime);
 
-    let b_0 = hash(Sha256, &msg_prime); // H(msg_prime)
+    let b_0 = hash(&msg_prime).to_vec(); // H(msg_prime)
 
     let payload_1 = b_0.concat_byte(1).concat(&dst_prime);
-    let mut b_i = hash(Sha256, &payload_1); // H(b_0 || 1 || dst_prime)
+    let mut b_i = hash(&payload_1).to_vec(); // H(b_0 || 1 || dst_prime)
 
     let mut uniform_bytes = b_i.clone();
     for i in 2..=ell {
         // i < 256 is checked before
         let payload_i = strxor(&b_0, &b_i).concat_byte(i as u8).concat(&dst_prime);
         // H((b_0 ^ b_(i-1)) || 1 || dst_prime)
-        b_i = hash(Sha256, &payload_i);
+        b_i = hash(&payload_i).to_vec();
         uniform_bytes.extend_from_slice(&b_i);
     }
     uniform_bytes.truncate(len_in_bytes);
