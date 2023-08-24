@@ -27,10 +27,18 @@ pub fn setup_converter(
     })
 }
 
-/// One part of the joint creation of pseudonomized and unlinkable data to be fed into the data lake.
-/// The input table is part of a pseudonymization request by a data source. Its data contents are encrypted towards the data lake and the keys (unpseudonymized identifiers) are blinded to allow conversion.
+/// One part of the joint creation of pseudonomized and unlinkable data to
+/// be fed into the data lake.  The input table is part of a
+/// pseudonymization request by a data source. Its data contents are
+/// encrypted towards the data lake and the keys (unpseudonymized
+/// identifiers) are blinded to allow conversion.
 ///
-/// The output tables are to be fed into the data lake. Each table corresponds to one column (one data attribute) of the original table. All table entries have been assigned pseudonymized keys. In addition the entry ciphertexts have been rerandomized and table rows have been shuffled to prevent correlation of the incoming with the outgoing table data.
+/// The output tables are to be fed into the data lake. Each table
+/// corresponds to one column (one data attribute) of the original
+/// table. All table entries have been assigned pseudonymized keys. In
+/// addition the entry ciphertexts have been rerandomized and table rows
+/// have been shuffled to prevent correlation of the incoming with the
+/// outgoing table data.
 ///
 ///  cf. [Lehmann], p. 13, Section 2.a of Fig. 4
 pub fn handle_pseudonymization_request(
