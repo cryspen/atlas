@@ -13,14 +13,31 @@ use crate::{
 };
 
 pub struct SourceContext {
+    session_id: Vec<u8>,
     coprf_requester_context: CoPRFRequesterContext,
     ek_lake: EncryptionKey,
 }
 
 impl SourceContext {
-    pub fn setup(bpk_lake: BlindingPublicKey, ek_lake: EncryptionKey) -> Self {
+    /// Create a new ScrambleDB Data Source Context.
+    ///
+    /// Inputs:
+    ///  - `session_id`: To differentiate different pseudonymization sessions,
+    ///    a fresh session ID should be provided. This also serves as a domain
+    ///    separator for the coPRF-subprotocol.
+    ///  - `bpk_lake`: The coPRF blinding public key of the target data lake,
+    ///    which will be used to perform blinding of the unpseudonymized table
+    ///    keys. Can be retrieved using [LakeContext::get_public_keys].
+    ///  - `epk_lake`: The public encryption key of the target data lake,
+    ///    which will be used to encrypt table values before sending the
+    ///    pseudonymization request to the Converter.  Can be retrieved using
+    ///    [LakeContext::get_public_keys].
+    pub fn setup(session_id: &[u8], bpk_lake: BlindingPublicKey, ek_lake: EncryptionKey) -> Self {
+        let mut coprf_context_string = SCRAMBLEDB_SRC_CONTEXT.to_vec();
+        coprf_context_string.extend_from_slice(session_id);
         SourceContext {
-            coprf_requester_context: CoPRFRequesterContext::new(SCRAMBLEDB_SRC_CONTEXT, bpk_lake),
+            session_id: session_id.to_vec(),
+            coprf_requester_context: CoPRFRequesterContext::new(&coprf_context_string, bpk_lake),
             ek_lake,
         }
     }

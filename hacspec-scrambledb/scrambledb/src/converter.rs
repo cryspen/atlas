@@ -41,6 +41,7 @@ pub fn setup_converter(
 /// outgoing table data.
 ///
 ///  cf. [Lehmann], p. 13, Section 2.a of Fig. 4
+///
 pub fn handle_pseudonymization_request(
     converter_context: ConverterContext,
     table: &SourceOutputTable,
@@ -49,7 +50,7 @@ pub fn handle_pseudonymization_request(
     let mut lake_input_tables = Vec::new();
     for attribute in table.attributes() {
         let mut lake_input_table_inner = Vec::new();
-        let coprf_key = derive_key(&converter_context.coprf_context, attribute)?;
+        let coprf_key = derive_key(&converter_context.coprf_context, attribute.as_bytes())?;
 
         let column = table.get_column(attribute).ok_or(Error::CorruptedData)?;
         for (table_key, table_value) in column.iter() {
@@ -74,6 +75,13 @@ pub fn handle_pseudonymization_request(
     Ok(lake_input_tables)
 }
 
+/// Join requests are processed by blindly converting coPRF outputs to a
+/// fresh-per-session join evaluation key.
+///
+/// For each of the blinded columns sent for joining by the lake, the
+/// pseudonymous column table key is blindly converted to a fresh join
+/// evaluation key.
+///
 pub fn handle_join_request(
     converter_context: ConverterContext,
     bpk_processor: BlindingPublicKey,
@@ -90,7 +98,7 @@ pub fn handle_join_request(
     for table in tables {
         let mut processor_input_table_inner = Vec::new();
         let attribute = table.attr();
-        let coprf_table_key = derive_key(&converter_context.coprf_context, attribute)?;
+        let coprf_table_key = derive_key(&converter_context.coprf_context, attribute.as_bytes())?;
         for &(blind_pseudonym, encrypted_value) in table.entries() {
             let converted_pseudonym = blind_convert(
                 bpk_processor,
@@ -107,8 +115,8 @@ pub fn handle_join_request(
         }
         processor_input_table_inner.sort_by_key(|&(pseudoym, _)| pseudoym);
         processor_input_tables.push(ProcessorInputTable::new(
-            &table.identifier().to_vec(),
-            &table.attr().to_vec(),
+            &table.identifier(),
+            &table.attr(),
             processor_input_table_inner,
         ));
     }

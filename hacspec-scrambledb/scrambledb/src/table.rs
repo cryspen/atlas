@@ -8,8 +8,8 @@
 use oprf::coprf::coprf_online::BlindInput;
 use std::collections::HashMap;
 
-pub type Attribute = Vec<u8>;
-pub type Identifier = Vec<u8>;
+pub type AttributeName = String;
+pub type Identifier = String;
 
 pub type BlindedPseudonym = oprf::coprf::coprf_online::BlindOutput;
 pub type EncryptedValue = elgamal::Ciphertext;
@@ -27,29 +27,29 @@ impl From<[u8; 64]> for TableKey {
 }
 pub struct ClearTable {
     identifier: Identifier,
-    inner: HashMap<Attribute, Vec<(TableKey, TableValue)>>,
+    inner: HashMap<AttributeName, Vec<(TableKey, TableValue)>>,
 }
 
 impl ClearTable {
     pub fn new(
         identifier: Identifier,
-        inner: HashMap<Attribute, Vec<(TableKey, TableValue)>>,
+        inner: HashMap<AttributeName, Vec<(TableKey, TableValue)>>,
     ) -> Self {
         Self { identifier, inner }
     }
 
-    pub fn attributes(&self) -> impl Iterator<Item = &Attribute> {
+    pub fn attributes(&self) -> impl Iterator<Item = &AttributeName> {
         self.inner.keys()
     }
 
     pub fn size(&self) -> usize {
         self.inner.len() * self.inner.values().len()
     }
-    pub fn identifier(&self) -> Vec<u8> {
+    pub fn identifier(&self) -> String {
         self.identifier.clone()
     }
 
-    pub fn get_column(&self, attr: &Attribute) -> Option<&Vec<(TableKey, TableValue)>> {
+    pub fn get_column(&self, attr: &AttributeName) -> Option<&Vec<(TableKey, TableValue)>> {
         self.inner.get(attr)
     }
 }
@@ -59,43 +59,43 @@ pub type JoinedTable = ClearTable;
 
 pub struct SourceOutputTable {
     identifier: Identifier,
-    inner: HashMap<Attribute, Vec<(BlindInput, EncryptedValue)>>,
+    inner: HashMap<AttributeName, Vec<(BlindInput, EncryptedValue)>>,
 }
 
 impl SourceOutputTable {
     pub fn new(
         identifier: Identifier,
-        inner: HashMap<Attribute, Vec<(BlindInput, EncryptedValue)>>,
+        inner: HashMap<AttributeName, Vec<(BlindInput, EncryptedValue)>>,
     ) -> Self {
         Self { identifier, inner }
     }
 
-    pub fn attributes(&self) -> impl Iterator<Item = &Attribute> {
+    pub fn attributes(&self) -> impl Iterator<Item = &AttributeName> {
         self.inner.keys()
     }
 
     pub fn size(&self) -> usize {
         self.inner.len() * self.inner.values().len()
     }
-    pub fn identifier(&self) -> Vec<u8> {
+    pub fn identifier(&self) -> String {
         self.identifier.clone()
     }
 
-    pub fn get_column(&self, attr: &Attribute) -> Option<&Vec<(BlindInput, EncryptedValue)>> {
+    pub fn get_column(&self, attr: &AttributeName) -> Option<&Vec<(BlindInput, EncryptedValue)>> {
         self.inner.get(attr)
     }
 }
 
 pub struct LakeTable {
     identifier: Identifier,
-    attr: Attribute,
+    attr: AttributeName,
     entries: Vec<(TableKey, TableValue)>,
 }
 
 impl LakeTable {
     pub fn new(
         identifier: Identifier,
-        attr: Attribute,
+        attr: AttributeName,
         entries: Vec<(TableKey, TableValue)>,
     ) -> Self {
         Self {
@@ -105,12 +105,12 @@ impl LakeTable {
         }
     }
 
-    pub fn identifier(&self) -> &[u8] {
-        self.identifier.as_ref()
+    pub fn identifier(&self) -> String {
+        self.identifier.clone()
     }
 
-    pub fn attr(&self) -> &[u8] {
-        self.attr.as_ref()
+    pub fn attr(&self) -> String {
+        self.attr.clone()
     }
 
     pub fn entries(&self) -> &[(TableKey, TableValue)] {
@@ -120,14 +120,14 @@ impl LakeTable {
 
 pub struct BlindColumn {
     identifier: Identifier,
-    attr: Attribute,
+    attr: AttributeName,
     entries: Vec<(BlindedPseudonym, EncryptedValue)>,
 }
 
 impl BlindColumn {
     pub fn new(
         identifier: &Identifier,
-        attr: &Attribute,
+        attr: &AttributeName,
         inner: Vec<(BlindedPseudonym, EncryptedValue)>,
     ) -> Self {
         BlindColumn {
@@ -137,12 +137,12 @@ impl BlindColumn {
         }
     }
 
-    pub(crate) fn attr(&self) -> &[u8] {
-        self.attr.as_ref()
+    pub(crate) fn attr(&self) -> String {
+        self.attr.clone()
     }
 
-    pub(crate) fn identifier(&self) -> &[u8] {
-        self.identifier.as_ref()
+    pub(crate) fn identifier(&self) -> String {
+        self.identifier.clone()
     }
 
     pub(crate) fn entries(&self) -> &[(BlindedPseudonym, EncryptedValue)] {

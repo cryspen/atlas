@@ -40,6 +40,14 @@ pub fn setup_lake(mut randomness: Randomness) -> Result<LakeContext, Error> {
     })
 }
 
+/// The final result of a pseudonymization session is a set of table
+/// columns, one per attribute of the original table, where the table keys
+/// are pseudonymized.
+///
+/// To this end, the output of the converter first has to be unblinded:
+///  - the encrypted table values are decrypted and stored in plain at the data lake.
+///  - the blinded coPRF results are unblinded and transformed into the
+///    final per-column pseudonyms by application of a PRP.
 pub fn finalize_pseudonymization_request(
     lake_context: LakeContext,
     input_tables: Vec<LakeInputTable>,
@@ -68,11 +76,7 @@ pub fn finalize_pseudonymization_request(
                 panic!("Invalid Table key instead of pseudonym")
             }
         });
-        let lake_table = LakeTable::new(
-            table.identifier().to_vec(),
-            table.attr().to_vec(),
-            lake_table_inner,
-        );
+        let lake_table = LakeTable::new(table.identifier(), table.attr(), lake_table_inner);
 
         lake_tables.push(lake_table);
     }
@@ -80,6 +84,14 @@ pub fn finalize_pseudonymization_request(
     Ok(lake_tables)
 }
 
+/// In order to process a join request on a number of columns, they are prepared as follows:
+/// - To allow for conversion to the join pseudonym, the unblinded coPRF
+///   outputs are first retrieved from the lake pseudonyms by applying the
+///   inverse of the PRP used when the data was imported to the lake.
+/// - Afterwards a blinding of these coPRF outputs is performed towards
+///   the data processor as receiver.
+/// - In addition the table values are encrypted towards the data
+///   processor.
 pub fn join_request(
     lake_context: LakeContext,
     bpk_processor: BlindingPublicKey,
@@ -108,11 +120,8 @@ pub fn join_request(
         }
         output_table_inner.sort_by_key(|&(blinded_pseudonym, _)| blinded_pseudonym);
 
-        let output_table = LakeOutputTable::new(
-            &table.identifier().to_vec(),
-            &table.attr().to_vec(),
-            output_table_inner,
-        );
+        let output_table =
+            LakeOutputTable::new(&table.identifier(), &table.attr(), output_table_inner);
 
         output_tables.push(output_table);
     }

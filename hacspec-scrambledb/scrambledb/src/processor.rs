@@ -41,6 +41,15 @@ pub fn setup_processor(mut randomness: Randomness) -> Result<ProcessorContext, E
     })
 }
 
+/// The final result of a join-request are table columns corresponding to
+/// the requested join attributes, where the set of table keys is the same
+/// for each column, namely a set of join-specific non-transitive
+/// pseudonym keys.
+///
+/// To retrieve this result from the output of the converter:
+/// - Unblind each table key and apply a PRF to obtain the final
+///   join-pseudonyms for each table.
+/// - Decrypt the table values.
 pub fn finalize_join_request(
     processor_context: ProcessorContext,
     converter_tables: Vec<ProcessorInputTable>,
@@ -69,8 +78,8 @@ pub fn finalize_join_request(
                 panic!("Invalid Table key instead of pseudonym")
             }
         });
-        joined_table_inner.insert(table.attr().to_vec(), joined_column_inner);
+        joined_table_inner.insert(table.attr(), joined_column_inner);
     }
 
-    Ok(JoinedTable::new(JOIN_ID.to_vec(), joined_table_inner))
+    Ok(JoinedTable::new(String::from(JOIN_ID), joined_table_inner))
 }

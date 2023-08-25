@@ -56,7 +56,7 @@ const SECPAR_BYTES: usize = 16;
 const SCRAMBLEDB_SRC_CONTEXT: &[u8] = b"ScrambleDBSourceContext";
 
 /// ID given to finalized joined tables by data processor
-const JOIN_ID: &[u8] = b"Join-";
+const JOIN_ID: &str = "Join-";
 
 pub mod converter;
 pub mod lake;
