@@ -1,5 +1,5 @@
 use hacspec_lib::{i2osp, Randomness};
-use hmac::{hkdf_expand, hkdf_extract, Sha256};
+use hmac::{hkdf_expand, hkdf_extract};
 use natmod::nat_mod;
 
 mod hacspec_helper;
@@ -30,12 +30,12 @@ pub struct P256Scalar {}
 
 pub fn random_scalar(randomness: &mut Randomness) -> Result<P256Scalar, Error> {
     // XXX: salt?
-    let dkp_prk = hkdf_extract::<Sha256>(b"salt", randomness.bytes(32)?);
+    let dkp_prk = hkdf_extract(b"salt", randomness.bytes(32)?);
 
     let mut sk = P256Scalar::zero();
 
     for counter in 0..255 {
-        let mut bytes = hkdf_expand::<Sha256>(&dkp_prk, &i2osp(counter, 1), 32);
+        let mut bytes = hkdf_expand(&dkp_prk, &i2osp(counter, 1), 32);
 
         bytes[0] &= 0xffu8;
         if p256_validate_private_key(&bytes) {
