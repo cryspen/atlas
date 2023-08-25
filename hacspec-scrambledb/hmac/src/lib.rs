@@ -1,3 +1,4 @@
+use hacspec_lib::FunctionalVec;
 use sha256::*;
 
 mod hacspec_helper;
@@ -60,4 +61,23 @@ pub fn hmac<H: Hash>(k: &[u8], txt: &[u8]) -> Vec<u8> {
     h_in.extend_from_slice(&h_inner);
 
     hash(&h_in).to_vec()
+}
+
+pub fn hkdf_extract<H: Hash>(salt: &[u8], ikm: &[u8]) -> Vec<u8> {
+    hmac::<H>(salt, ikm)
+}
+
+pub fn hkdf_expand<H: Hash>(prk: &[u8], info: &[u8], l: usize) -> Vec<u8> {
+    let n = (l + H::HASH_LEN - 1) / H::HASH_LEN; // N = ceil(L/HashLen)
+
+    let t = hmac::<H>(prk, &info.concat_byte(1u8));
+    for i in 1..n {
+        let round_input = t[i * H::HASH_LEN..(i + 1) * H::HASH_LEN]
+            .to_vec()
+            .concat(info)
+            .concat_byte((i - 1) as u8);
+        let t_i = hmac::<H>(prk, &round_input);
+        t.concat(&t_i);
+    }
+    t[0..l].to_vec()
 }

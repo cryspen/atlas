@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 sha256 = { path = "../sha256" }
+hacspec_lib = { path = "../hacspec_lib" }
