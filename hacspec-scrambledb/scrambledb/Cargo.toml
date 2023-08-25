@@ -6,10 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-oprf = { path = "../oprf" }
-scrambledb-util = { path = "../scrambledb-util" }
-elgamal = { path = "../elgamal" }
-prp = { path = "../prp" }
-p256 = { path = "../p256" }
-libcrux = { workspace = true }
+oprf.workspace = true
+elgamal.workspace = true
+prp.workspace = true
+p256.workspace = true
 hacspec_lib.workspace = true

@@ -117,5 +117,5 @@ pub fn derive_key(context: &CoPRFEvaluatorContext, key_id: &[u8]) -> Result<CoPR
     let mut key_material = context.msk.to_vec();
     key_material.extend_from_slice(key_id);
 
-    scrambledb_util::random_scalar(&mut Randomness::new(key_material)).map_err(|e| e.into())
+    p256::random_scalar(&mut Randomness::new(key_material)).map_err(|e| e.into())
 }

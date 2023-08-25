@@ -1,3 +1,5 @@
+use hacspec_lib::{i2osp, Randomness};
+use hmac::{hkdf_expand, hkdf_extract, Sha256};
 use natmod::nat_mod;
 
 mod hacspec_helper;
@@ -8,6 +10,13 @@ pub enum Error {
     InvalidAddition,
     DeserializeError,
     PointAtInfinity,
+    SamplingError,
+}
+
+impl From<hacspec_lib::Error> for Error {
+    fn from(_value: hacspec_lib::Error) -> Self {
+        Self::SamplingError
+    }
 }
 
 const BITS: u128 = 256;
@@ -18,6 +27,27 @@ pub struct P256FieldElement {}
 
 #[nat_mod("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551", 32)]
 pub struct P256Scalar {}
+
+pub fn random_scalar(randomness: &mut Randomness) -> Result<P256Scalar, Error> {
+    // XXX: salt?
+    let dkp_prk = hkdf_extract::<Sha256>(b"salt", randomness.bytes(32)?);
+
+    let mut sk = P256Scalar::zero();
+
+    for counter in 0..255 {
+        let mut bytes = hkdf_expand::<Sha256>(&dkp_prk, &i2osp(counter, 1), 32);
+
+        bytes[0] &= 0xffu8;
+        if p256_validate_private_key(&bytes) {
+            sk = P256Scalar::from_be_bytes(&bytes);
+        }
+    }
+    if sk == P256Scalar::zero() {
+        Err(Error::SamplingError)
+    } else {
+        Ok(sk)
+    }
+}
 
 pub type Affine = (P256FieldElement, P256FieldElement);
 pub type AffineResult = Result<Affine, Error>;

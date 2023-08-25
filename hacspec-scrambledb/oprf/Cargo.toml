@@ -6,11 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-natmod = { path = "../natmod" }
-p256 = { path = "../p256" }
-scrambledb-util = { path = "../scrambledb-util" }
-hash-to-curve = { path = "../hash-to-curve" }
-elgamal = { path = "../elgamal" }
+natmod.workspace = true
+p256.workspace = true
+hash-to-curve.workspace = true
+elgamal.workspace = true
 hacspec_lib.workspace = true
 
 [dev-dependencies]

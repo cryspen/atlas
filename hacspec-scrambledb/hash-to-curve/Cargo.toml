@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-natmod = { path = "../natmod" }
-p256 = { path = "../p256" }
-sha256 = { path = "../sha256" }
-hacspec_lib = { workspace = true }
+natmod.workspace = true
+p256.workspace = true
+sha256.workspace = true
+hacspec_lib.workspace = true
 
 
 [dev-dependencies]

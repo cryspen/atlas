@@ -70,14 +70,6 @@ impl From<elgamal::Error> for Error {
     }
 }
 
-impl From<scrambledb_util::Error> for Error {
-    fn from(value: scrambledb_util::Error) -> Self {
-        match value {
-            scrambledb_util::Error::SamplingError => Self::DeriveKeyPairError,
-        }
-    }
-}
-
 // 3. Protocol
 pub mod protocol;
 

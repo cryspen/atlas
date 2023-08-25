@@ -8,9 +8,16 @@ members = [
     "hacspec_lib",
     "prp",
     "sha256",
-    "hmac"
+    "hmac",
 ]
 
 [workspace.dependencies]
-libcrux = { git = "https://github.com/cryspen/libcrux" }
 hacspec_lib = { path = "./hacspec_lib" }
+elgamal = { path = "./elgamal" }
+hash-to-curve = { path = "./hash-to-curve" }
+p256 = { path = "./p256" }
+oprf = { path = "./oprf" }
+prp = { path = "./prp" }
+sha256 = { path = "./sha256" }
+hmac = { path = "./hmac" }
+natmod = { path = "./natmod" }

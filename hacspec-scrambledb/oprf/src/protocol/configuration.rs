@@ -1,6 +1,6 @@
 //! ## 3.1. Configuration
 
-use scrambledb_util::i2osp;
+use hacspec_lib::i2osp;
 
 ///  Each of the three protocol variants are identified with a one-byte
 ///    value (in hexadecimal):

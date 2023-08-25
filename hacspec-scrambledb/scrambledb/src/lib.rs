@@ -24,14 +24,6 @@ impl From<hacspec_lib::Error> for Error {
     }
 }
 
-impl From<scrambledb_util::Error> for Error {
-    fn from(value: scrambledb_util::Error) -> Self {
-        match value {
-            scrambledb_util::Error::SamplingError => Self::RandomnessError,
-        }
-    }
-}
-
 impl From<std::array::TryFromSliceError> for Error {
     fn from(_value: std::array::TryFromSliceError) -> Self {
         Self::RandomnessError
@@ -44,6 +36,7 @@ impl From<p256::Error> for Error {
             p256::Error::InvalidAddition => Self::CorruptedData,
             p256::Error::DeserializeError => Self::CorruptedData,
             p256::Error::PointAtInfinity => Self::CorruptedData,
+            p256::Error::SamplingError => Self::RandomnessError,
         }
     }
 }
