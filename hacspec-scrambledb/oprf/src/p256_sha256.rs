@@ -17,7 +17,6 @@ pub type P256SerializedPoint = [u8; 33];
 /// SerializeElement(A): Implemented using the compressed Elliptic-
 ///     Curve-Point-to-Octet-String method according to [SEC1]; Ne =
 ///     33.
-///
 pub fn serialize_element(p: &P256Point) -> P256SerializedPoint {
     p256::serialize_point(p)
 }
@@ -36,7 +35,9 @@ pub fn scalar_inverse(s: P256Scalar) -> P256Scalar {
     s.inv()
 }
 
-/// HashToScalar(): Use hash_to_field from [I-D.irtf-cfrg-hash-to-curve] using L = 48, expand_message_xmd with SHA-256, DST = "HashToScalar-" || contextString, and prime modulus equal to Group.Order().
+/// HashToScalar(): Use hash_to_field from [I-D.irtf-cfrg-hash-to-curve]
+/// using L = 48, expand_message_xmd with SHA-256, DST = "HashToScalar-"
+/// || contextString, and prime modulus equal to Group.Order().
 pub fn hash_to_scalar(bytes: &[u8], context_string: &[u8]) -> Result<P256Scalar, Error> {
     let mut dst: Vec<u8> = "HashToScalar-".into(); // DST = "HashToScalar-" || contextString
     dst.extend_from_slice(context_string);
@@ -56,7 +57,9 @@ pub fn hash_to_scalar_dst(
         .map_err(|e| e.into())
 }
 
-/// HashToGroup(): Use hash_to_curve with suite P256_XMD:SHA-256_SSWU_RO_ [I-D.irtf-cfrg-hash-to-curve] and DST = "HashToGroup-" || contextString.
+/// HashToGroup(): Use hash_to_curve with suite P256_XMD:SHA-256_SSWU_RO_
+/// [I-D.irtf-cfrg-hash-to-curve] and DST = "HashToGroup-" ||
+/// contextString.
 pub fn hash_to_group(bytes: &[u8], context_string: &[u8]) -> Result<P256Point, Error> {
     let mut dst: Vec<u8> = b"HashToGroup-".to_vec();
     dst.extend_from_slice(context_string);
