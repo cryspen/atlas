@@ -1,6 +1,6 @@
 #![doc = include_str!("../Readme.md")]
-// #![warn(missing_docs)]
-// #![warn(rustdoc::missing_crate_level_docs)]
+#![warn(missing_docs)]
+#![warn(rustdoc::missing_crate_level_docs)]
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
