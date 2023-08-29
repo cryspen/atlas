@@ -16,8 +16,8 @@ fn test_p256_base() {
         Ok(p) => p,
         Err(_) => panic!("Error p256_point_mul_base"),
     };
-    assert_eq!(point_computed.x_coord().unwrap(), point_expected.0);
-    assert_eq!(point_computed.y_coord().unwrap(), point_expected.1);
+    assert_eq!(point_computed.x().unwrap(), point_expected.0);
+    assert_eq!(point_computed.y().unwrap(), point_expected.1);
 
     let sk = P256Scalar::from_hex("018ebbb95eed0e13");
     let point_expected = (
@@ -33,8 +33,8 @@ fn test_p256_base() {
         Ok(p) => p,
         Err(_) => panic!("Error p256_point_mul_base"),
     };
-    assert_eq!(point_computed.x_coord().unwrap(), point_expected.0);
-    assert_eq!(point_computed.y_coord().unwrap(), point_expected.1);
+    assert_eq!(point_computed.x().unwrap(), point_expected.0);
+    assert_eq!(point_computed.y().unwrap(), point_expected.1);
 
     let sk =
         P256Scalar::from_hex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550");
@@ -51,8 +51,8 @@ fn test_p256_base() {
         Ok(p) => p,
         Err(_) => panic!("Error p256_point_mul_base"),
     };
-    assert_eq!(point_computed.x_coord().unwrap(), point_expected.0);
-    assert_eq!(point_computed.y_coord().unwrap(), point_expected.1);
+    assert_eq!(point_computed.x().unwrap(), point_expected.0);
+    assert_eq!(point_computed.y().unwrap(), point_expected.1);
 }
 
 use serde_json::Value;
@@ -137,16 +137,16 @@ fn test_wycheproof_plain() {
                 Ok(s) => s,
                 Err(_) => panic!("Unexpected error in point_mul"),
             };
-            assert_eq!(shared.x_coord().unwrap(), expected);
+            assert_eq!(shared.x().unwrap(), expected);
 
             // Check w
-            let my_p = (p.x_coord().unwrap(), p256_calculate_w(p.x_coord().unwrap())).into();
+            let my_p = (p.x().unwrap(), p256_calculate_w(p.x().unwrap())).into();
             let shared = match p256_point_mul(k, my_p) {
                 Ok(s) => s,
                 Err(_) => panic!("Unexpected error in point_mul"),
             };
             assert_eq!(
-                shared.x_coord().unwrap(),
+                shared.x().unwrap(),
                 expected,
                 "Error in ECDH using calculate w"
             );
@@ -244,7 +244,7 @@ fn test_p256_calculate_w() {
 
         // calculate the ECDH secret
         let my_secret_x = match p256_point_mul(private, public) {
-            Ok(p) => p.x_coord().unwrap(),
+            Ok(p) => p.x().unwrap(),
             Err(_) => panic!("Error test_ecdh"),
         };
 
