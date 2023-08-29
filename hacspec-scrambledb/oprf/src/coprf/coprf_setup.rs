@@ -55,7 +55,9 @@ pub struct CoPRFReceiverContext {
 }
 
 impl CoPRFReceiverContext {
-    /// Retrieves the receivers blinding public key. This is needed by the requester to perform initial blinding and by the Evaluator to rerandomize to evaluation result.
+    /// Retrieves the receivers blinding public key. This is needed by the
+    /// requester to perform initial blinding and by the Evaluator to
+    /// rerandomize to evaluation result.
     pub fn get_bpk(&self) -> BlindingPublicKey {
         self.bpk
     }
@@ -83,7 +85,8 @@ impl CoPRFEvaluatorContext {
 
 impl CoPRFReceiverContext {
     /// ### E.1.3. Receiver Setup
-    /// The coPRF receiver holds a pair of corresponding blinding and unblinding keys.
+    /// The coPRF receiver holds a pair of corresponding blinding and
+    /// unblinding keys.
     pub fn new(randomness: &mut Randomness) -> Self {
         let (bsk, bpk) = generate_blinding_key_pair(randomness).unwrap();
         CoPRFReceiverContext { bsk, bpk }
