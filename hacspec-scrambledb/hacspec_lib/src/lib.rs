@@ -31,7 +31,3 @@ pub fn i2osp(value: usize, len: usize) -> Vec<u8> {
         _ => panic!("unsupported len {len}"),
     }
 }
-
-pub fn subbytes(bytes: &[u8], offset: usize, count: usize) -> &[u8] {
-    &bytes[offset..offset + count]
-}
