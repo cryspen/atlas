@@ -1,6 +1,5 @@
 use hacspec_lib::{i2osp, Randomness};
 use hmac::{hkdf_expand, hkdf_extract};
-use natmod::nat_mod;
 
 mod hacspec_helper;
 pub use hacspec_helper::*;

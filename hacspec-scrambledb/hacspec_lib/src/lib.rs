@@ -48,3 +48,52 @@ pub fn xor_slice(mut this: Vec<u8>, other: &[u8]) -> Vec<u8> {
     }
     this
 }
+
+macro_rules! to_le_u32s_impl {
+    ($name:ident,$l:literal) => {
+        pub fn $name(bytes: &[u8]) -> [u32; $l] {
+            assert_eq!($l, bytes.len() / 4);
+            let mut out = [0; $l];
+            for i in 0..$l {
+                out[i] = u32::from_le_bytes(bytes[4 * i..4 * i + 4].try_into().unwrap());
+            }
+            out
+        }
+    };
+}
+to_le_u32s_impl!(to_le_u32s_3, 3);
+to_le_u32s_impl!(to_le_u32s_8, 8);
+to_le_u32s_impl!(to_le_u32s_16, 16);
+
+pub fn u32s_to_le_bytes(state: &[u32; 16]) -> [u8; 64] {
+    let mut out = [0; 64];
+    for i in 0..state.len() {
+        let tmp = state[i].to_le_bytes();
+        for j in 0..4 {
+            out[i * 4 + j] = tmp[j];
+        }
+    }
+    out
+}
+
+pub fn xor_state(mut state: [u32; 16], other: [u32; 16]) -> [u32; 16] {
+    for i in 0..16 {
+        state[i] = state[i] ^ other[i];
+    }
+    state
+}
+
+pub fn add_state(mut state: [u32; 16], other: [u32; 16]) -> [u32; 16] {
+    for i in 0..16 {
+        state[i] = state[i].wrapping_add(other[i]);
+    }
+    state
+}
+
+pub fn update_array(mut array: [u8; 64], val: &[u8]) -> [u8; 64] {
+    assert!(64 >= val.len());
+    for i in 0..val.len() {
+        array[i] = val[i];
+    }
+    array
+}

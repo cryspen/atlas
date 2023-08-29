@@ -1,5 +1,6 @@
-mod hacspec_helper;
-use hacspec_helper::*;
+use hacspec_lib::{
+    add_state, to_le_u32s_16, to_le_u32s_3, to_le_u32s_8, u32s_to_le_bytes, update_array, xor_state,
+};
 
 type State = [u32; 16];
 type Block = [u8; 64];
