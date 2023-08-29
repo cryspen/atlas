@@ -28,12 +28,16 @@ use p256::{NatMod, P256Point};
 
 /// CoPRF Inputs can be arbitrary byte strings.
 pub type Input<'a> = &'a [u8];
-/// The coPRF range is the range of the underlying PRF, in our case the group of points on P-256.
+/// The coPRF range is the range of the underlying PRF, in our case the
+/// group of points on P-256.
 pub type Output = P256Point;
 
-/// The blinded coPRF input corresponds to a ciphertext of the underlying rerandomizable encryption scheme, in our case an Elgamal ciphertext.
+/// The blinded coPRF input corresponds to a ciphertext of the underlying
+/// rerandomizable encryption scheme, in our case an Elgamal ciphertext.
 pub type BlindInput = Ciphertext;
-/// Since blind evaluation is performed via the homomorphic properties and rerandomizability of the underlying encryption scheme, a coPRF output is also a ciphertext of the underlying encryption scheme.
+/// Since blind evaluation is performed via the homomorphic properties and
+/// rerandomizability of the underlying encryption scheme, a coPRF output
+/// is also a ciphertext of the underlying encryption scheme.
 pub type BlindOutput = Ciphertext;
 
 /// The requester blinds a query for blind evaluation by Elgamal
