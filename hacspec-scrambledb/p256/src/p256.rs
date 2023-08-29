@@ -265,13 +265,13 @@ impl P256Point {
         }
     }
 
-    pub fn x_coord(&self) -> Result<P256FieldElement, Error> {
+    pub fn x(&self) -> Result<P256FieldElement, Error> {
         match self {
             P256Point::NonInf((x, _)) => Ok(*x),
             P256Point::AtInfinity => Err(Error::PointAtInfinity),
         }
     }
-    pub fn y_coord(&self) -> Result<P256FieldElement, Error> {
+    pub fn y(&self) -> Result<P256FieldElement, Error> {
         match self {
             P256Point::NonInf((_, y)) => Ok(*y),
             P256Point::AtInfinity => Err(Error::PointAtInfinity),
