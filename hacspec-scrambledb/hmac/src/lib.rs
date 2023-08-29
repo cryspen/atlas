@@ -1,8 +1,4 @@
-use hacspec_lib::FunctionalVec;
-use sha256::*;
-
-mod hacspec_helper;
-use hacspec_helper::*;
+use hacspec_lib::{xor_slice, FunctionalVec};
 
 const BLOCK_LEN: usize = 64;
 const HASH_LEN: usize = 32;
