@@ -45,17 +45,18 @@ pub type BlindOutput = Ciphertext;
 /// applying the RO-mapping into the base group used by the encryption
 /// scheme to the input bytes.
 pub fn blind(
-    context: &CoPRFRequesterContext,
+    bpk: BlindingPublicKey,
     input: Input,
+    context_string: Vec<u8>,
     randomness: &mut Randomness,
 ) -> Result<BlindInput, Error> {
-    let inputElement = p256_sha256::hash_to_group(input, &context.string)?;
+    let inputElement = p256_sha256::hash_to_group(input, &context_string)?;
 
     if inputElement == p256_sha256::identity() {
         return Err(Error::InvalidInputError);
     }
 
-    let blindInput = elgamal::encrypt(context.bpk, inputElement, randomness)?;
+    let blindInput = elgamal::encrypt(bpk, inputElement, randomness)?;
 
     Ok(blindInput)
 }

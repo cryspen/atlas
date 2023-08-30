@@ -1,0 +1,4 @@
+# As modules roughly correspond to sections in the extracted
+# specification document, we want to keep them in a specific
+# (potentially non-alphabetic) order.
+reorder_modules = false
