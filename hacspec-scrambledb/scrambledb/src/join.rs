@@ -40,7 +40,7 @@ use crate::{
 ///                            ek_target,
 ///                            pseudonymized_tables,
 ///                            randomness):
-///     let blind_tables = [];
+///     let blind_tables = Vec::new();
 ///     for table in pseudonymized_tables {
 ///         let blind_column = BlindColumn::new(table.column.attribute());
 ///
@@ -93,6 +93,7 @@ pub fn join_identifier(identifier: String, attribute: String) -> String {
     join_identifier
 }
 
+/// ### Conversion
 /// Join requests are processed by blindly converting coPRF outputs to a
 /// fresh-per-session join evaluation key.
 ///

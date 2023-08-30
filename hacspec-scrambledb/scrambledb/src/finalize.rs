@@ -1,9 +1,18 @@
+//! # Conversion Finalization
 use crate::{
     error::Error,
     setup::StoreContext,
     table::{Column, ConvertedTable, PseudonymizedTable},
 };
 
+/// The result of a split or join conversion is a set of blinded
+/// pseudonymized tables which have been encrypted towards a data store.
+///
+/// For permanent storage of the pseudonymized data, the raw pseudonyms have
+/// to be unblinded and subsequently hardened into permanent pseudonyms.
+///
+/// In addition the encrypted values need to be decrypted to be available
+/// for future conversions towards other data stores.
 pub fn finalize_conversion(
     store_context: StoreContext,
     converted_tables: Vec<ConvertedTable>,

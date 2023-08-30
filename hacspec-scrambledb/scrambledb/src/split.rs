@@ -1,3 +1,4 @@
+//! # Split Conversion
 use elgamal::{encrypt, EncryptionKey};
 use hacspec_lib::Randomness;
 use oprf::coprf::{
@@ -22,7 +23,7 @@ pub fn split_conversion_context() -> Vec<u8> {
     b"Split-".to_vec()
 }
 
-/// Prepare a pseudonymization request.
+/// ## Preparation
 ///
 /// - For each column of the table, go entry by entry, blinding the table key for the
 /// data lake as coPRF receiver and additionaly encrypting the entry value towards the
@@ -59,6 +60,7 @@ pub fn prepare_split_conversion(
     Ok(BlindTable::new(table.identifier(), columns))
 }
 
+/// ## Conversion
 /// One part of the joint creation of pseudonomized and unlinkable data to
 /// be fed into the data lake.  The input table is part of a
 /// pseudonymization request by a data source. Its data contents are
@@ -71,9 +73,6 @@ pub fn prepare_split_conversion(
 /// addition the entry ciphertexts have been rerandomized and table rows
 /// have been shuffled to prevent correlation of the incoming with the
 /// outgoing table data.
-///
-///  cf. [Lehmann], p. 13, Section 2.a of Fig. 4
-///
 pub fn split_conversion(
     converter_context: ConverterContext,
     bpk_store: BlindingPublicKey,
