@@ -8,7 +8,9 @@ edition = "2021"
 path = "src/p256.rs"
 
 [dependencies]
-natmod = {path = "../natmod" }
+natmod.workspace = true
+hacspec_lib.workspace = true
+hmac.workspace = true
 num-bigint = "0.4.3"
 num-traits = "0.2.15"
 

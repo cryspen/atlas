@@ -1,6 +1,6 @@
 //! // This trait lives in the library
 //!
-//! ```
+//! ```ignore
 //! pub trait NatModTrait<T> {
 //!     const MODULUS: T;
 //! }

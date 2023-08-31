@@ -93,11 +93,4 @@
 //! Configuration details for the offline phase are described in
 //! Section 3.1.
 
-use p256::{P256Point, P256Scalar};
-
-type ServerPrivateKey = P256Scalar;
-type ServerPublicKey = P256Point;
-
 pub mod configuration;
-pub mod online;
-pub mod setup;

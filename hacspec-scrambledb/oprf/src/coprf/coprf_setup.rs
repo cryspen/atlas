@@ -4,13 +4,13 @@
 //! CoPRFs are defined in a multi-key setting, such that CoPRF evaluation
 //! keys are derived from a master secret.
 
-use libcrux::hpke::kdf::{LabeledExpand, LabeledExtract, KDF};
-use p256::{p256_validate_private_key, NatMod, P256Scalar};
-use scrambledb_util::i2osp;
-use std::collections::HashMap;
+use hacspec_lib::Randomness;
+use p256::P256Scalar;
 
-use crate::protocol::configuration::{create_context_string, ModeID};
-use crate::Error;
+use crate::{
+    protocol::configuration::{create_context_string, ModeID},
+    Error,
+};
 
 /// As blinding is performed by Elgamal encryption, the blinding public
 /// key is an Elgamal encryption key.
@@ -37,62 +37,59 @@ pub type CoPRFKey = P256Scalar;
 
 /// The coPRF requester requires the blinding public key of the intended
 /// receiver of the PRF output.
-#[allow(unused)]
 pub struct CoPRFRequesterContext {
-    pub context_string: Vec<u8>,
-    pub bpk: BlindingPublicKey,
+    pub(crate) string: Vec<u8>,
+    pub(crate) bpk: BlindingPublicKey,
 }
 
-/// The coPRF evaluator holds the coPRF master secret, as well as any
-/// evaluation keys derived from it.
-#[allow(unused)]
+/// The coPRF evaluator holds the coPRF master secret.
 pub struct CoPRFEvaluatorContext {
-    pub context_string: Vec<u8>,
-    pub msk: CoPRFMasterSecret,
-    pub keys: HashMap<CoPRFKeyID, CoPRFKey>,
+    pub(crate) msk: CoPRFMasterSecret,
 }
 
 /// The coPRF receiver needs an unblinding private key in order to obtain
 /// the final coPRF output from the blinded evaluation result.
-#[allow(unused)]
 pub struct CoPRFReceiverContext {
-    context_string: Vec<u8>,
-    bpk: BlindingPublicKey,
-    bsk: BlindingPrivateKey,
+    pub(crate) bsk: BlindingPrivateKey,
+    pub(crate) bpk: BlindingPublicKey,
 }
 
-/// ### E.1.1. Requester Setup
-/// The requesting party requires the blinding public key of the receiving
-/// party on whose behalf PRF evaluation queries should be carried out.
-pub fn setup_coprf_requester(identifier: &[u8], bpk: BlindingPublicKey) -> CoPRFRequesterContext {
-    CoPRFRequesterContext {
-        context_string: create_context_string(ModeID::modecoPRF, identifier),
-        bpk,
+impl CoPRFReceiverContext {
+    /// Retrieves the receivers blinding public key. This is needed by the
+    /// requester to perform initial blinding and by the Evaluator to
+    /// rerandomize to evaluation result.
+    pub fn get_bpk(&self) -> BlindingPublicKey {
+        self.bpk
+    }
+}
+impl CoPRFRequesterContext {
+    /// ### E.1.1. Requester Setup
+    /// The requesting party requires the blinding public key of the receiving
+    /// party on whose behalf PRF evaluation queries should be carried out.
+    pub fn new(identifier: &[u8], bpk: BlindingPublicKey) -> Self {
+        CoPRFRequesterContext {
+            string: create_context_string(ModeID::modecoPRF, identifier),
+            bpk,
+        }
     }
 }
 
-/// ### E.1.2. Evaluator Setup
-/// The coPRF evaluator holds the master secret as well as any PRF
-/// evaluation keys derived from it.
-pub fn setup_coprf_evaluator(identifier: &[u8], msk: CoPRFMasterSecret) -> CoPRFEvaluatorContext {
-    CoPRFEvaluatorContext {
-        context_string: create_context_string(ModeID::modecoPRF, identifier),
-        msk,
-        keys: HashMap::new(),
+impl CoPRFEvaluatorContext {
+    /// ### E.1.2. Evaluator Setup
+    /// The coPRF evaluator holds the master secret as well as any PRF
+    /// evaluation keys derived from it.
+    pub fn new(msk: CoPRFMasterSecret) -> Self {
+        CoPRFEvaluatorContext { msk }
     }
 }
 
-/// ### E.1.3. Receiver Setup
-/// The coPRF receiver holds a pair of corresponding blinding and unblinding keys.
-pub fn setup_coprf_receiver(
-    identifier: &[u8],
-    bpk: BlindingPublicKey,
-    bsk: BlindingPrivateKey,
-) -> CoPRFReceiverContext {
-    CoPRFReceiverContext {
-        context_string: create_context_string(ModeID::modecoPRF, identifier),
-        bpk,
-        bsk,
+impl CoPRFReceiverContext {
+    /// ### E.1.3. Receiver Setup
+    /// The coPRF receiver holds a pair of corresponding blinding and
+    /// unblinding keys.
+    pub fn new(randomness: &mut Randomness) -> Self {
+        let (bsk, bpk) = generate_blinding_key_pair(randomness).unwrap();
+        CoPRFReceiverContext { bsk, bpk }
     }
 }
 
@@ -105,8 +102,8 @@ pub fn setup_coprf_receiver(
 /// decryption using the encryption scheme, hence blinding key generation
 /// is the key generation procedure for the encryption scheme.
 ///
-pub fn generate_blinding_key_pair(
-    uniform_bytes: &[u8],
+fn generate_blinding_key_pair(
+    uniform_bytes: &mut Randomness,
 ) -> Result<(BlindingPrivateKey, BlindingPublicKey), Error> {
     let (bsk, bpk) = elgamal::generate_keys(uniform_bytes)?;
     Ok((bsk, bpk))
@@ -119,40 +116,9 @@ pub fn generate_blinding_key_pair(
 ///
 /// Concretely in our case, PRF evaluation keys should be scalars in
 /// P256. To achieve this, we use the rejection sampling method outlined in [RFC9180].
-pub fn derive_key(msk: CoPRFMasterSecret, key_id: &[u8]) -> Result<CoPRFKey, Error> {
-    let mut key_material = msk.to_vec();
+pub fn derive_key(context: &CoPRFEvaluatorContext, key_id: &[u8]) -> Result<CoPRFKey, Error> {
+    let mut key_material = context.msk.to_vec();
     key_material.extend_from_slice(key_id);
-    let suite_id = b"coPRF-P256-SHA256".to_vec();
-    let label = b"dkp_prk".to_vec();
-    let candidate_label = b"candidate".to_vec();
 
-    let dkp_prk = LabeledExtract(
-        KDF::HKDF_SHA256,
-        suite_id.clone(),
-        b"",
-        label,
-        &key_material,
-    )?;
-
-    let mut sk = P256Scalar::zero();
-
-    for counter in 0..255 {
-        let mut bytes = LabeledExpand(
-            KDF::HKDF_SHA256,
-            suite_id.clone(),
-            &dkp_prk,
-            candidate_label.clone(),
-            &i2osp(counter, 1),
-            32,
-        )?;
-        bytes[0] = bytes[0] & 0xffu8;
-        if p256_validate_private_key(&bytes) {
-            sk = P256Scalar::from_be_bytes(&bytes);
-        }
-    }
-    if sk == P256Scalar::zero() {
-        Err(Error::DeriveKeyPairError)
-    } else {
-        Ok(sk)
-    }
+    p256::random_scalar(&mut Randomness::new(key_material)).map_err(|e| e.into())
 }

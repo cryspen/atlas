@@ -1,4 +1,5 @@
-use natmod::nat_mod;
+use hacspec_lib::{i2osp, Randomness};
+use hmac::{hkdf_expand, hkdf_extract};
 
 mod hacspec_helper;
 pub use hacspec_helper::*;
@@ -6,6 +7,15 @@ pub use hacspec_helper::*;
 #[derive(Debug)]
 pub enum Error {
     InvalidAddition,
+    DeserializeError,
+    PointAtInfinity,
+    SamplingError,
+}
+
+impl From<hacspec_lib::Error> for Error {
+    fn from(_value: hacspec_lib::Error) -> Self {
+        Self::SamplingError
+    }
 }
 
 const BITS: u128 = 256;
@@ -16,6 +26,27 @@ pub struct P256FieldElement {}
 
 #[nat_mod("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551", 32)]
 pub struct P256Scalar {}
+
+pub fn random_scalar(randomness: &mut Randomness) -> Result<P256Scalar, Error> {
+    // XXX: salt?
+    let dkp_prk = hkdf_extract(b"salt", randomness.bytes(32)?);
+
+    let mut sk = P256Scalar::zero();
+
+    for counter in 0..255 {
+        let mut bytes = hkdf_expand(&dkp_prk, &i2osp(counter, 1), 32);
+
+        bytes[0] &= 0xffu8;
+        if p256_validate_private_key(&bytes) {
+            sk = P256Scalar::from_be_bytes(&bytes);
+        }
+    }
+    if sk == P256Scalar::zero() {
+        Err(Error::SamplingError)
+    } else {
+        Ok(sk)
+    }
+}
 
 pub type Affine = (P256FieldElement, P256FieldElement);
 pub type AffineResult = Result<Affine, Error>;
@@ -62,6 +93,21 @@ impl std::ops::Neg for P256FieldElement {
     }
 }
 
+pub fn is_square(x: &P256FieldElement) -> bool {
+    let exp = P256FieldElement::from_u128(1).neg() * P256FieldElement::from_u128(2).inv();
+    let test = x.pow_felem(&exp);
+    test == P256FieldElement::zero() || test == P256FieldElement::one()
+}
+
+pub fn sgn0(x: &P256FieldElement) -> bool {
+    x.bit(0)
+}
+
+pub fn sqrt(x: &P256FieldElement) -> P256FieldElement {
+    let c1 = P256FieldElement::one() * P256FieldElement::from_u128(4).inv();
+    x.pow_felem(&c1)
+}
+
 impl std::ops::Neg for P256Point {
     type Output = P256Point;
     fn neg(self) -> Self::Output {
@@ -72,7 +118,7 @@ impl std::ops::Neg for P256Point {
     }
 }
 
-pub fn affine_to_jacobian(p: Affine) -> P256Jacobian {
+fn affine_to_jacobian(p: Affine) -> P256Jacobian {
     let (x, y) = p;
     (x, y, P256FieldElement::from_u128(1))
 }
@@ -116,7 +162,7 @@ fn s1_equal_s2(s1: P256FieldElement, s2: P256FieldElement) -> JacobianResult {
     }
 }
 
-pub fn point_add_jacob(p: P256Jacobian, q: P256Jacobian) -> JacobianResult {
+fn point_add_jacob(p: P256Jacobian, q: P256Jacobian) -> JacobianResult {
     let mut result = Ok(q);
     if !is_point_at_infinity(p) {
         if is_point_at_infinity(q) {
@@ -172,12 +218,104 @@ fn ltr_mul(k: P256Scalar, p: P256Jacobian) -> JacobianResult {
     Ok(q)
 }
 
-pub fn p256_point_mul(k: P256Scalar, p: Affine) -> AffineResult {
-    let jac = ltr_mul(k, affine_to_jacobian(p))?;
-    Ok(jacobian_to_affine(jac))
+pub type P256SerializedPoint = [u8; 33];
+
+/// SerializeElement(A): Implemented using the compressed Elliptic-
+///     Curve-Point-to-Octet-String method according to [SEC1]; Ne =
+///     33.
+///
+pub fn serialize_point(p: &P256Point) -> P256SerializedPoint {
+    let mut out = [0u8; 33];
+    match p {
+        P256Point::AtInfinity => out,
+        P256Point::NonInf((x, y)) => {
+            let x_serialized = x.to_be_bytes();
+
+            for (to, from) in out.iter_mut().skip(1).zip(x_serialized.iter()) {
+                *to = *from
+            }
+            out[0] = if y.bit(0) { 3 } else { 2 };
+
+            out
+        }
+    }
+}
+impl P256Point {
+    pub fn raw_bytes(&self) -> [u8; 64] {
+        match self {
+            P256Point::NonInf((x, y)) => {
+                let mut out = [0u8; 64];
+                out[0..32].copy_from_slice(&x.to_be_bytes());
+                out[32..64].copy_from_slice(&y.to_be_bytes());
+                out
+            }
+            P256Point::AtInfinity => panic!("Tried to serialize point at infitiy"),
+        }
+    }
+
+    pub fn from_raw_bytes(bytes: [u8; 64]) -> Result<P256Point, Error> {
+        let x = P256FieldElement::from_be_bytes(&bytes[0..32]);
+        let y = P256FieldElement::from_be_bytes(&bytes[32..64]);
+        let candidate = P256Point::NonInf((x, y));
+        if p256_validate_public_key(candidate) {
+            Ok(candidate)
+        } else {
+            Err(Error::DeserializeError)
+        }
+    }
+
+    pub fn x(&self) -> Result<P256FieldElement, Error> {
+        match self {
+            P256Point::NonInf((x, _)) => Ok(*x),
+            P256Point::AtInfinity => Err(Error::PointAtInfinity),
+        }
+    }
+    pub fn y(&self) -> Result<P256FieldElement, Error> {
+        match self {
+            P256Point::NonInf((_, y)) => Ok(*y),
+            P256Point::AtInfinity => Err(Error::PointAtInfinity),
+        }
+    }
 }
 
-pub fn p256_point_mul_base(k: P256Scalar) -> AffineResult {
+#[allow(unused)]
+pub fn deserialize_point(pm: P256SerializedPoint) -> Result<P256Point, Error> {
+    if pm == [0u8; 33] {
+        return Err(Error::DeserializeError);
+    }
+
+    let x = P256FieldElement::from_be_bytes(&pm[1..33]);
+
+    let ym = pm[0];
+    let yp_sign: bool = match ym {
+        0x02 => false,
+        0x03 => true,
+        _ => return Err(Error::DeserializeError),
+    };
+
+    let a = P256FieldElement::from_u128(3u128).neg();
+    let b = P256FieldElement::from_hex(
+        "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+    );
+
+    let alpha = x.pow(3) + a * x + b;
+    let beta = sqrt(&alpha);
+
+    let y: P256FieldElement = if beta.bit(0) == yp_sign {
+        beta
+    } else {
+        beta.neg()
+    };
+
+    Ok((x, y).into())
+}
+
+pub fn p256_point_mul(k: P256Scalar, p: P256Point) -> Result<P256Point, Error> {
+    let jac = ltr_mul(k, affine_to_jacobian(p.into()))?;
+    Ok(jacobian_to_affine(jac).into())
+}
+
+pub fn p256_point_mul_base(k: P256Scalar) -> Result<P256Point, Error> {
     let base_point = (
         P256FieldElement::from_be_bytes(&[
             0x6Bu8, 0x17u8, 0xD1u8, 0xF2u8, 0xE1u8, 0x2Cu8, 0x42u8, 0x47u8, 0xF8u8, 0xBCu8, 0xE6u8,
@@ -189,7 +327,8 @@ pub fn p256_point_mul_base(k: P256Scalar) -> AffineResult {
             0x4Au8, 0x7Cu8, 0x0Fu8, 0x9Eu8, 0x16u8, 0x2Bu8, 0xCEu8, 0x33u8, 0x57u8, 0x6Bu8, 0x31u8,
             0x5Eu8, 0xCEu8, 0xCBu8, 0xB6u8, 0x40u8, 0x68u8, 0x37u8, 0xBFu8, 0x51u8, 0xF5u8,
         ]),
-    );
+    )
+        .into();
     p256_point_mul(k, base_point)
 }
 
@@ -208,7 +347,7 @@ pub fn point_add(p: P256Point, q: P256Point) -> Result<P256Point, Error> {
     }
 }
 
-pub fn point_add_noninf(p: Affine, q: Affine) -> AffineResult {
+fn point_add_noninf(p: Affine, q: Affine) -> AffineResult {
     if p != q {
         point_add_distinct(p, q)
     } else {
@@ -235,14 +374,14 @@ pub fn p256_validate_private_key(k: &[u8]) -> bool {
 }
 
 /// Verify that the point `p` is a valid public key.
-pub fn p256_validate_public_key(p: Affine) -> bool {
+pub fn p256_validate_public_key(p: P256Point) -> bool {
     let b = P256FieldElement::from_be_bytes(&[
         0x5au8, 0xc6u8, 0x35u8, 0xd8u8, 0xaau8, 0x3au8, 0x93u8, 0xe7u8, 0xb3u8, 0xebu8, 0xbdu8,
         0x55u8, 0x76u8, 0x98u8, 0x86u8, 0xbcu8, 0x65u8, 0x1du8, 0x06u8, 0xb0u8, 0xccu8, 0x53u8,
         0xb0u8, 0xf6u8, 0x3bu8, 0xceu8, 0x3cu8, 0x3eu8, 0x27u8, 0xd2u8, 0x60u8, 0x4bu8,
     ]);
-    let point_at_infinity = is_point_at_infinity(affine_to_jacobian(p));
-    let (x, y) = p;
+    let point_at_infinity = is_point_at_infinity(affine_to_jacobian(p.into()));
+    let (x, y) = p.into();
     let on_curve = y * y == x * x * x - P256FieldElement::from_u128(3) * x + b;
 
     !point_at_infinity && on_curve
