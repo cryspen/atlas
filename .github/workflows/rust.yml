@@ -18,14 +18,24 @@ concurrency:
   
 jobs:
   build:
+    strategy:
+        fail-fast: false
+        matrix:
+            os:
+                - macos-latest
+                - ubuntu-latest
+                - windows-latest
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v3
+    
     - name: Build
       run: cargo build --verbose
+      
     - name: Run tests
       run: cargo test --verbose
-    - name: Check Formatting
+      
+    - name: Check formatting
       run: cargo fmt --all --check
