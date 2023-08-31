@@ -9,6 +9,7 @@ members = [
     "prp",
     "sha256",
     "hmac",
+]
 resolver = "2"
 
 [workspace.dependencies]
