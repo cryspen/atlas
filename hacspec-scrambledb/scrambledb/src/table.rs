@@ -1,155 +1,100 @@
-//! Let `T` denote a table with `m` columns and `n` rows.
-//! We define the following functions on `T`:
-//! * `attributes(T) -> attr_1,..., attr_m` returns the list of attributes of the columns
-//! * `key(T) -> k_1,...,k_n` returns the list of keys of the rows
-//! * `id(T) -> id` returns the table identifier
-//! * `get(T, i, j) -> value` returns the value at position `i,j` in the table
+//! ## Tables and Data Types
+//! The `ScrambleDB` protocol provides conversions between types of data
+//! tables that are differentiated by their structure and contents.
 
-use oprf::coprf::coprf_online::BlindInput;
-use std::collections::HashMap;
+use oprf::coprf::coprf_online::{BlindInput, BlindOutput};
 
-pub type Attribute = Vec<u8>;
-pub type Identifier = Vec<u8>;
+/// A plain entity identifier is a unicode string.
+pub type PlainIdentifier = String;
 
-pub type BlindedPseudonym = oprf::coprf::coprf_online::BlindOutput;
+/// A plain data value is a plaintext value of the underlying
+/// rerandomizable public key encryption scheme.
+pub type PlainValue = elgamal::Plaintext;
 pub type EncryptedValue = elgamal::Ciphertext;
+pub type BlindIdentifier = BlindInput;
+pub type BlindPseudonym = BlindOutput;
+pub type Pseudonym = [u8; 64];
 
-pub enum TableKey {
-    Plain(Vec<u8>),
-    Pseudonym(libcrux::aead::Tag, Vec<u8>),
-}
-pub type TableValue = elgamal::Plaintext;
+pub type PlainTable = MultiColumnTable<PlainIdentifier, PlainValue>;
+pub type BlindTable = MultiColumnTable<BlindIdentifier, EncryptedValue>;
+pub type ConvertedTable = SingleColumnTable<BlindPseudonym, EncryptedValue>;
+pub type PseudonymizedTable = SingleColumnTable<Pseudonym, PlainValue>;
 
-impl From<(libcrux::aead::Tag, Vec<u8>)> for TableKey {
-    fn from(value: (libcrux::aead::Tag, Vec<u8>)) -> Self {
-        Self::Pseudonym(value.0, value.1)
-    }
-}
-pub struct ClearTable {
-    identifier: Identifier,
-    inner: HashMap<Attribute, Vec<(TableKey, TableValue)>>,
+#[derive(Clone)]
+pub struct Column<K, V> {
+    attribute: String,
+    data: Vec<(K, V)>,
 }
 
-impl ClearTable {
-    pub fn new(
-        identifier: Identifier,
-        inner: HashMap<Attribute, Vec<(TableKey, TableValue)>>,
-    ) -> Self {
-        Self { identifier, inner }
+impl<K, V> Column<K, V> {
+    pub fn new(attribute: String, data: Vec<(K, V)>) -> Self {
+        Self { attribute, data }
     }
 
-    pub fn attributes(&self) -> impl Iterator<Item = &Attribute> {
-        self.inner.keys()
+    pub fn attribute(&self) -> String {
+        self.attribute.clone()
     }
 
-    pub fn size(&self) -> usize {
-        self.inner.len() * self.inner.values().len()
+    pub fn data(&self) -> Vec<(K, V)>
+    where
+        K: Clone,
+        V: Clone,
+    {
+        self.data.clone()
     }
-    pub fn identifier(&self) -> Vec<u8> {
+
+    pub fn sort(&mut self)
+    where
+        K: Ord,
+        K: Clone,
+    {
+        self.data.sort_by_key(|(k, _)| k.clone())
+    }
+}
+
+pub struct MultiColumnTable<K, V> {
+    identifier: String,
+    columns: Vec<Column<K, V>>,
+}
+
+pub struct SingleColumnTable<K, V> {
+    identifier: String,
+    column: Column<K, V>,
+}
+
+impl<K, V> SingleColumnTable<K, V> {
+    pub fn new(identifier: String, column: Column<K, V>) -> Self {
+        Self { identifier, column }
+    }
+    pub fn identifier(&self) -> String {
         self.identifier.clone()
     }
 
-    pub fn get_column(&self, attr: &Attribute) -> Option<&Vec<(TableKey, TableValue)>> {
-        self.inner.get(attr)
+    pub fn column(&self) -> Column<K, V>
+    where
+        K: Clone,
+        V: Clone,
+    {
+        self.column.clone()
     }
 }
 
-pub type SourceInputTable = ClearTable;
-pub type JoinedTable = ClearTable;
-
-pub struct SourceOutputTable {
-    identifier: Identifier,
-    inner: HashMap<Attribute, Vec<(BlindInput, EncryptedValue)>>,
-}
-
-impl SourceOutputTable {
-    pub fn new(
-        identifier: Identifier,
-        inner: HashMap<Attribute, Vec<(BlindInput, EncryptedValue)>>,
-    ) -> Self {
-        Self { identifier, inner }
-    }
-
-    pub fn attributes(&self) -> impl Iterator<Item = &Attribute> {
-        self.inner.keys()
-    }
-
-    pub fn size(&self) -> usize {
-        self.inner.len() * self.inner.values().len()
-    }
-    pub fn identifier(&self) -> Vec<u8> {
-        self.identifier.clone()
-    }
-
-    pub fn get_column(&self, attr: &Attribute) -> Option<&Vec<(BlindInput, EncryptedValue)>> {
-        self.inner.get(attr)
-    }
-}
-
-pub struct LakeTable {
-    identifier: Identifier,
-    attr: Attribute,
-    entries: Vec<(TableKey, TableValue)>,
-}
-
-impl LakeTable {
-    pub fn new(
-        identifier: Identifier,
-        attr: Attribute,
-        entries: Vec<(TableKey, TableValue)>,
-    ) -> Self {
+impl<K, V> MultiColumnTable<K, V> {
+    pub fn new(identifier: String, columns: Vec<Column<K, V>>) -> Self {
         Self {
             identifier,
-            attr,
-            entries,
+            columns,
         }
     }
-
-    pub fn identifier(&self) -> &[u8] {
-        self.identifier.as_ref()
+    pub fn identifier(&self) -> String {
+        self.identifier.clone()
     }
 
-    pub fn attr(&self) -> &[u8] {
-        self.attr.as_ref()
-    }
-
-    pub fn entries(&self) -> &[(TableKey, TableValue)] {
-        self.entries.as_ref()
-    }
-}
-
-pub struct BlindColumn {
-    identifier: Identifier,
-    attr: Attribute,
-    entries: Vec<(BlindedPseudonym, EncryptedValue)>,
-}
-
-impl BlindColumn {
-    pub fn new(
-        identifier: &Identifier,
-        attr: &Attribute,
-        inner: Vec<(BlindedPseudonym, EncryptedValue)>,
-    ) -> Self {
-        BlindColumn {
-            identifier: identifier.clone(),
-            attr: attr.clone(),
-            entries: inner,
-        }
-    }
-
-    pub(crate) fn attr(&self) -> &[u8] {
-        self.attr.as_ref()
-    }
-
-    pub(crate) fn identifier(&self) -> &[u8] {
-        self.identifier.as_ref()
-    }
-
-    pub(crate) fn entries(&self) -> &[(BlindedPseudonym, EncryptedValue)] {
-        self.entries.as_ref()
+    pub fn columns(&self) -> Vec<Column<K, V>>
+    where
+        K: Clone,
+        V: Clone,
+    {
+        self.columns.clone()
     }
 }
-
-pub type LakeInputTable = BlindColumn;
-pub(crate) type LakeOutputTable = BlindColumn;
-pub(crate) type ProcessorInputTable = BlindColumn;

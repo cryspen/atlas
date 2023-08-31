@@ -1,3 +1,4 @@
+#![allow(clippy::assign_op_pattern)]
 //! # Extension E. Convertible PRF (coPRF)
 //!
 //! This part of the document describes an extension to the OPRF protocol
@@ -13,6 +14,5 @@
 //!
 //! CoPRFs further provide the possiblity of converting PRF outputs, both
 //! in blinded and unblinded form, from one PRF key to another.
-//!
 pub mod coprf_online;
 pub mod coprf_setup;

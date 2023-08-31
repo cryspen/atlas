@@ -1,13 +1,7 @@
-// TODO: Add comments about what this is and where the spec is.
-
-use crate::hash_suite::{hash_to_field, HashToCurve, HashToField};
-use crate::hasher::SHA256;
-use crate::prime_curve::{
-    sqrt_ts_ct, Constructor, FieldArithmetic, MapToCurve, PrimeCurve, PrimeField,
-};
-use crate::{expand_message::expand_message_xmd, hash_suite::Ciphersuite};
-use crate::{Error, ExpandMessageType};
-use p256::{NatMod, P256FieldElement, P256Point, P256Scalar};
+use crate::Error;
+use hacspec_lib::{i2osp, FunctionalVec};
+use p256::{is_square, sgn0, sqrt, NatMod, P256FieldElement, P256Point, P256Scalar};
+use sha256::hash;
 
 /// # 8.2 Suites for NIST P-256
 ///
@@ -18,225 +12,233 @@ use p256::{NatMod, P256FieldElement, P256Point, P256Scalar};
 #[allow(non_camel_case_types)]
 pub struct P256_XMD_SHA256_SSWU_RO {}
 
-impl Ciphersuite for P256_XMD_SHA256_SSWU_RO {
-    const ID: &'static str = "P256_XMD:SHA-256_SSWU_RO_";
-    const K: usize = 128;
-    const L: usize = 48;
-    const M: usize = 1;
+/// bytes to generate per field element in `expand_message`
+const L: usize = 48;
+/// Output size of H = SHA-256 in bytes
+const B_IN_BYTES: usize = sha256::HASH_SIZE;
+/// Input block size of H = SHA-256
+const S_IN_BYTES: usize = 64;
 
-    type BaseField = P256FieldElement;
-    type OutputCurve = P256Point;
-
-    fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Result<Vec<u8>, Error> {
-        expand_message_xmd::<SHA256>(msg, dst, len_in_bytes)
+#[allow(non_snake_case)]
+fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Result<Vec<u8>, Error> {
+    let ell = (len_in_bytes + B_IN_BYTES - 1) / B_IN_BYTES;
+    if ell > 255 || len_in_bytes > u16::MAX.into() || dst.len() > 255 {
+        return Err(Error::InvalidEll);
     }
+
+    let dst_prime = dst.concat_byte(dst.len() as u8);
+    let z_pad = vec![0u8; S_IN_BYTES];
+    let l_i_b_str = i2osp(len_in_bytes, 2);
+
+    // msg_prime = Z_pad || msg || l_i_b_str || 0 || dst_prime
+    let msg_prime = z_pad
+        .concat(msg)
+        .concat(&l_i_b_str)
+        .concat(&[0u8; 1])
+        .concat(&dst_prime);
+
+    let b_0 = hash(&msg_prime).to_vec(); // H(msg_prime)
+
+    let payload_1 = b_0.concat_byte(1).concat(&dst_prime);
+    let mut b_i = hash(&payload_1).to_vec(); // H(b_0 || 1 || dst_prime)
+
+    let mut uniform_bytes = b_i.clone();
+    for i in 2..=ell {
+        // i < 256 is checked before
+        let payload_i = strxor(&b_0, &b_i).concat_byte(i as u8).concat(&dst_prime);
+        // H((b_0 ^ b_(i-1)) || 1 || dst_prime)
+        b_i = hash(&payload_i).to_vec();
+        uniform_bytes.extend_from_slice(&b_i);
+    }
+    uniform_bytes.truncate(len_in_bytes);
+    Ok(uniform_bytes)
 }
 
-impl Constructor<32, P256FieldElement> for P256FieldElement {
-    fn from_coeffs(v: Vec<P256FieldElement>) -> Self {
-        assert_eq!(v.len(), 1);
-        v[0]
-    }
+fn strxor(a: &[u8], b: &[u8]) -> Vec<u8> {
+    assert_eq!(a.len(), b.len());
+    a.iter().zip(b.iter()).map(|(a, b)| a ^ b).collect()
 }
 
-impl HashToField for P256_XMD_SHA256_SSWU_RO {
-    fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256FieldElement>, Error> {
-        crate::hash_suite::hash_to_field(
-            ExpandMessageType::P256_SHA256,
-            msg,
-            dst,
-            count,
-            Self::L,
-            Self::M,
-        )
-        .map(|r| r[0].clone())
+pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256FieldElement>, Error> {
+    let len_in_bytes = count * L;
+    let uniform_bytes = expand_message(msg, dst, len_in_bytes)?;
+    let mut u = Vec::with_capacity(count);
+    for i in 0..count {
+        let elm_offset = L * i;
+        let tv = &uniform_bytes[elm_offset..L * (i + 1)];
+        let tv = P256FieldElement::from_be_bytes(tv);
+        u.push(tv);
     }
+    Ok(u)
 }
 
-impl HashToCurve for P256_XMD_SHA256_SSWU_RO {
-    fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<(Self::BaseField, Self::BaseField), Error> {
-        let u: Vec<Vec<P256FieldElement>> = hash_to_field(
-            ExpandMessageType::P256_SHA256,
-            msg,
-            dst,
-            2,
-            Self::L,
-            Self::M,
-        )?;
-        let q0 = u[0][0].map_to_curve();
-        let q1 = u[1][0].map_to_curve();
-        let r = Self::OutputCurve::point_add(q0, q1)?;
-        Ok(r.into())
+pub fn hash_to_scalar(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256Scalar>, Error> {
+    let len_in_bytes = count * L;
+    let uniform_bytes = expand_message(msg, dst, len_in_bytes)?;
+    let mut u = Vec::with_capacity(count);
+    for i in 0..count {
+        let elm_offset = L * i;
+        let tv = &uniform_bytes[elm_offset..L * (i + 1)];
+        let tv = P256Scalar::from_be_bytes(tv);
+        u.push(tv);
     }
+    Ok(u)
 }
 
-#[allow(non_camel_case_types)]
-pub struct P256_XMD_SHA256_SSWU_NU {}
+/// SSWU
+fn map_to_curve(u: P256FieldElement) -> P256Point {
+    let a: &P256FieldElement = &P256FieldElement::from_u128(3u128).neg();
+    let b = &P256FieldElement::from_hex(
+        "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+    );
+    let z = P256FieldElement::from_u128(10u128).neg();
+    let tv1 = (z.pow(2) * u.pow(4) + z * u.pow(2)).inv0();
+    let x1 = if tv1 == P256FieldElement::zero() {
+        *b * (z * *a).inv()
+    } else {
+        (b.neg() * a.inv()) * (tv1 + P256FieldElement::from_u128(1u128))
+    };
 
-impl Ciphersuite for P256_XMD_SHA256_SSWU_NU {
-    const ID: &'static str = "P256_XMD:SHA-256_SSWU_NU_";
-    const K: usize = 128;
-    const L: usize = 48;
-    const M: usize = 1;
+    let gx1 = x1.pow(3) + (*a) * x1 + (*b);
+    let x2 = z * u.pow(2) * x1;
+    let gx2 = x2.pow(3) + *a * x2 + *b;
 
-    type BaseField = P256FieldElement;
-    type OutputCurve = P256Point;
+    let mut output = if is_square(&gx1) {
+        (x1, sqrt(&gx1))
+    } else {
+        (x2, sqrt(&gx2))
+    };
 
-    fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Result<Vec<u8>, Error> {
-        expand_message_xmd::<SHA256>(msg, dst, len_in_bytes)
+    if sgn0(&u) != sgn0(&output.1) {
+        output.1 = output.1.neg();
     }
+
+    output.into()
 }
 
-// impl HashToField for P256_XMD_SHA256_SSWU_NU {
-//     fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256FieldElement>, Error> {
-//         crate::hash_suite::hash_to_field::<32, P256FieldElement, P256FieldElement>(
-//             msg,
-//             dst,
-//             count,
-//             Self::L,
-//             Self::M,
-//             Self::expand_message,
-//         )
-//     }
-// }
-
-// impl EncodeToCurve for P256_XMD_SHA256_SSWU_NU {
-//     fn encode_to_curve(msg: &[u8], dst: &[u8]) -> Result<Self::OutputCurve, Error> {
-//         let u = Self::hash_to_field(msg, dst, 1)?;
-//         let q = u[0].map_to_curve();
-//         Ok(P256Point::clear_cofactor(q))
-//     }
-// }
-
-impl FieldArithmetic for P256FieldElement {
-    fn is_square(&self) -> bool {
-        crate::prime_curve::is_square_m_eq_1(self)
-    }
-
-    fn sqrt(self) -> Self {
-        crate::prime_curve::sqrt_3mod4_m_eq_1(&self)
-    }
-
-    fn sgn0(self) -> bool {
-        crate::prime_curve::sgn0_m_eq_1(self)
-    }
-
-    fn inv(self) -> Self {
-        <P256FieldElement as NatMod<32>>::inv(self)
-    }
-
-    fn inv0(self) -> Self {
-        <P256FieldElement as NatMod<32>>::inv0(self)
-    }
-
-    fn pow(self, rhs: u128) -> Self {
-        <P256FieldElement as NatMod<32>>::pow(self, rhs)
-    }
-
-    fn zero() -> Self {
-        <P256FieldElement as NatMod<32>>::zero()
-    }
-
-    fn one() -> Self {
-        <P256FieldElement as NatMod<32>>::one()
-    }
-
-    fn from_u128(x: u128) -> Self {
-        <P256FieldElement as NatMod<32>>::from_u128(x)
-    }
-}
-
-impl PrimeField<32> for P256FieldElement {
-    fn is_square(&self) -> bool {
-        crate::prime_curve::is_square_m_eq_1(self)
-    }
-
-    fn sqrt(self) -> P256FieldElement {
-        crate::prime_curve::sqrt_3mod4_m_eq_1(&self)
-    }
-
-    fn sgn0(self) -> bool {
-        crate::prime_curve::sgn0_m_eq_1(self)
-    }
-}
-
-impl PrimeField<32> for P256Scalar {
-    fn is_square(&self) -> bool {
-        crate::prime_curve::is_square_m_eq_1(self)
-    }
-
-    fn sqrt(self) -> Self {
-        sqrt_ts_ct(vec![self], 1)[0]
-    }
-
-    fn sgn0(self) -> bool {
-        crate::prime_curve::sgn0_m_eq_1(self)
-    }
-}
-
-impl Constructor<32, P256Scalar> for P256Scalar {
-    fn from_coeffs(v: Vec<P256Scalar>) -> Self {
-        v[0]
-    }
-}
-
-impl PrimeCurve for P256Point {
-    type BaseField = P256FieldElement;
-
-    fn clear_cofactor(self) -> Result<Self, Error> {
-        match self {
-            Self::AtInfinity => Err(Error::PointAtInfinity),
-            Self::NonInf(_) => Ok(self),
-        }
-    }
-
-    fn point_add(lhs: P256Point, rhs: P256Point) -> Result<P256Point, Error> {
-        p256::point_add(lhs, rhs).map_err(|_e| Error::InvalidAddition)
-    }
-}
-
-impl MapToCurve for P256FieldElement {
-    type TargetCurve = P256Point;
-
-    fn map_to_curve(self) -> Self::TargetCurve {
-        crate::mappings::map_to_curve_simple_swu(
-            &self,
-            &<P256FieldElement as FieldArithmetic>::from_u128(3u128).neg(),
-            &P256FieldElement::from_hex(
-                "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
-            ),
-            <P256FieldElement as FieldArithmetic>::from_u128(10u128).neg(),
-        )
-        .into()
-    }
+pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<P256Point, Error> {
+    let u: Vec<P256FieldElement> = hash_to_field(msg, dst, 2)?;
+    let q0 = map_to_curve(u[0]);
+    let q1 = map_to_curve(u[1]);
+    let r = p256::point_add(q0, q1)?;
+    Ok(r)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::*;
+    use std::fs::read_to_string;
+    const ID: &str = "P256_XMD:SHA-256_SSWU_RO_";
+    use serde_json::Value;
+
+    pub fn load_vectors(path: &std::path::Path) -> Value {
+        serde_json::from_str(&read_to_string(path).expect("File not found.")).unwrap()
+    }
 
     #[test]
     fn p256_xmd_sha256_sswu_ro_hash_to_field() {
-        test_hash_to_field_plain(crate::P256_XMD_SHA256_SSWU_RO)
-    }
-    //     // #[test]
-    //     // fn p256_xmd_sha256_sswu_nu_hash_to_field() {
-    //     //     test_hash_to_field::<32, P256_XMD_SHA256_SSWU_NU>()
-    //     // }
+        let mut vector_path = std::path::Path::new("vectors").join(ID);
+        vector_path.set_extension("json");
+        eprintln!(" Reading {}", vector_path.display());
 
+        let tests = load_vectors(vector_path.as_path());
+        let dst = tests["dst"].as_str().unwrap().as_bytes();
+
+        assert_eq!(tests["ciphersuite"].as_str().unwrap(), ID);
+
+        for test_case in tests["vectors"].as_array().unwrap().iter() {
+            let msg_str = test_case["msg"].as_str().unwrap();
+            let msg = msg_str.as_bytes();
+
+            let u_expected: Vec<_> = test_case["u"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|u_i| {
+                    let u_i = u_i.as_str().unwrap();
+                    let u0_expected = u_i.trim_start_matches("0x");
+                    P256FieldElement::from_be_bytes(&hex::decode(u0_expected).unwrap())
+                })
+                .collect();
+
+            let u_real = hash_to_field(msg, dst, 2).unwrap();
+            assert_eq!(u_real.len(), u_expected.len());
+            for (u_real, u_expected) in u_real.iter().zip(u_expected.iter()) {
+                assert_eq!(
+                    u_expected.as_ref(),
+                    u_real.as_ref(),
+                    "u0 did not match for {msg_str}",
+                );
+            }
+        }
+    }
     #[test]
     fn p256_xmd_sha256_sswu_ro_map_to_curve() {
-        test_map_to_curve::<32, P256_XMD_SHA256_SSWU_RO>();
+        let mut vector_path = std::path::Path::new("vectors").join(ID);
+        vector_path.set_extension("json");
+        let vectors = load_vectors(vector_path.as_path());
+
+        let test_cases = vectors["vectors"].as_array().unwrap().clone();
+
+        for test_case in test_cases.iter() {
+            let u = test_case["u"].as_array().unwrap();
+            let u0 = u[0].as_str().unwrap().trim_start_matches("0x");
+            let u0 = P256FieldElement::from_be_bytes(&hex::decode(u0).unwrap());
+            let u1 = u[1].as_str().unwrap().trim_start_matches("0x");
+            let u1 = P256FieldElement::from_be_bytes(&hex::decode(u1).unwrap());
+
+            let (q0_x, q0_y) = map_to_curve(u0).into();
+            let (q1_x, q1_y) = map_to_curve(u1).into();
+
+            let q0_expected = &test_case["Q0"];
+            let q0_x_expected = q0_expected["x"].as_str().unwrap().trim_start_matches("0x");
+            let q0_x_expected =
+                P256FieldElement::from_be_bytes(&hex::decode(q0_x_expected).unwrap());
+            let q0_y_expected = q0_expected["y"].as_str().unwrap().trim_start_matches("0x");
+            let q0_y_expected =
+                P256FieldElement::from_be_bytes(&hex::decode(q0_y_expected).unwrap());
+
+            let q1_expected = &test_case["Q1"];
+            let q1_x_expected = q1_expected["x"].as_str().unwrap().trim_start_matches("0x");
+            let q1_x_expected =
+                P256FieldElement::from_be_bytes(&hex::decode(q1_x_expected).unwrap());
+            let q1_y_expected = q1_expected["y"].as_str().unwrap().trim_start_matches("0x");
+            let q1_y_expected =
+                P256FieldElement::from_be_bytes(&hex::decode(q1_y_expected).unwrap());
+
+            assert_eq!(q0_x_expected, q0_x, "x0 incorrect");
+            assert_eq!(q0_y_expected, q0_y, "y0 incorrect");
+
+            assert_eq!(q1_x_expected, q1_x, "x1 incorrect");
+            assert_eq!(q1_y_expected, q1_y, "y1 incorrect");
+        }
+    }
+
+    #[test]
+    fn p256_xmd_sha256_sswu_ro_hash_to_curve() {
+        let mut vector_path = std::path::Path::new("vectors").join(ID);
+        vector_path.set_extension("json");
+        let vectors = load_vectors(vector_path.as_path());
+
+        let dst = vectors["dst"].as_str().unwrap();
+        let dst = dst.as_bytes();
+        let test_cases = vectors["vectors"].as_array().unwrap().clone();
+
+        for test_case in test_cases.iter() {
+            let msg = test_case["msg"].as_str().unwrap();
+            let msg = msg.as_bytes();
+
+            let p_expected = &test_case["P"];
+            let p_x_expected = p_expected["x"].as_str().unwrap().trim_start_matches("0x");
+            let p_x_expected = P256FieldElement::from_be_bytes(&hex::decode(p_x_expected).unwrap());
+            let p_y_expected = p_expected["y"].as_str().unwrap().trim_start_matches("0x");
+            let p_y_expected = P256FieldElement::from_be_bytes(&hex::decode(p_y_expected).unwrap());
+
+            let (x, y) = hash_to_curve(msg, dst).unwrap().into();
+
+            // assert!(!inf, "Point should not be infinite");
+            assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
+            assert_eq!(p_y_expected.as_ref(), y.as_ref(), "y-coordinate incorrect");
+        }
     }
 }
-//     #[test]
-//     fn p256_xmd_sha256_sswu_ro_hash_to_curve() {
-//         test_hash_to_curve::<32, P256_XMD_SHA256_SSWU_RO>();
-//     }
-
-//     #[test]
-//     fn p256_xmd_sha256_sswu_nu_encode_to_curve() {
-//         test_encode_to_curve::<32, P256_XMD_SHA256_SSWU_NU>();
-//     }
-// }
