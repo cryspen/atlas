@@ -1,0 +1,152 @@
+<html>
+
+<head>
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css" />
+  <style>
+    .row {
+      display: flex;
+    }
+
+    .column {
+      flex: 50%;
+      padding: 20px;
+    }
+  </style>
+  <!-- Note the usage of `type=module` here as this is an ES6 module -->
+  <script type="module">
+    import init from "scrambledb.js";
+    // Initialise wasm context.
+    await init();
+  </script>
+</head>
+
+<body>
+  <script type="module">
+    function hex_to_bytes(hex) {
+      var typedArray = new Uint8Array(
+        hex.match(/[\da-f]{2}/gi).map(function (h) {
+          return parseInt(h, 16);
+        })
+      );
+      return typedArray;
+    }
+
+    function bytes_to_hex(bytes) {
+      return Array.from(bytes, function (byte) {
+        return ("0" + (byte & 0xff).toString(16)).slice(-2);
+      }).join("");
+    }
+
+    import init, {
+      // ScrambleDB API
+    } from "../pkg/scrambledb.js";
+
+    function import_csv() {
+      let input = document.createElement('input');
+      input.type = 'file';
+      input.onchange = _ => {
+        let files = Array.from(input.files);
+
+        console.log(files);
+      };
+      input.click();
+    }
+  </script>
+
+
+  <div id="Data Source">
+    <h3>Data Source</h3>
+    <div>
+      <table>
+        <thead>
+          <tr>
+            <th> ID</th>
+            <th> Address</th>
+            <th> Date of Birth</th>
+            <th> Eyecolor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td> 1</td>
+            <td> Entenhausen</td>
+            <td> 1.4.2918</td>
+            <td> Green</td>
+          </tr>
+        </tbody>
+      </table>
+      <button onclick="import_csv()">Import CSV Data</button>
+    </div>
+    <div class="column">
+      <button type="button" id="blind_table"> Blind Table </button>
+    </div>
+    <div class="column">
+      <textarea readonly>
+    </textarea>
+      <button type="button" id="blind_table"> Submit Data </button>
+    </div>
+  </div>
+  <hr />
+  <div class="row" id="Data Lake">
+    <!-- Upload csv data -->
+    <h3>Data Lake</h3>
+    <div class column>
+      <div class="scrollmenu">
+      </div>
+    </div>
+    <div class="column">
+      <textarea readonly>
+    </textarea>
+    </div>
+  </div>
+  <hr />
+  <div class="row" id="Data Processor">
+    <!-- Upload csv data -->
+    <h3>Data Processor</h3>
+  </div>
+  <!--     <div class="row"> -->
+  <!--       <div class="column"> -->
+  <!--         <h3>Sender</h3> -->
+  <!--         <form name="sender_form" onsubmit="hpke_seal()"> -->
+  <!--           <label for="info">Info</label> -->
+  <!--           <input name="info" id="info" /> -->
+  <!--           <label for="aad">Additional Data</label> -->
+  <!--           <input name="aad" id="aad" /> -->
+  <!--           <label for="payload">Payload</label> -->
+  <!--           <textarea -->
+  <!--             name="payload" -->
+  <!--             id="payload" -->
+  <!--             placeholder="The payload..." -->
+  <!--           ></textarea> -->
+  <!--           <button type="button" id="hpke_seal">HPKE Seal</button> -->
+  <!--         </form> -->
+  <!--       </div> -->
+  <!--       <div class="column"> -->
+  <!--         <h3>Receiver</h3> -->
+  <!--         <form name="receiver_form"> -->
+  <!--           <button type="button" id="gen_receiver_kp">Generate key pair</button> -->
+  <!--           <br /> -->
+  <!--           <label for="pkR">Public Key</label> -->
+  <!--           <input readonly name="pkR" id="pkR" /> -->
+  <!--           <label for="skR">Private Key</label> -->
+  <!--           <input readonly name="skR" id="skR" /> -->
+  <!--           <br /> -->
+  <!--           <label for="enc">Encoded Shared Secret</label> -->
+  <!--           <input readonly name="enc" id="enc" /> -->
+  <!--           <label for="ct">Ciphertext</label> -->
+  <!--           <input readonly name="ct" id="sct" /><br /> -->
+  <!--           <button type="button" id="hpke_open">HPKE Open</button> -->
+  <!--           <br /> -->
+  <!--           <label for="payload">Decrypted Payload</label> -->
+  <!--           <textarea -->
+  <!--             name="payload" -->
+  <!--             id="payload" -->
+  <!--             placeholder="The decrypted payload..." -->
+  <!--             readonly -->
+  <!--           ></textarea> -->
+  <!--         </form> -->
+  <!--       </div> -->
+  <!--     </div> -->
+  <!--   </body> -->
+  <!-- </html> -->

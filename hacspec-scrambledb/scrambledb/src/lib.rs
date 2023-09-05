@@ -207,3 +207,4 @@ pub mod join;
 pub mod finalize;
 
 pub mod error;
+pub mod wasm_demo;

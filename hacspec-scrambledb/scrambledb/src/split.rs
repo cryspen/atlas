@@ -74,7 +74,7 @@ pub fn prepare_split_conversion(
 /// have been shuffled to prevent correlation of the incoming with the
 /// outgoing table data.
 pub fn split_conversion(
-    converter_context: ConverterContext,
+    converter_context: &ConverterContext,
     bpk_store: BlindingPublicKey,
     ek_store: EncryptionKey,
     table: BlindTable,

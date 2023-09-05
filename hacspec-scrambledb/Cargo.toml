@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "scrambledb",
+    "scrambledb-demo",
     "elgamal",
     "hash-to-curve",
     "p256",

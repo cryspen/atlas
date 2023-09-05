@@ -41,10 +41,10 @@ impl ConverterContext {
     /// fn setup_converter_context(msk) -> ConverterContext:
     ///     return coPRFEvaluatorContext::new(msk)
     /// ```
-    pub fn setup(msk: [u8; 32]) -> Self {
-        ConverterContext {
-            coprf_context: CoPRFEvaluatorContext::new(msk),
-        }
+    pub fn setup(randomness: &mut Randomness) -> Result<Self, Error> {
+        Ok(ConverterContext {
+            coprf_context: CoPRFEvaluatorContext::new(randomness)?,
+        })
     }
 }
 
@@ -76,10 +76,10 @@ impl StoreContext {
     ///       k_prp
     ///     }
     /// ```
-    pub fn setup(mut randomness: Randomness) -> Result<Self, Error> {
-        let receiver_context = CoPRFReceiverContext::new(&mut randomness);
+    pub fn setup(randomness: &mut Randomness) -> Result<Self, Error> {
+        let receiver_context = CoPRFReceiverContext::new(randomness);
 
-        let (dk, ek) = generate_keys(&mut randomness)?;
+        let (dk, ek) = generate_keys(randomness)?;
 
         let k_prp = randomness.bytes(32)?.try_into()?;
 
@@ -171,3 +171,5 @@ impl StoreContext {
         elgamal::decrypt(self.dk, encrypted_value).map_err(|e| e.into())
     }
 }
+
+

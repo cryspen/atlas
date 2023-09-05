@@ -14,7 +14,7 @@ use crate::{
 /// In addition the encrypted values need to be decrypted to be available
 /// for future conversions towards other data stores.
 pub fn finalize_conversion(
-    store_context: StoreContext,
+    store_context: &StoreContext,
     converted_tables: Vec<ConvertedTable>,
 ) -> Result<Vec<PseudonymizedTable>, Error> {
     let mut pseudonymized_tables = Vec::new();

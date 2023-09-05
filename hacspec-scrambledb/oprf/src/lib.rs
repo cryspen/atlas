@@ -7,6 +7,7 @@ pub enum Error {
     CurveError,
     HashToCurveError,
     ElgamalError,
+    RandomnessError,
 }
 
 impl From<p256::Error> for Error {
@@ -24,6 +25,12 @@ impl From<hash_to_curve::Error> for Error {
 impl From<elgamal::Error> for Error {
     fn from(_: elgamal::Error) -> Self {
         Self::ElgamalError
+    }
+}
+
+impl From<hacspec_lib::Error> for Error {
+    fn from(_value: hacspec_lib::Error) -> Self {
+        Self::RandomnessError
     }
 }
 

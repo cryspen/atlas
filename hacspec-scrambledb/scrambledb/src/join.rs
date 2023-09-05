@@ -60,7 +60,7 @@ use crate::{
 ///     return blind_tables
 /// ```
 pub fn prepare_join_conversion(
-    origin_context: StoreContext,
+    origin_context: &StoreContext,
     bpk_target: BlindingPublicKey,
     ek_target: EncryptionKey,
     pseudonymized_tables: Vec<PseudonymizedTable>,
@@ -102,7 +102,7 @@ pub fn join_identifier(identifier: String, attribute: String) -> String {
 /// evaluation key.
 ///
 pub fn join_conversion(
-    converter_context: ConverterContext,
+    converter_context: &ConverterContext,
     bpk_target: BlindingPublicKey,
     ek_target: EncryptionKey,
     tables: Vec<BlindTable>,
