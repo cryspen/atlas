@@ -171,5 +171,3 @@ impl StoreContext {
         elgamal::decrypt(self.dk, encrypted_value).map_err(|e| e.into())
     }
 }
-
-
