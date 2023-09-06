@@ -14,13 +14,15 @@ elgamal.workspace = true
 prp.workspace = true
 p256.workspace = true
 hacspec_lib.workspace = true
-wasm-bindgen = { version = "0.2.87", optional = true }
-rand = "0.8.5"
 hash-to-curve.workspace = true
-getrandom = { version = "0.2.10", features = ["js"] }
-hex = "0.4.3"
+
+wasm-bindgen = { version = "0.2.87", optional = true }
+rand = { version = "0.8.5", optional = true }
+getrandom = { version = "0.2.10", features = ["js"], optional = true }
+hex = { version = "0.4.3", optional = true }
 [dependencies.web-sys]
 version = "0.3.4"
+optional = true
 features = [
     'Document',
     'Element',
@@ -32,4 +34,4 @@ features = [
     'HtmlTableRowElement',
 ]
 [features]
-wasm = ["wasm-bindgen"]
+wasm = ["wasm-bindgen", "getrandom", "web-sys", "rand", "hex"]

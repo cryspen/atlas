@@ -26,20 +26,6 @@ pub struct Column<K, V> {
     data: Vec<(K, V)>,
 }
 
-// impl PlainTable {
-//     pub fn rows(&self) -> Vec<(PlainIdentifier, Vec<PlainValue>)> {
-//         let keys = self.columns[0].keys();
-//         let mut out = Vec::new();
-//         for key in keys {
-//             let mut key_values = Vec::new();
-//             for column in self.columns() {
-//                 key_values.push(column.get(&key).unwrap());
-//             }
-//             out.push((key, key_values));
-//         }
-//         out
-//     }
-// }
 impl<K, V> Column<K, V> {
     pub fn new(attribute: String, data: Vec<(K, V)>) -> Self {
         Self { attribute, data }
@@ -154,20 +140,20 @@ impl<K, V> MultiColumnTable<K, V> {
         self.columns.clone()
     }
 
-    pub fn rows(&self) -> Vec<(K, Vec<V>)>
+    pub fn rows(&self) -> Vec<Vec<(K, V)>>
     where
         K: Clone + PartialEq,
         V: Clone,
     {
-        let keys = self.columns[0].keys();
-        let mut out = Vec::new();
-        for key in keys {
-            let mut key_values = Vec::new();
+        let mut rows = Vec::new();
+        for i in 0..self.num_rows() {
+            let mut row = Vec::new();
             for column in self.columns() {
-                key_values.push(column.get(&key).unwrap());
+                row.push(column.data()[i].clone());
             }
-            out.push((key, key_values));
+            rows.push(row)
         }
-        out
+
+        rows
     }
 }
