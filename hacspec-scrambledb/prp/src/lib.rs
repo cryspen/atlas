@@ -127,3 +127,19 @@ pub fn prp(input: Block, key: &ChaChaKey) -> Block {
     let state = chacha20_init(key, b"scrambledbiv", 1);
     chacha20_encrypt_block(state, 2, &input)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::prelude::*;
+
+    #[test]
+    fn test_inversion() {
+        let mut key = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut key);
+
+        let block = [1u8; 64];
+        assert_ne!(block, prp(block, &key));
+        assert_eq!(block, prp(prp(block, &key), &key));
+    }
+}
