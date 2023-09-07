@@ -78,7 +78,7 @@ fn run() -> Result<(), JsValue> {
     let join_tables = vec![lake_tables[0].clone(), lake_tables[1].clone()];
     let processor_context = StoreContext::setup(&mut randomness).unwrap();
 
-    let (bpk_processor, ek_processor) = processor_context.public_keys();
+    let (ek_processor, bpk_processor) = processor_context.public_keys();
     let blind_tables = crate::join::prepare_join_conversion(
         &lake_context,
         bpk_processor,
