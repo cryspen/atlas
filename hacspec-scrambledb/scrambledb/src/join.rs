@@ -2,7 +2,7 @@
 use elgamal::EncryptionKey;
 use hacspec_lib::Randomness;
 use oprf::coprf::{
-    coprf_online::{blind_evaluate, prepare_blind_convert},
+    coprf_online::{blind_convert, prepare_blind_convert},
     coprf_setup::{derive_key, BlindingPublicKey},
 };
 
@@ -66,9 +66,11 @@ pub fn prepare_join_conversion(
     pseudonymized_tables: Vec<PseudonymizedTable>,
     randomness: &mut Randomness,
 ) -> Result<Vec<BlindTable>, Error> {
-    let mut blind_tables = Vec::new();
-    for table in pseudonymized_tables {
+    let mut blind_columns = Vec::new();
+
+    for table in pseudonymized_tables.iter() {
         let mut blind_column_data = Vec::new();
+
         for (pseudonym, value) in table.column().data() {
             let raw_pseudonym = origin_context.recover_raw_pseudonym(pseudonym)?;
             let blinded_pseudonym = prepare_blind_convert(bpk_target, raw_pseudonym, randomness)?;
@@ -77,19 +79,20 @@ pub fn prepare_join_conversion(
 
             blind_column_data.push((blinded_pseudonym, encrypted_value));
         }
+
         let mut blind_column = Column::new(table.column().attribute(), blind_column_data);
         blind_column.sort();
 
         let blind_table = BlindTable::new(table.identifier(), vec![blind_column]);
-        blind_tables.push(blind_table)
+        blind_columns.push(blind_table)
     }
-    Ok(blind_tables)
+    Ok(blind_columns)
 }
 
-pub fn join_identifier(identifier: String, attribute: String) -> String {
+pub fn join_identifier(identifier: String) -> String {
     let mut join_identifier = identifier;
     join_identifier.push('-');
-    join_identifier.push_str(&attribute);
+    join_identifier.push_str("Join");
     join_identifier
 }
 
@@ -117,12 +120,14 @@ pub fn join_conversion(
     for table in tables {
         for blind_column in table.columns() {
             let attribute = blind_column.attribute();
+            let pseudonym_key = derive_key(&converter_context.coprf_context, attribute.as_bytes())?;
 
             let mut converted_data = Vec::new();
             for (blind_identifier, encrypted_value) in blind_column.data() {
-                let blind_pseudonym = blind_evaluate(
-                    join_conversion_key,
+                let blind_pseudonym = blind_convert(
                     bpk_target,
+                    pseudonym_key,
+                    join_conversion_key,
                     blind_identifier,
                     randomness,
                 )?;
@@ -133,10 +138,119 @@ pub fn join_conversion(
             let mut converted_table_column = Column::new(attribute.clone(), converted_data);
             converted_table_column.sort();
             converted_tables.push(ConvertedTable::new(
-                join_identifier(table.identifier(), attribute),
+                join_identifier(table.identifier()),
                 converted_table_column,
             ));
         }
     }
     Ok(converted_tables)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use crate::{setup::StoreContext, test_util::generate_plain_table};
+
+    use super::*;
+
+    #[test]
+    fn test_join_full() {
+        use rand::prelude::*;
+
+        let mut rng = rand::thread_rng();
+        let mut randomness = [0u8; 1000000];
+        rng.fill_bytes(&mut randomness);
+        let mut randomness = Randomness::new(randomness.to_vec());
+
+        let converter_context = ConverterContext::setup(&mut randomness).unwrap();
+        let lake_context = StoreContext::setup(&mut randomness).unwrap();
+
+        // == Generate Plain Table ==
+        let plain_table = generate_plain_table();
+
+        let (lake_ek, lake_bpk) = lake_context.public_keys();
+
+        // == Blind Table for Pseudonymization ==
+        let blind_table = crate::split::prepare_split_conversion(
+            lake_ek,
+            lake_bpk,
+            plain_table.clone(),
+            &mut randomness,
+        )
+        .unwrap();
+
+        // == Blind Pseudonymized Table ==
+        let converted_tables = crate::split::split_conversion(
+            &converter_context,
+            lake_bpk,
+            lake_ek,
+            blind_table,
+            &mut randomness,
+        )
+        .unwrap();
+
+        // == Unblinded Pseudonymized Table ==
+        let lake_tables =
+            crate::finalize::finalize_conversion(&lake_context, converted_tables).unwrap();
+
+        let plain_values: Vec<HashSet<p256::P256Point>> = plain_table
+            .clone()
+            .columns()
+            .iter()
+            .map(|column| HashSet::from_iter(column.values()))
+            .collect();
+
+        let mut pseudonym_set = HashSet::new();
+
+        for table in lake_tables.clone() {
+            // store lake_pseudonyms for test against join pseudonyms
+            for key in table.keys() {
+                pseudonym_set.insert(key);
+            }
+        }
+
+        // select first two lake tables for join
+        let join_tables = vec![lake_tables[0].clone(), lake_tables[1].clone()];
+        let processor_context = StoreContext::setup(&mut randomness).unwrap();
+
+        let (bpk_processor, ek_processor) = processor_context.public_keys();
+        let blind_tables = crate::join::prepare_join_conversion(
+            &lake_context,
+            bpk_processor,
+            ek_processor,
+            join_tables,
+            &mut randomness,
+        )
+        .unwrap();
+
+        let converted_join_tables = crate::join::join_conversion(
+            &converter_context,
+            bpk_processor,
+            ek_processor,
+            blind_tables,
+            &mut randomness,
+        )
+        .unwrap();
+
+        let joined_tables =
+            crate::finalize::finalize_conversion(&processor_context, converted_join_tables)
+                .unwrap();
+
+        for table in joined_tables {
+            // test if all pseudonyms are unique
+            for key in table.keys() {
+                assert!(
+                    pseudonym_set.insert(key),
+                    "Generated pseudonyms are not unique."
+                );
+            }
+            let table_values: HashSet<p256::P256Point> = HashSet::from_iter(table.values());
+
+            assert!(
+                plain_values.iter().any(|set| { *set == table_values }),
+                "Data was not preserved during join."
+            );
+        }
+    }
 }

@@ -208,3 +208,4 @@ pub mod finalize;
 
 pub mod error;
 pub mod wasm_demo;
+mod test_util;

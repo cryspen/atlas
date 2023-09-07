@@ -7,20 +7,24 @@ use wasm_bindgen::JsCast;
 use web_sys::{Document, HtmlTableElement};
 
 use crate::table::BlindIdentifier;
-use crate::table::BlindPseudonym;
 use crate::table::EncryptedValue;
 use crate::table::MultiColumnTable;
 use crate::table::PlainValue;
 use crate::table::Pseudonym;
+use crate::test_util::generate_plain_table;
 use crate::{
     setup::{ConverterContext, StoreContext},
-    table::{BlindTable, Column, PlainTable, PseudonymizedTable},
+    table::{BlindTable, PlainTable, PseudonymizedTable},
 };
+use std::fmt::Debug;
+
+#[wasm_bindgen]
+pub fn demo_blind_table() {}
 
 #[wasm_bindgen(start)]
 fn run() -> Result<(), JsValue> {
     use rand::prelude::*;
-    use web_sys::console;
+
     let mut rng = rand::thread_rng();
     let mut randomness = [0u8; 1000000];
     rng.fill_bytes(&mut randomness);
@@ -70,6 +74,8 @@ fn run() -> Result<(), JsValue> {
         fill_pseudonymized_table_element(&lake_table_element, lake_table);
     }
 
+    // select first two lake tables for join
+    let join_tables = vec![lake_tables[0].clone(), lake_tables[1].clone()];
     let processor_context = StoreContext::setup(&mut randomness).unwrap();
 
     let (bpk_processor, ek_processor) = processor_context.public_keys();
@@ -77,7 +83,7 @@ fn run() -> Result<(), JsValue> {
         &lake_context,
         bpk_processor,
         ek_processor,
-        lake_tables,
+        join_tables,
         &mut randomness,
     )
     .unwrap();
@@ -92,14 +98,13 @@ fn run() -> Result<(), JsValue> {
     .unwrap();
 
     let joined_tables =
-        crate::finalize::finalize_conversion(&lake_context, converted_join_tables).unwrap();
+        crate::finalize::finalize_conversion(&processor_context, converted_join_tables).unwrap();
 
     for lake_table in joined_tables.iter() {
         let lake_table_element =
             add_column_html_to_dom_id(&"data-processor-joined", &lake_table, &document);
         fill_pseudonymized_table_element(&lake_table_element, lake_table);
     }
-    console::log_1(&"Okay...".into());
 
     Ok(())
 }
@@ -128,8 +133,8 @@ fn add_column_html_to_dom_id(
         .unwrap();
     header_row.set_attribute("class", "tableheader").unwrap();
 
-    // insert a dummy cell in the header for correct alignment of attribute header
-    let _dummy_cell = header_row.insert_cell().unwrap();
+    let id_cell = header_row.insert_cell().unwrap();
+    id_cell.set_text_content(Some(&"ID"));
     let header_cell = header_row.insert_cell().unwrap();
     header_cell.set_text_content(Some(&table.column().attribute()));
 
@@ -143,7 +148,7 @@ fn add_column_html_to_dom_id(
     table_element
 }
 
-fn prep_multicol_table_html_to_dom_id<K, V>(
+fn prep_multicol_table_html_to_dom_id<K: Debug, V: Debug>(
     element_id: &str,
     table: &MultiColumnTable<K, V>,
     document: &Document,
@@ -166,13 +171,12 @@ where
         .dyn_into::<web_sys::HtmlTableRowElement>()
         .unwrap();
     header_row.set_attribute("class", "tableheader").unwrap();
-    // insert a dummy cell in the header for correct alignment of attribute headers
-    let _dummy_cell = header_row.insert_cell().unwrap();
 
     for colum in table.columns() {
+        let id_cell = header_row.insert_cell().unwrap();
+        id_cell.set_text_content(Some(&"ID"));
         let header_cell = header_row.insert_cell().unwrap();
         header_cell.set_text_content(Some(&colum.attribute()));
-        let _dummy_cell = header_row.insert_cell().unwrap();
     }
 
     t_head.append_child(&header_row).unwrap();
@@ -193,11 +197,11 @@ fn fill_plain_table_element(table_element: &HtmlTableElement, plain_table: &Plai
             .unwrap();
         for (key, value) in row {
             let key_cell = html_row.insert_cell().unwrap();
-            key_cell.set_attribute("class", "kc").unwrap();
+            //key_cell.set_attribute("class", "kc").unwrap();
             key_cell.set_text_content(Some(&key));
 
             let val_cell = html_row.insert_cell().unwrap();
-            val_cell.set_attribute("class", "vc").unwrap();
+            //val_cell.set_attribute("class", "vc").unwrap();
             val_cell.set_text_content(Some(&hex::encode(value.raw_bytes())));
             val_cell.set_text_content(Some(&plain_value_to_string(value)));
         }
@@ -238,63 +242,16 @@ fn fill_pseudonymized_table_element(table_element: &HtmlTableElement, table: &Ps
     }
 }
 
-fn generate_plain_table() -> PlainTable {
-    let mut columns = Vec::new();
-    columns.push(Column::new(
-        String::from("Address"),
-        vec![
-            (
-                String::from("Alice"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData1", b"sample_dst").unwrap(),
-            ),
-            (
-                String::from("Bob"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData2", b"sample_dst").unwrap(),
-            ),
-        ],
-    ));
-
-    columns.push(Column::new(
-        String::from("Date of Birth"),
-        vec![
-            (
-                String::from("Alice"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData3", b"sample_dst").unwrap(),
-            ),
-            (
-                String::from("Bob"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData4", b"sample_dst").unwrap(),
-            ),
-        ],
-    ));
-
-    columns.push(Column::new(
-        String::from("Favorite Color"),
-        vec![
-            (
-                String::from("Alice"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData5", b"sample_dst").unwrap(),
-            ),
-            (
-                String::from("Bob"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData6", b"sample_dst").unwrap(),
-            ),
-        ],
-    ));
-
-    PlainTable::new(String::from("ExampleTable"), columns)
-}
-
 fn plain_value_to_string(plain_value: PlainValue) -> String {
     String::from(format!(
-        "FELEM({}...)",
+        "DATA({}...)",
         &hex::encode(plain_value.raw_bytes())[0..5]
     ))
 }
 
 fn encryption_to_string(encrypted_value: EncryptedValue) -> String {
     String::from(format!(
-        "CTXT({}..., {}...)",
+        "BLIND({}..., {}...)",
         &hex::encode(encrypted_value.0.raw_bytes())[0..5],
         &hex::encode(encrypted_value.1.raw_bytes())[0..5],
     ))
@@ -304,10 +261,6 @@ fn blind_id_to_string(blind_id: BlindIdentifier) -> String {
     encryption_to_string(blind_id)
 }
 
-fn blind_pseudonym_to_string(blind_nym: BlindPseudonym) -> String {
-    encryption_to_string(blind_nym)
-}
-
 fn nym_to_string(nym: Pseudonym) -> String {
-    String::from(format!("BYTES({}...)", &hex::encode(nym)[0..5]))
+    String::from(format!("PSEUDONYM({}...)", &hex::encode(nym)[0..5]))
 }
