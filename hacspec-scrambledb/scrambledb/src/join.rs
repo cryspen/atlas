@@ -238,15 +238,17 @@ mod tests {
                 .unwrap();
 
         for table in joined_tables {
-            // test if all pseudonyms are unique
+            let mut lake_pseudonyms = pseudonym_set.clone();
+
+            // test if all pseudonyms are fresh compared to lake_pseudonyms
             for key in table.keys() {
                 assert!(
-                    pseudonym_set.insert(key),
+                    lake_pseudonyms.insert(key),
                     "Generated pseudonyms are not unique."
                 );
             }
-            let table_values: HashSet<p256::P256Point> = HashSet::from_iter(table.values());
 
+            let table_values: HashSet<p256::P256Point> = HashSet::from_iter(table.values());
             assert!(
                 plain_values.iter().any(|set| { *set == table_values }),
                 "Data was not preserved during join."
