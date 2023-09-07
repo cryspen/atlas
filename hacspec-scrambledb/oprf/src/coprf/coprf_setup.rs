@@ -122,5 +122,7 @@ pub fn derive_key(context: &CoPRFEvaluatorContext, key_id: &[u8]) -> Result<CoPR
     let mut key_material = context.msk.to_vec();
     key_material.extend_from_slice(key_id);
 
-    p256::random_scalar(&mut Randomness::new(key_material)).map_err(|e| e.into())
+    let random_bytes = sha256::hash(&key_material);
+
+    p256::random_scalar(&mut Randomness::new(random_bytes.to_vec())).map_err(|e| e.into())
 }
