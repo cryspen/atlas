@@ -20,6 +20,7 @@ wasm-bindgen = { version = "0.2.87", optional = true }
 rand = { version = "0.8.5", optional = true }
 getrandom = { version = "0.2.10", features = ["js"], optional = true }
 hex = { version = "0.4.3", optional = true }
+
 [dependencies.web-sys]
 version = "0.3.4"
 optional = true
@@ -33,5 +34,9 @@ features = [
     'HtmlTableElement',
     'HtmlTableRowElement',
 ]
+
 [features]
 wasm = ["wasm-bindgen", "getrandom", "web-sys", "rand", "hex"]
+
+[dev-dependencies]
+scrambledb = { path = ".", features = ["rand"] }
