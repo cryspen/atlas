@@ -1,0 +1,57 @@
+(* This model is a sketch of the Convertible Oblivious PRF
+functionality given by Anja Lehmann in "ScrambleDB: Oblivious
+(Chameleon) Pseudonymization-as-a-Service" as part of the ScrambleDB
+system.
+
+TODO:
+1. Model subkey derivation.
+2. Model output conversion between subkeys.
+*)
+
+free c: channel.
+
+type prf_key.
+type prf_input.
+type prf_output.
+
+type blinding_pk.
+type blinding_sk.
+type blinded_input.
+type blinded_output.
+
+event Receiver_finished(prf_output).
+
+fun prf(prf_key, prf_input): prf_output.
+fun pk(blinding_sk): blinding_pk.
+fun blind_input(blinding_pk, prf_input): blinded_input.
+fun blind_output(blinding_pk, prf_output): blinded_output.
+
+reduc forall x: prf_input, bsk: blinding_sk, k: prf_key; blind_evaluate(k, blind_input(pk(bsk), x)) = blind_output(pk(bsk), prf(k, x)).
+reduc forall y: prf_output, bsk: blinding_sk; unblind(bsk, blind_output(pk(bsk), y)) = y.
+
+free x: prf_input [private].
+free k: prf_key [private].
+
+query attacker(x).
+query attacker(k).
+
+let Requester(x: prf_input) =
+    in (c, bpk: blinding_pk);
+    let b = blind_input(bpk, x) in
+    out(c, b).
+
+let Evaluator(k: prf_key) =
+    in(c, b: blinded_input);
+    let o = blind_evaluate(k, b) in
+    out(c, o).
+
+let Receiver() =
+    new bsk: blinding_sk;
+    let bpk = pk(bsk) in
+    out(c, bpk);
+    in(c, blind_y: blinded_output);
+    let y = unblind(bsk, blind_y) in
+    event Receiver_finished(y).
+
+process
+    Requester(x) | Evaluator(k) | Receiver()
