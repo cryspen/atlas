@@ -7,22 +7,55 @@ use wasm_bindgen::JsCast;
 use web_sys::{Document, HtmlTableElement};
 
 use crate::table::BlindIdentifier;
+use crate::table::Column;
 use crate::table::EncryptedValue;
 use crate::table::MultiColumnTable;
 use crate::table::PlainValue;
 use crate::table::Pseudonym;
-use crate::test_util::generate_plain_table;
 use crate::{
     setup::{ConverterContext, StoreContext},
     table::{BlindTable, PlainTable, PseudonymizedTable},
 };
+use gloo_utils::format::JsValueSerdeExt;
 use std::fmt::Debug;
+
+#[wasm_bindgen]
+pub fn init_table(table: JsValue) {
+    let table: String = table.into_serde().unwrap();
+    let table: serde_json::Value = serde_json::from_str(&table).unwrap();
+    web_sys::console::log_1(&format!("table: {table:x?}").into());
+    let address = &table[0]["Address"].as_str().unwrap();
+    web_sys::console::log_1(&format!("address 0: {:x?}", address).into());
+    run(table)
+}
 
 #[wasm_bindgen]
 pub fn demo_blind_table() {}
 
-#[wasm_bindgen(start)]
-fn run() -> Result<(), JsValue> {
+pub fn generate_plain_table(table: serde_json::Value) -> PlainTable {
+    let mut columns = Vec::new();
+    let column_names = ["Address", "Date of Birth", "Favourite Color"];
+    for column in column_names {
+        let mut column_values = vec![];
+        for i in 0..table.as_array().unwrap().len() {
+            let row = &table[i];
+            web_sys::console::log_1(&format!("row {i}: {:x?}", row).into());
+            column_values.push((
+                row["Identity"].as_str().unwrap().to_string(),
+                hash_to_curve::p256_hash::hash_to_curve(
+                    row[column].as_str().unwrap().as_bytes(),
+                    b"sample_dst",
+                )
+                .unwrap(),
+            ));
+        }
+        columns.push(Column::new(column.to_string(), column_values));
+    }
+
+    PlainTable::new(String::from("ExampleTable"), columns)
+}
+
+pub fn run(table: serde_json::Value) {
     use rand::prelude::*;
 
     let mut rng = rand::thread_rng();
@@ -34,7 +67,7 @@ fn run() -> Result<(), JsValue> {
     let lake_context = StoreContext::setup(&mut randomness).unwrap();
 
     // == Generate Plain Table ==
-    let plain_table = generate_plain_table();
+    let plain_table = generate_plain_table(table);
 
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
@@ -105,8 +138,6 @@ fn run() -> Result<(), JsValue> {
             add_column_html_to_dom_id(&"data-processor-joined", &lake_table, &document);
         fill_pseudonymized_table_element(&lake_table_element, lake_table);
     }
-
-    Ok(())
 }
 
 fn add_column_html_to_dom_id(
