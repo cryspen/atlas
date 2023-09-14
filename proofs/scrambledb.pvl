@@ -1,0 +1,78 @@
+(* This model is a sketch of the Convertible Oblivious PRF
+functionality given by Anja Lehmann in "ScrambleDB: Oblivious
+(Chameleon) Pseudonymization-as-a-Service" as part of the ScrambleDB
+system.
+
+TODO:
+1. Model output conversion between subkeys.
+*)
+
+free c: channel.
+
+(* PRF *)
+type prf_msk.
+type prf_key.
+type group_element.
+fun hash_to_group(bitstring): group_element.
+fun derive_key(prf_msk, bitstring): prf_key.
+fun prf(prf_key, group_element): group_element.
+
+(* Blinding *)
+type blinding_pk.
+type blinding_sk.
+type blinded_element.
+fun blinding_sk_to_pk(blinding_sk): blinding_pk.
+fun blind_(blinding_pk, group_element, bitstring): blinded_element.
+fun reblind_(blinding_pk, group_element, bitstring): blinded_element.
+letfun blind(bpk: blinding_pk, x: group_element) = new r:bitstring; blind_(bpk, x, r).
+reduc forall y: group_element, bsk: blinding_sk, r: bitstring;
+      unblind(bsk, reblind_(blinding_sk_to_pk(bsk), y, r)) = y.
+reduc forall x: group_element, bpk: blinding_pk, k: prf_key, r: bitstring;
+      blind_evaluate(k, blind_(bpk, x, r)) = reblind_(bpk, prf(k, x), r).
+
+(* Public Key Encryption *)
+type pubkey.
+type privkey.
+fun pk(privkey): pubkey.
+fun penc_(pubkey, bitstring, bitstring): bitstring.
+letfun penc(pk: pubkey, msg: bitstring) = new r:bitstring; penc_(pk, msg, r).
+reduc forall sk: privkey, msg: bitstring, r: bitstring; 
+      pdec(sk, penc_(pk(sk), msg, r)) = msg.
+
+(* Model of ScrambleDB *)
+(* Protocol Messages *)
+fun input_data(bitstring, group_element, bitstring): bitstring [data].
+fun blinded_data(bitstring, blinded_element, bitstring): bitstring [data].
+fun evaluated_data(bitstring, blinded_element, bitstring): bitstring [data].
+fun final_data(bitstring, group_element, bitstring): bitstring [data].
+
+(* Events *)
+event LakeReceived(bitstring).
+event SourceSent(bitstring).
+event Converted(bitstring, bitstring).
+
+
+let DataSource(input: bitstring, bpk: blinding_pk, ek: pubkey) =
+    let input_data(attribute_id,uid, attribute_value) = input in
+    let blinded_uid = blind(bpk, uid) in
+    let encryption = penc(ek, attribute_value) in
+    event SourceSent(input);
+    out(c, blinded_data(attribute_id, blinded_uid, encryption)).
+
+let Converter(msk: prf_msk, ek: pubkey) =
+    in(c, input: bitstring);
+    let blinded_data(attribute_id, blinded_uid, encryption) = input in
+    let k = derive_key(msk, attribute_id) in
+    let blinded_pseudonym = blind_evaluate(k, blinded_uid) in
+    let reencryption = penc(ek, encryption) in
+    let output = evaluated_data(attribute_id, blinded_pseudonym, reencryption) in
+    event Converted(input, output);
+    out(c, output).
+
+let DataLake(bsk: blinding_sk, dk: privkey) =
+    in(c, evaluated_data(attribute_id, blinded_pseudonym, reencryption));
+    let pseudonym = unblind(bsk, blinded_pseudonym) in
+    let value = pdec(dk, pdec(dk, reencryption)) in 
+    event LakeReceived(final_data(attribute_id, pseudonym, value));
+    out(c, attribute_id).
+
