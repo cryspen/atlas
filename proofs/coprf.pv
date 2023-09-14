@@ -10,48 +10,101 @@ TODO:
 
 free c: channel.
 
+(* PRF *)
+type prf_msk.
 type prf_key.
-type prf_input.
-type prf_output.
+type group_element.
 
+fun hash_to_group(bitstring): group_element.
+
+fun derive_key(prf_msk, bitstring): prf_key.
+fun prf(prf_key, group_element): group_element.
+
+(* Blinding *)
 type blinding_pk.
 type blinding_sk.
-type blinded_input.
-type blinded_output.
+type blinded_element.
 
-event Receiver_finished(prf_output).
+fun blinding_sk_to_pk(blinding_sk): blinding_pk.
 
-fun prf(prf_key, prf_input): prf_output.
-fun pk(blinding_sk): blinding_pk.
-fun blind_input(blinding_pk, prf_input): blinded_input.
-fun blind_output(blinding_pk, prf_output): blinded_output.
+fun blind_(blinding_pk, group_element, bitstring): blinded_element.
+fun reblind_(blinding_pk, group_element, bitstring): blinded_element.
+letfun blind(bpk: blinding_pk, x: group_element) = new r:bitstring; blind_(bpk, x, r).
 
-reduc forall x: prf_input, bsk: blinding_sk, k: prf_key; blind_evaluate(k, blind_input(pk(bsk), x)) = blind_output(pk(bsk), prf(k, x)).
-reduc forall y: prf_output, bsk: blinding_sk; unblind(bsk, blind_output(pk(bsk), y)) = y.
+reduc forall y: group_element, bsk: blinding_sk, r: bitstring;
+      unblind(bsk, reblind_(blinding_sk_to_pk(bsk), y, r)) = y.
 
-free x: prf_input [private].
-free k: prf_key [private].
+reduc forall x: group_element, bpk: blinding_pk, k: prf_key, r: bitstring;
+      blind_evaluate(k, blind_(bpk, x, r)) = reblind_(bpk, prf(k, x), r).
 
-query attacker(x).
-query attacker(k).
+(* Public Key Encryption *)
+type pubkey.
+type privkey.
 
-let Requester(x: prf_input) =
-    in (c, bpk: blinding_pk);
-    let b = blind_input(bpk, x) in
-    out(c, b).
+fun pk(privkey): pubkey.
+fun penc_(pubkey, bitstring, bitstring): bitstring.
+letfun penc(pk: pubkey, msg: bitstring) = new r:bitstring; penc_(pk, msg, r).
 
-let Evaluator(k: prf_key) =
-    in(c, b: blinded_input);
-    let o = blind_evaluate(k, b) in
-    out(c, o).
+reduc forall sk: privkey, msg: bitstring, r: bitstring; 
+      pdec(sk, penc_(pk(sk), msg, r)) = msg.
+      
 
-let Receiver() =
-    new bsk: blinding_sk;
-    let bpk = pk(bsk) in
-    out(c, bpk);
-    in(c, blind_y: blinded_output);
-    let y = unblind(bsk, blind_y) in
-    event Receiver_finished(y).
+(*
+fun blind_output(blinding_pk, group_element, bitstring): blinded_output.
+
+
+reduc forall x:group_element, bsk: blinding_sk, k_to: prf_key, k_from: prf_key;
+      blind_convert(k_to, k_from, blind_output(pk(bsk), prf(k_from, x)))
+      = blind_output(pk(bsk), prf(k_to, x)).
+*)
+const left_input: group_element.
+const right_input: group_element.
+
+
+
+fun input_data(bitstring, group_element, bitstring): bitstring [data].
+fun blinded_data(bitstring, blinded_element, bitstring): bitstring [data].
+fun evaluated_data(bitstring, blinded_element, bitstring): bitstring [data].
+fun final_data(bitstring, group_element, bitstring): bitstring [data].
+
+event Receiver_finished(bitstring).
+
+
+(* query attribute_id: bitstring, pseudonym: group_element, attribute_value: bitstring;
+       event(Receiver_finished(final_data(attribute_id, pseudonym, attribute_value))). *)
+
+let Requester(input: bitstring, bpk: blinding_pk, ek: pubkey) =
+    let input_data(attribute_id,uid, attribute_value) = input in
+    let blinded_uid = blind(bpk, uid) in
+    let encryption = penc(ek, attribute_value) in
+    out(c, blinded_data(attribute_id, blinded_uid, encryption)).
+
+let Evaluator(msk: prf_msk, ek: pubkey) =
+    in(c, blinded_data(attribute_id, blinded_uid, encryption));
+    let k = derive_key(msk, attribute_id) in
+    let blinded_pseudonym = blind_evaluate(k, blinded_uid) in
+    let reencryption = penc(ek, encryption) in
+    out(c, evaluated_data(attribute_id, blinded_pseudonym, reencryption)).
+
+let Receiver(bsk: blinding_sk, dk: privkey) =
+    in(c, evaluated_data(attribute_id, blinded_pseudonym, reencryption));
+    let pseudonym = unblind(bsk, blinded_pseudonym) in
+    let value = pdec(dk, pdec(dk, reencryption)) in 
+    event Receiver_finished(final_data(attribute_id, pseudonym, value)).
+
+const attribute_id: bitstring.
+const uid_0: group_element.
+const uid_1: group_element.
+const attribute_value_0: bitstring.
+const attribute_value_1: bitstring.
 
 process
-    Requester(x) | Evaluator(k) | Receiver()
+    new bsk: blinding_sk;
+    new dk: privkey;
+    new msk: prf_msk;
+    let bpk = blinding_sk_to_pk(bsk) in
+    let ek = pk(dk) in
+    out(c, (bpk, ek));
+    let input_0= input_data(attribute_id, uid_0, attribute_value_0) in
+    let input_1= input_data(attribute_id, uid_1, attribute_value_1) in  
+    (Requester(diff[input_0, input_1], bpk, ek) | Receiver(bsk, dk) | Evaluator(msk, ek))
