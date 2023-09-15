@@ -59,8 +59,7 @@ let DataSource(input: bitstring, bpk: blinding_pk, ek: pubkey) =
     event SourceSent(input);
     out(c, blinded_data(attribute_id, blinded_uid, encryption)).
 
-let Converter(msk: prf_msk, ek: pubkey) =
-    in(c, input: bitstring);
+let Converter(input: bitstring, msk: prf_msk, ek: pubkey) =
     let blinded_data(attribute_id, blinded_uid, encryption) = input in
     let k = derive_key(msk, attribute_id) in
     let blinded_pseudonym = blind_evaluate(k, blinded_uid) in
@@ -69,10 +68,11 @@ let Converter(msk: prf_msk, ek: pubkey) =
     event Converted(input, output);
     out(c, output).
 
-let DataLake(bsk: blinding_sk, dk: privkey) =
-    in(c, evaluated_data(attribute_id, blinded_pseudonym, reencryption));
+let DataLake(input: bitstring, bsk: blinding_sk, dk: privkey, reveal: bool) =
+    let evaluated_data(attribute_id, blinded_pseudonym, reencryption) = input in
     let pseudonym = unblind(bsk, blinded_pseudonym) in
     let value = pdec(dk, pdec(dk, reencryption)) in 
     event LakeReceived(final_data(attribute_id, pseudonym, value));
-    out(c, attribute_id).
+    if reveal then
+    out(c, (attribute_id, pseudonym, value)).
 

@@ -13,4 +13,4 @@ process
     let bpk = blinding_sk_to_pk(bsk) in
     let ek = pk(dk) in
     let input = input_data(attribute_id, uid, attribute_value) in
-    (DataSource(input, bpk, ek) | DataLake(bsk, dk) | Converter(msk, ek))
+    (DataSource(input, bpk, ek) | DataLake(bsk, dk, false) | Converter(msk, ek))

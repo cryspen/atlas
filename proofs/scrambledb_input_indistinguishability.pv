@@ -13,4 +13,6 @@ process
     out(c, (bpk, ek));
     let input_0= input_data(attribute_id, uid_0, attribute_value_0) in
     let input_1= input_data(attribute_id, uid_1, attribute_value_1) in  
-    (DataSource(diff[input_0, input_1], bpk, ek) | DataLake(bsk, dk) | Converter(msk, ek))
+    (DataSource(diff[input_0, input_1], bpk, ek) |
+     (in (c, lake_input: bitstring); DataLake(lake_input, bsk, dk, false)) |
+     (in (c, converter_input: bitstring); Converter(converter_input, msk, ek)))
