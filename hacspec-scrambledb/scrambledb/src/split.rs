@@ -51,7 +51,6 @@ pub fn prepare_split_conversion(
             )?;
 
             let encrypted_value = encrypt(ek_receiver, plaintext_value, randomness)?;
-            //let encrypted_value = (plaintext_value, plaintext_value);
 
             blinded_column_data.push((blinded_id, encrypted_value));
         }
