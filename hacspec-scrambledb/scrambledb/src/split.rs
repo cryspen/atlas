@@ -9,8 +9,8 @@ use oprf::coprf::{
 use crate::{
     error::Error,
     setup::ConverterContext,
-    table::{BlindTable, Column, ConvertedTable, EncryptedValue, PlainTable},
     table::{BlindTable, Column, ConvertedTable, PlainTable},
+};
 
 pub fn split_identifier(identifier: String, attribute: String) -> String {
     let mut split_identifier = identifier.clone();
