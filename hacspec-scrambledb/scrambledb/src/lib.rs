@@ -208,6 +208,6 @@ pub mod finalize;
 
 pub mod error;
 
-#[cfg(feature="wasm")]
+#[cfg(feature = "wasm")]
 pub mod wasm_demo;
 mod test_util;
