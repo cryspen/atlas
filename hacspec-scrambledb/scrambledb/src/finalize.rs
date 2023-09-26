@@ -24,7 +24,6 @@ pub fn finalize_conversion(
 
         for (blinded_pseudonym, encrypted_value) in blinded_table.column().data() {
             let pseudonym = store_context.finalize_pseudonym(blinded_pseudonym)?;
-            //let value = encrypted_value.0;
             let value = store_context.decrypt_value(encrypted_value)?;
 
             pseudonymized_column_data.push((pseudonym, value));
