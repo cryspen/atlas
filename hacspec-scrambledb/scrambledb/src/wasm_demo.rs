@@ -1,5 +1,3 @@
-#![cfg(feature = "wasm")]
-
 use hacspec_lib::Randomness;
 use wasm_bindgen::prelude::*;
 
@@ -30,9 +28,6 @@ pub fn demo_blind_table() {}
 pub fn init_table(table: JsValue) {
     let table: String = table.into_serde().unwrap();
     let table: serde_json::Value = serde_json::from_str(&table).unwrap();
-    web_sys::console::log_1(&format!("table: {table:x?}").into());
-    let address = &table[0]["Address"].as_str().unwrap();
-    web_sys::console::log_1(&format!("address 0: {:x?}", address).into());
     run(table)
 }
 
@@ -46,7 +41,7 @@ pub fn generate_plain_table(
         let mut column_values = vec![];
         for i in 0..table.as_array().unwrap().len() {
             let row = &table[i];
-            web_sys::console::log_1(&format!("row {i}: {:x?}", row).into());
+
             let encoded_value = hash_to_curve::p256_hash::hash_to_curve(
                 row[column].as_str().unwrap().as_bytes(),
                 b"sample_dst",
@@ -86,8 +81,6 @@ pub fn run(table: serde_json::Value) {
     let processor_context = StoreContext::setup(&mut randomness).unwrap();
     let (ek_processor, bpk_processor) = processor_context.public_keys();
 
-    web_sys::console::log_1(&"Setup done.".into());
-
     // Split conversion
     let blind_source_table = crate::split::prepare_split_conversion(
         ek_lake,
@@ -96,8 +89,6 @@ pub fn run(table: serde_json::Value) {
         &mut randomness,
     )
     .unwrap();
-
-    web_sys::console::log_1(&"Split Blinding done.".into());
 
     let blind_split_tables = crate::split::split_conversion(
         &converter_context,
@@ -108,12 +99,8 @@ pub fn run(table: serde_json::Value) {
     )
     .unwrap();
 
-    web_sys::console::log_1(&"Split conversion done.".into());
-
     let finalized_split_tables =
         crate::finalize::finalize_conversion(&lake_context, blind_split_tables.clone()).unwrap();
-
-    web_sys::console::log_1(&"Split finalization done.".into());
 
     // Join conversion
     let join_table_selection = vec![
@@ -130,8 +117,6 @@ pub fn run(table: serde_json::Value) {
     )
     .unwrap();
 
-    web_sys::console::log_1(&"Join blinding done.".into());
-
     let blind_joined_tables = crate::join::join_conversion(
         &converter_context,
         bpk_processor,
@@ -141,13 +126,10 @@ pub fn run(table: serde_json::Value) {
     )
     .unwrap();
 
-    web_sys::console::log_1(&"Join conversion done.".into());
-
     let joined_tables =
         crate::finalize::finalize_conversion(&processor_context, blind_joined_tables.clone())
             .unwrap();
 
-    web_sys::console::log_1(&"Join finalization done.".into());
     // == Visualization ==
 
     let window = web_sys::window().expect("no global `window` exists");
