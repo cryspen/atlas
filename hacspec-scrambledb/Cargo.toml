@@ -9,6 +9,14 @@ members = [
     "prp",
     "sha256",
     "hmac",
+    "aead",
+    "errors",
+    "hacspec_cryptolib",
+    "hpke_double",
+    "kdf",
+    "kem",
+    "evercrypt_cryptolib",
+    "hacspec_cryptolib",
 ]
 resolver = "2"
 

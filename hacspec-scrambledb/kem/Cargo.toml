@@ -1,0 +1,18 @@
+[package]
+name = "hpke_kem"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+path = "src/kem.rs"
+
+[dependencies]
+hacspec-lib = { git = "https://github.com/hacspec/hacspec", package = "hacspec-lib" }
+hacspec_cryptolib = { path = "../hacspec_cryptolib" }
+evercrypt_cryptolib = { path = "../evercrypt_cryptolib", optional = true }
+
+hpke_errors = { path = "../errors" }
+hpke_kdf = { path = "../kdf" }
+
+[features]
+evercrypt = ["evercrypt_cryptolib"]

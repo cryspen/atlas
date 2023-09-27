@@ -1,0 +1,8 @@
+[package]
+name = "evercrypt_cryptolib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hacspec-lib = { git = "https://github.com/hacspec/hacspec", package = "hacspec-lib" }
+evercrypt = "0.0.10"

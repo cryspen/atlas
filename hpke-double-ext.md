@@ -124,6 +124,8 @@ Creation of level-1 ciphertexts, i.e. regular encryption, from sender to receive
 Level-2 ciphertexts are created by encrypting a level-1 ciphertext one more time using the relays encryption context:
 
     def ContextX.ReSeal(aad, ct):
+        if ct_level(ct) != 1:
+            raise InvalidParameters
         cct = Seal(self.key, self.ComputeNonce(self.seq), aad, ct)
         self.IncrementSeq()
         return cct
@@ -132,10 +134,8 @@ Decryption is only defined on level-2 ciphertexts:
 
     def ContextR.Open(aad, cct):
         if ct_level(cct) != 2:
-            raise OpenError
+            raise InvalidParameters
         ct = Open(self.key, self.ComputeNonce(self.seq), aad, cct)
-        if ct == OpenError or ct_level(ct) != 1:
-          raise OpenError
         pt = Open(self.key, self.ComputeNonce(self.seq), aad, ct)
         if pt == OpenError:
           raise OpenError
