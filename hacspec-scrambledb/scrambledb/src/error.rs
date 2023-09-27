@@ -12,6 +12,7 @@ impl From<oprf::Error> for Error {
             oprf::Error::CurveError => Self::CorruptedData,
             oprf::Error::HashToCurveError => Self::CorruptedData,
             oprf::Error::ElgamalError => Self::RandomnessError,
+            oprf::Error::RandomnessError => Self::RandomnessError,
         }
     }
 }

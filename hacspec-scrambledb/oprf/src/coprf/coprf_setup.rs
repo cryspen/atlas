@@ -26,7 +26,8 @@ pub type BlindingPrivateKey = elgamal::DecryptionKey;
 /// `Nsk` bytes of entropy is provided to the key derivation
 /// algorithm, where `Nsk` is the number of bytes to represent a valid
 /// private key, i.e. a P256 scalar in our case.
-pub type CoPRFMasterSecret = [u8; 32];
+pub type CoPRFMasterSecret = Vec<u8>;
+const COPRF_MSK_BYTES: usize = 32;
 
 /// A coPRF evaluation key is identified by a bytestring of arbitrary
 /// length.
@@ -78,8 +79,9 @@ impl CoPRFEvaluatorContext {
     /// ### E.1.2. Evaluator Setup
     /// The coPRF evaluator holds the master secret as well as any PRF
     /// evaluation keys derived from it.
-    pub fn new(msk: CoPRFMasterSecret) -> Self {
-        CoPRFEvaluatorContext { msk }
+    pub fn new(randomness: &mut Randomness) -> Result<Self, Error> {
+        let msk = randomness.bytes(COPRF_MSK_BYTES)?.to_vec();
+        Ok(CoPRFEvaluatorContext { msk })
     }
 }
 
@@ -120,5 +122,7 @@ pub fn derive_key(context: &CoPRFEvaluatorContext, key_id: &[u8]) -> Result<CoPR
     let mut key_material = context.msk.to_vec();
     key_material.extend_from_slice(key_id);
 
-    p256::random_scalar(&mut Randomness::new(key_material)).map_err(|e| e.into())
+    let random_bytes = sha256::hash(&key_material);
+
+    p256::random_scalar(&mut Randomness::new(random_bytes.to_vec())).map_err(|e| e.into())
 }
