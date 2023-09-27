@@ -1,6 +1,6 @@
 //! # Split Conversion
-use elgamal::{encrypt, EncryptionKey};
 use hacspec_lib::Randomness;
+use libcrux::hpke::{kem::Nsk, HPKEConfig, HpkePublicKey, HpkeSeal};
 use oprf::coprf::{
     coprf_online::{blind, blind_evaluate},
     coprf_setup::{derive_key, BlindingPublicKey},
@@ -10,11 +10,12 @@ use crate::{
     error::Error,
     setup::ConverterContext,
     table::{BlindTable, Column, ConvertedTable, PlainTable},
+    SerializedHPKE,
 };
 
 pub fn split_identifier(identifier: String, attribute: String) -> String {
-    let mut split_identifier = identifier.clone();
-    split_identifier.push_str("-");
+    let mut split_identifier = identifier;
+    split_identifier.push('-');
     split_identifier.push_str(&attribute);
     split_identifier
 }
@@ -30,7 +31,7 @@ pub fn split_conversion_context() -> Vec<u8> {
 /// data lake
 /// - Sort each column by the blinded table keys (this implements a random shuffle)
 pub fn prepare_split_conversion(
-    ek_receiver: EncryptionKey,
+    ek_receiver: &HpkePublicKey,
     bpk_receiver: BlindingPublicKey,
     table: PlainTable,
     randomness: &mut Randomness,
@@ -50,7 +51,20 @@ pub fn prepare_split_conversion(
                 randomness,
             )?;
 
-            let encrypted_value = encrypt(ek_receiver, plaintext_value, randomness)?;
+            let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
+
+            let encrypted_value = SerializedHPKE::from_hpke_ct(&HpkeSeal(
+                crate::HPKE_CONF,
+                ek_receiver,
+                b"Level-1",
+                b"",
+                &plaintext_value,
+                None,
+                None,
+                None,
+                randomness.bytes(Nsk(kem))?.to_vec(),
+            )?)
+            .to_bytes();
 
             blinded_column_data.push((blinded_id, encrypted_value));
         }
@@ -78,7 +92,7 @@ pub fn prepare_split_conversion(
 pub fn split_conversion(
     converter_context: &ConverterContext,
     bpk_receiver: BlindingPublicKey,
-    ek_receiver: EncryptionKey,
+    ek_receiver: &HpkePublicKey,
     blinded_table: BlindTable,
     randomness: &mut Randomness,
 ) -> Result<Vec<ConvertedTable>, Error> {
@@ -94,7 +108,20 @@ pub fn split_conversion(
             let blinded_pseudonym =
                 blind_evaluate(conversion_key, bpk_receiver, blind_identifier, randomness)?;
 
-            let encrypted_value = elgamal::rerandomize(ek_receiver, encrypted_value, randomness)?;
+            let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
+            let hpke_ct = HpkeSeal(
+                crate::HPKE_CONF,
+                ek_receiver,
+                b"Level-2",
+                b"",
+                &encrypted_value,
+                None,
+                None,
+                None,
+                randomness.bytes(Nsk(kem))?.to_vec(),
+            )?;
+
+            let encrypted_value = SerializedHPKE::from_hpke_ct(&hpke_ct).to_bytes();
 
             converted_column_data.push((blinded_pseudonym, encrypted_value));
         }
@@ -137,7 +164,7 @@ mod tests {
 
         // == Blind Table for Pseudonymization ==
         let blind_table = crate::split::prepare_split_conversion(
-            lake_ek,
+            &lake_ek,
             lake_bpk,
             plain_table.clone(),
             &mut randomness,
@@ -148,7 +175,7 @@ mod tests {
         let converted_tables = crate::split::split_conversion(
             &converter_context,
             lake_bpk,
-            lake_ek,
+            &lake_ek,
             blind_table,
             &mut randomness,
         )
@@ -158,7 +185,7 @@ mod tests {
         let lake_tables =
             crate::finalize::finalize_conversion(&lake_context, converted_tables).unwrap();
 
-        let plain_values: Vec<HashSet<p256::P256Point>> = plain_table
+        let plain_values: Vec<HashSet<Vec<u8>>> = plain_table
             .clone()
             .columns()
             .iter()
@@ -168,7 +195,7 @@ mod tests {
         let mut pseudonym_set = HashSet::new();
         // test that data is preserved
         for table in lake_tables {
-            let table_values: HashSet<p256::P256Point> = HashSet::from_iter(table.values());
+            let table_values: HashSet<Vec<u8>> = HashSet::from_iter(table.values());
             assert!(
                 plain_values.iter().any(|set| { *set == table_values }),
                 "Data was not preserved during pseudonymization."

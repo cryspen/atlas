@@ -7,11 +7,13 @@ pub fn generate_plain_table() -> PlainTable {
         vec![
             (
                 String::from("Alice"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData1", b"sample_dst").unwrap(),
+                b"TestData1".to_vec(),
+                //hash_to_curve::p256_hash::hash_to_curve(b"TestData1", b"sample_dst").unwrap(),
             ),
             (
                 String::from("Bob"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData2", b"sample_dst").unwrap(),
+                b"TestData2".to_vec(),
+                //hash_to_curve::p256_hash::hash_to_curve(b"TestData2", b"sample_dst").unwrap(),
             ),
         ],
     ));
@@ -21,11 +23,13 @@ pub fn generate_plain_table() -> PlainTable {
         vec![
             (
                 String::from("Alice"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData3", b"sample_dst").unwrap(),
+                b"TestData3".to_vec(),
+                //hash_to_curve::p256_hash::hash_to_curve(b"TestData3", b"sample_dst").unwrap(),
             ),
             (
                 String::from("Bob"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData4", b"sample_dst").unwrap(),
+                b"TestData4".to_vec(),
+                //hash_to_curve::p256_hash::hash_to_curve(b"TestData4", b"sample_dst").unwrap(),
             ),
         ],
     ));
@@ -35,11 +39,13 @@ pub fn generate_plain_table() -> PlainTable {
         vec![
             (
                 String::from("Alice"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData5", b"sample_dst").unwrap(),
+                b"TestData5".to_vec(),
+                //hash_to_curve::p256_hash::hash_to_curve(b"TestData5", b"sample_dst").unwrap(),
             ),
             (
                 String::from("Bob"),
-                hash_to_curve::p256_hash::hash_to_curve(b"TestData6", b"sample_dst").unwrap(),
+                b"TestData6".to_vec(),
+                //hash_to_curve::p256_hash::hash_to_curve(b"TestData6", b"sample_dst").unwrap(),
             ),
         ],
     ));
