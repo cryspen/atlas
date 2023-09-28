@@ -13,6 +13,11 @@
       padding: 20px;
     }
 
+    tbody tr:nth-child(even) {
+      background-color: white;
+    }
+
+
     tr.tableheader {
       font-weight: bold;
     }
@@ -45,39 +50,183 @@
   <script type="module">
     import init, {
       // ScrambleDB API
+      init_table,
     } from "./scrambledb.js";
+
+    document.getElementById("read_table").onclick = read_table;
+
+    /**
+    * converts array-like object to array
+    * @param  collection the object to be converted
+    * @return {Array} the converted object
+    */
+    function arrayify(collection) {
+      return Array.prototype.slice.call(collection);
+    }
+
+    /**
+    * generates factory functions to convert table rows to objects,
+    * based on the titles in the table's <thead>
+    * @param  {Array[String]} headings the values of the table's <thead>
+    * @return {Function}      a function that takes a table row and spits out an object
+    */
+    function factory(headings) {
+      return function (row) {
+        return arrayify(row.cells).reduce(function (prev, curr, i) {
+          // new TextEncoder().encode
+          prev[headings[i]] = curr.getElementsByTagName("input")[0].value;
+          return prev;
+        }, {});
+      }
+    }
+
+    /**
+    * given a table, generate an array of objects.
+    * each object corresponds to a row in the table.
+    * each object's key/value pairs correspond to a column's heading and the row's value for that column
+    * 
+    * @param  {HTMLTableElement} table the table to convert
+    * @return {Array[Object]}       array of objects representing each row in the table
+    */
+    function parseTable(table) {
+      var headings = arrayify(table.tHead.rows[0].cells).map(function (heading) {
+        return heading.innerText;
+      });
+      return arrayify(table.tBodies[0].rows).map(factory(headings));
+    }
+
+    function read_table() {
+      var table = document.getElementById('InputTable');
+      var parsed = parseTable(table);
+      console.log(parsed);
+      init_table(JSON.stringify(parsed));
+
+      document.getElementById('computation').style.display = "block";
+    }
   </script>
 
 
   <div id="Data Source">
     <h3>Data Source</h3>
-    <div>
-      <h4> Plain Table</h4>
-      <table id="data-source-table-plain">
-      </table>
-    </div>
-    <div>
-      <h4> Blinded Table</h4>
-      <table id="data-source-table-blind">
-      </table>
-    </div>
-    <hr>
-    <div id="Data Lake">
-      <h3>Data Lake</h3>
-      <div>
-        <h4>Pseudonymized Tables</h4>
-        <div id="data-lake-tables">
 
+    <div id="computation" style="display:none;">
+      <form name="inputtable">
+        <table id="InputTable">
+          <thead>
+            <tr>
+              <th>Identity</th>
+              <th>Date of Birth</th>
+              <th>Address</th>
+              <th>Favourite Color</th>
+            </tr>
+          </thead>
+          <tr>
+            <td><input type="text" name="row1" id="row1" value="Alice" /></td>
+            <td><input type="text" name="row1" id="row1" value="01.01.1970" /></td>
+            <td><input type="text" name="row1" id="row1" value="Avenue du Maine 77" /></td>
+            <td><input type="text" name="row1" id="row1" value="Red" /></td>
+          </tr>
+          <tr>
+            <td><input type="text" name="row1" id="row1" value="Bob" /></td>
+            <td><input type="text" name="row1" id="row1" value="11.11.1990" /></td>
+            <td><input type="text" name="row1" id="row1" value="Main street 15" /></td>
+            <td><input type="text" name="row1" id="row1" value="Black" /></td>
+          </tr>
+        </table>
+        <input name="read" id="read_table" type="button" value="Read Table" />
+      </form>
+    </div>
+    <pre><code>let blinded_table = prepare_split_conversion(
+        ek_lake,
+        bpk_lake,
+        source_table,
+        randomness
+    );</code></pre>
+  </div>
+
+  <hr>
+  <hr>
+
+  <div>
+    <div id="converter-1">
+      <h3>Converter (Pseudonymization)</h3>
+      <div>
+        <h4> Input: Blinded Table</h4>
+        <div id="converter-input-1">
+        </div>
+      </div>
+      <pre>
+    <code>let converted_split_tables = split_conversion(
+        converter_context,
+        bpk_lake,
+        ek_lake,
+        blinded_table,
+        randomness,
+    );</code></pre>
+      <div>
+        <h4> Output: Obliviously Converted & Split Tables</h4>
+        <div id="converter-output-1">
         </div>
       </div>
     </div>
+
+    <hr>
+
+    <div id="Data Lake">
+      <h3>Data Lake</h3>
+      <pre><code>let pseudonymized_tables =
+        finalize_conversion(lake_context, converted_split_tables);</code></pre>
+      <div>
+        <h4>Pseudonymized Tables</h4>
+        <div id="data-lake-tables">
+        </div>
+      </div>
+      <pre><code>let join_table_selection = ["Address", "Date of Birth"];
+    let blinded_tables = prepare_join_conversion(
+        lake_context,
+        bpk_processor,
+        ek_processor,
+        join_table_selection,
+        randomness,
+    );</code></pre>
+    </div>
+
+    <hr>
+
+    <div id="converter-2">
+      <h3>Converter (Join) </h3>
+      <div>
+        <h4> Input: Blinded Tables</h4>
+        <div id="converter-input-2">
+        </div>
+      </div>
+      <pre>
+    <code>let converted_tables = join_conversion(
+        converter_context,
+        bpk_processor,
+        ek_processor,
+        blind_pre_join_tables,
+        randomness,
+    );</code></pre>
+      <div>
+        <h4> Output: Converted Tables</h4>
+        <div id="converter-output-2">
+        </div>
+      </div>
+    </div>
+
+    <hr>
+
     <div id="Data Processor">
       <h3>Data Lake</h3>
+      <pre>
+    <code>let joined_tables = finalize_conversion(processor_context, converted_tables);</code></pre>
       <div>
         <h4> Joined Table</h4>
         <div id="data-processor-joined">
         </div>
       </div>
+    </div>
 </body>
 
 </html>

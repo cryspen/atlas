@@ -9,7 +9,7 @@ use oprf::coprf::{
 use crate::{
     error::Error,
     setup::ConverterContext,
-    table::{BlindTable, Column, ConvertedTable, EncryptedValue, PlainTable},
+    table::{BlindTable, Column, ConvertedTable, PlainTable},
 };
 
 pub fn split_identifier(identifier: String, attribute: String) -> String {
@@ -51,7 +51,6 @@ pub fn prepare_split_conversion(
             )?;
 
             let encrypted_value = encrypt(ek_receiver, plaintext_value, randomness)?;
-            //let encrypted_value = (plaintext_value, plaintext_value);
 
             blinded_column_data.push((blinded_id, encrypted_value));
         }
