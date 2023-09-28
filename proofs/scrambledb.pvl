@@ -30,6 +30,16 @@ reduc forall y: group_element, bsk: blinding_sk, r: bitstring;
 reduc forall x: group_element, bpk: blinding_pk, k: prf_key, r: bitstring;
       blind_evaluate(k, blind_(bpk, x, r)) = reblind_(bpk, prf(k, x), r).
 
+(* The following version of blind evaluation without reblind_
+seemingly leads analysis `scrambledb_pseudonymity` into
+non-termination:
+
+reduc forall y: group_element, bsk: blinding_sk, r: bitstring;
+      unblind(bsk, blind_(blinding_sk_to_pk(bsk), y, r)) = y.
+reduc forall x: group_element, bpk: blinding_pk, k: prf_key, r: bitstring;
+      blind_evaluate(k, blind_(bpk, x, r)) = blind_(bpk, prf(k, x), r).
+*)
+
 (* Public Key Encryption *)
 type pubkey.
 type privkey.
@@ -53,7 +63,7 @@ event Converted(bitstring, bitstring).
 
 
 let DataSource(input: bitstring, bpk: blinding_pk, ek: pubkey) =
-    let input_data(attribute_id,uid, attribute_value) = input in
+    let input_data(attribute_id, uid, attribute_value) = input in
     let blinded_uid = blind(bpk, uid) in
     let encryption = penc(ek, attribute_value) in
     event SourceSent(input);
