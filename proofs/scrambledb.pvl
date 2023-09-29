@@ -1,11 +1,7 @@
 (* This model is a sketch of the Convertible Oblivious PRF
 functionality given by Anja Lehmann in "ScrambleDB: Oblivious
 (Chameleon) Pseudonymization-as-a-Service" as part of the ScrambleDB
-system.
-
-TODO:
-1. Model output conversion between subkeys.
-*)
+system. *)
 
 free c: channel.
 
