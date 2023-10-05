@@ -52,7 +52,7 @@ jobs:
     - name: Upload Documentation Artifact
       uses: actions/upload-pages-artifact@v2
       with:
-        path: "docs"
+        path: "hacspec-scrambledb/docs"
 
     - name: Deploy Documentation to GitHub Pages
       id: deployment
