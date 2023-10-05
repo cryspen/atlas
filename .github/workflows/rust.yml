@@ -42,3 +42,19 @@ jobs:
       
     - name: Check formatting
       run: cargo fmt --all --check
+
+    - name: Build Documentation
+      run: |
+        cargo doc --no-deps
+        echo "<meta http-equiv=\"refresh\" content=\"0; url=scrambledb\">" > target/doc/index.html
+        cp -r target/doc docs
+
+    - name: Upload Documentation Artifact
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: "docs"
+
+    - name: Deploy Documentation to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v2
+
