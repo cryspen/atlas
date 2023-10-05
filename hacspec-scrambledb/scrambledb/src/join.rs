@@ -1,6 +1,6 @@
 //! ## Join Conversion
-use elgamal::EncryptionKey;
 use hacspec_lib::Randomness;
+use libcrux::hpke::{kem::Nsk, HPKEConfig, HpkePublicKey, HpkeSeal};
 use oprf::coprf::{
     coprf_online::{blind_convert, prepare_blind_convert},
     coprf_setup::{derive_key, BlindingPublicKey},
@@ -10,7 +10,7 @@ use crate::{
     error::Error,
     setup::{ConverterContext, StoreContext},
     table::{BlindTable, Column, ConvertedTable, PseudonymizedTable},
-    SECPAR_BYTES,
+    SerializedHPKE, SECPAR_BYTES,
 };
 
 /// ### Preparation
@@ -62,7 +62,7 @@ use crate::{
 pub fn prepare_join_conversion(
     origin_context: &StoreContext,
     bpk_target: BlindingPublicKey,
-    ek_target: EncryptionKey,
+    ek_receiver: &HpkePublicKey,
     pseudonymized_tables: Vec<PseudonymizedTable>,
     randomness: &mut Randomness,
 ) -> Result<Vec<BlindTable>, Error> {
@@ -75,7 +75,19 @@ pub fn prepare_join_conversion(
             let raw_pseudonym = origin_context.recover_raw_pseudonym(pseudonym)?;
             let blinded_pseudonym = prepare_blind_convert(bpk_target, raw_pseudonym, randomness)?;
 
-            let encrypted_value = elgamal::encrypt(ek_target, value, randomness)?;
+            let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
+            let encrypted_value = SerializedHPKE::from_hpke_ct(&HpkeSeal(
+                crate::HPKE_CONF,
+                ek_receiver,
+                b"Level-1",
+                b"",
+                &value,
+                None,
+                None,
+                None,
+                randomness.bytes(Nsk(kem))?.to_vec(),
+            )?)
+            .to_bytes();
 
             blind_column_data.push((blinded_pseudonym, encrypted_value));
         }
@@ -107,7 +119,7 @@ pub fn join_identifier(identifier: String) -> String {
 pub fn join_conversion(
     converter_context: &ConverterContext,
     bpk_target: BlindingPublicKey,
-    ek_target: EncryptionKey,
+    ek_target: &HpkePublicKey,
     tables: Vec<BlindTable>,
     randomness: &mut Randomness,
 ) -> Result<Vec<ConvertedTable>, Error> {
@@ -131,7 +143,20 @@ pub fn join_conversion(
                     blind_identifier,
                     randomness,
                 )?;
-                let encrypted_value = elgamal::rerandomize(ek_target, encrypted_value, randomness)?;
+
+                let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
+                let encrypted_value = SerializedHPKE::from_hpke_ct(&HpkeSeal(
+                    crate::HPKE_CONF,
+                    ek_target,
+                    b"Level-2",
+                    b"",
+                    &encrypted_value,
+                    None,
+                    None,
+                    None,
+                    randomness.bytes(Nsk(kem))?.to_vec(),
+                )?)
+                .to_bytes();
 
                 converted_data.push((blind_pseudonym, encrypted_value));
             }
@@ -173,7 +198,7 @@ mod tests {
 
         // == Blind Table for Pseudonymization ==
         let blind_table = crate::split::prepare_split_conversion(
-            lake_ek,
+            &lake_ek,
             lake_bpk,
             plain_table.clone(),
             &mut randomness,
@@ -184,7 +209,7 @@ mod tests {
         let converted_tables = crate::split::split_conversion(
             &converter_context,
             lake_bpk,
-            lake_ek,
+            &lake_ek,
             blind_table,
             &mut randomness,
         )
@@ -194,7 +219,7 @@ mod tests {
         let lake_tables =
             crate::finalize::finalize_conversion(&lake_context, converted_tables).unwrap();
 
-        let plain_values: Vec<HashSet<p256::P256Point>> = plain_table
+        let plain_values: Vec<HashSet<Vec<u8>>> = plain_table
             .clone()
             .columns()
             .iter()
@@ -218,7 +243,7 @@ mod tests {
         let blind_tables = crate::join::prepare_join_conversion(
             &lake_context,
             bpk_processor,
-            ek_processor,
+            &ek_processor,
             join_tables,
             &mut randomness,
         )
@@ -227,7 +252,7 @@ mod tests {
         let converted_join_tables = crate::join::join_conversion(
             &converter_context,
             bpk_processor,
-            ek_processor,
+            &ek_processor,
             blind_tables,
             &mut randomness,
         )
@@ -248,7 +273,7 @@ mod tests {
                 );
             }
 
-            let table_values: HashSet<p256::P256Point> = HashSet::from_iter(table.values());
+            let table_values: HashSet<Vec<u8>> = HashSet::from_iter(table.values());
             assert!(
                 plain_values.iter().any(|set| { *set == table_values }),
                 "Data was not preserved during join."

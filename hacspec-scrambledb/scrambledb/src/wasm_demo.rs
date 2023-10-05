@@ -16,7 +16,6 @@ use crate::{
     setup::{ConverterContext, StoreContext},
     table::{BlindTable, PlainTable, PseudonymizedTable},
 };
-use std::collections::HashMap;
 use std::fmt::Debug;
 
 use gloo_utils::format::JsValueSerdeExt;
@@ -31,35 +30,22 @@ pub fn init_table(table: JsValue) {
     run(table)
 }
 
-pub fn generate_plain_table(
-    table: serde_json::Value,
-) -> (PlainTable, HashMap<p256::P256Point, String>) {
+pub fn generate_plain_table(table: serde_json::Value) -> PlainTable {
     let mut columns = Vec::new();
-    let mut values = HashMap::new();
     let column_names = ["Address", "Date of Birth", "Favourite Color"];
     for column in column_names {
         let mut column_values = vec![];
         for i in 0..table.as_array().unwrap().len() {
             let row = &table[i];
 
-            let encoded_value = hash_to_curve::p256_hash::hash_to_curve(
-                row[column].as_str().unwrap().as_bytes(),
-                b"sample_dst",
-            )
-            .unwrap();
-            values.insert(
-                encoded_value.clone(),
-                String::from(row[column].as_str().unwrap()),
-            );
+            let encoded_value = row[column].as_str().unwrap().as_bytes().to_vec();
+
             column_values.push((row["Identity"].as_str().unwrap().to_string(), encoded_value));
         }
         columns.push(Column::new(column.to_string(), column_values));
     }
 
-    (
-        PlainTable::new(String::from("ExampleTable"), columns),
-        values,
-    )
+    PlainTable::new(String::from("ExampleTable"), columns)
 }
 
 pub fn run(table: serde_json::Value) {
@@ -71,7 +57,7 @@ pub fn run(table: serde_json::Value) {
     let mut randomness = Randomness::new(randomness.to_vec());
 
     // Setup and Source input
-    let (source_table, values) = generate_plain_table(table);
+    let source_table = generate_plain_table(table);
 
     let converter_context = ConverterContext::setup(&mut randomness).unwrap();
 
@@ -83,7 +69,7 @@ pub fn run(table: serde_json::Value) {
 
     // Split conversion
     let blind_source_table = crate::split::prepare_split_conversion(
-        ek_lake,
+        &ek_lake,
         bpk_lake,
         source_table.clone(),
         &mut randomness,
@@ -93,7 +79,7 @@ pub fn run(table: serde_json::Value) {
     let blind_split_tables = crate::split::split_conversion(
         &converter_context,
         bpk_lake,
-        ek_lake,
+        &ek_lake,
         blind_source_table.clone(),
         &mut randomness,
     )
@@ -111,7 +97,7 @@ pub fn run(table: serde_json::Value) {
     let blind_pre_join_tables = crate::join::prepare_join_conversion(
         &lake_context,
         bpk_processor,
-        ek_processor,
+        &ek_processor,
         join_table_selection.clone(),
         &mut randomness,
     )
@@ -120,7 +106,7 @@ pub fn run(table: serde_json::Value) {
     let blind_joined_tables = crate::join::join_conversion(
         &converter_context,
         bpk_processor,
-        ek_processor,
+        &ek_processor,
         blind_pre_join_tables.clone(),
         &mut randomness,
     )
@@ -159,7 +145,7 @@ pub fn run(table: serde_json::Value) {
     for lake_table in finalized_split_tables.iter() {
         let lake_table_element =
             dom_insert_column_table(&"data-lake-tables", &lake_table, &document);
-        fill_pseudonymized_column(&lake_table_element, lake_table, &values);
+        fill_pseudonymized_column(&lake_table_element, lake_table);
     }
 
     // select first two lake tables for join
@@ -177,7 +163,7 @@ pub fn run(table: serde_json::Value) {
     for lake_table in joined_tables.iter() {
         let lake_table_element =
             dom_insert_column_table(&"data-processor-joined", &lake_table, &document);
-        fill_pseudonymized_column(&lake_table_element, lake_table, &values);
+        fill_pseudonymized_column(&lake_table_element, lake_table);
     }
 }
 
@@ -333,19 +319,15 @@ fn fill_blind_table_single_id(table_element: &HtmlTableElement, blind_table: &Bl
             .unwrap();
 
         insert_cell(&html_row, TableCell::BlindID(row[0].0));
-        insert_cell(&html_row, TableCell::BlindValue(row[0].1));
+        insert_cell(&html_row, TableCell::BlindValue(row[0].1.clone()));
 
         for (_key, value) in row.iter().skip(1) {
-            insert_cell(&html_row, TableCell::BlindValue(*value));
+            insert_cell(&html_row, TableCell::BlindValue(value.clone()));
         }
     }
 }
 
-fn fill_pseudonymized_column(
-    table_element: &HtmlTableElement,
-    table: &PseudonymizedTable,
-    values: &HashMap<p256::P256Point, String>,
-) {
+fn fill_pseudonymized_column(table_element: &HtmlTableElement, table: &PseudonymizedTable) {
     for (key, value) in table.column().data() {
         let html_row = table_element
             .insert_row()
@@ -356,7 +338,7 @@ fn fill_pseudonymized_column(
         insert_cell(&html_row, TableCell::Pseudonym(key));
         insert_cell(
             &html_row,
-            TableCell::PlainValue(values.get(&value).unwrap().clone()),
+            TableCell::PlainValue(String::from_utf8_lossy(&value).to_string()),
         );
     }
 }
@@ -391,11 +373,7 @@ impl TableCell {
                 &hex::encode(b.1.raw_bytes())[0..5],
             )),
             TableCell::BlindValue(b) => {
-                format!(
-                    "ENC({}..., {}...)",
-                    &hex::encode(b.0.raw_bytes())[0..5],
-                    &hex::encode(b.1.raw_bytes())[0..5],
-                )
+                format!("ENC({}...)", &hex::encode(b)[0..5],)
             }
             TableCell::Pseudonym(nym) => {
                 String::from(format!("NYM({}...)", &hex::encode(nym)[0..5]))

@@ -17,6 +17,12 @@ impl From<oprf::Error> for Error {
     }
 }
 
+impl From<libcrux::hpke::errors::HpkeError> for Error {
+    fn from(_value: libcrux::hpke::errors::HpkeError) -> Self {
+        Self::CorruptedData
+    }
+}
+
 impl From<hacspec_lib::Error> for Error {
     fn from(value: hacspec_lib::Error) -> Self {
         match value {
