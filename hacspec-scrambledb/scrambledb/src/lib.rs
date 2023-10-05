@@ -262,4 +262,6 @@ pub mod error;
 
 #[cfg(feature = "wasm")]
 pub mod wasm_demo;
+
+#[cfg(test)]
 mod test_util;
