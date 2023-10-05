@@ -141,6 +141,44 @@ Decryption is only defined on level-2 ciphertexts:
           raise OpenError
         self.IncrementSeq()
         return pt
+        
+## Single-Shot Double HPKE
+HPKE Double encryption can already be implemented using the single-shot
+basic mode API provided by standard HPKE. We specify the following
+serialization/deserialization scheme for HPKE ciphertexts:
+
+```text
+    def Serialize(enc, ct):
+        return I2OSP(len(enc)) || I2OSP(len(ct)) || enc || ct
+        
+    def Deserialize(bytes):
+        len_enc = O2ISP(bytes[0..4])
+        len_ct = O2ISP(bytes[4..8])
+        return (enc = bytes[8..8 + len_enc], ct = bytes [8 + len_enc ... 8 + len_enc + len_ct])
+```
+
+### Level-1 Encryption
+```text
+    def SealDouble(pkR, ptxt):
+        enc, ct = SealBase(pkR, "Level-1", "", ptxt, None, None, None)
+        return Serialize(enc, ct)
+```
+
+### Level-2 Encryption
+```text
+    def ReSeal(pkR, ctxt):
+        enc, ct = SealBase(config, pkR, "Level-2", "", ctxt, None, None, None)
+        return (enc, ct)
+```
+
+### Decryption
+```text
+    def Open(enc, skR, ct):
+        ct_inner_serialized = OpenBase(enc, skR, "Level-2", "", ct, None, None, None)
+        (enc_inner, ct_inner) = Deserialize(ct_inner_serialized)
+        pt = OpenBase(enc_inner, skR, "Level-1", "", ct_inner, None, None , None)
+        return pt
+```
 
 # Security Notions
 
