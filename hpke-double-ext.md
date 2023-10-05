@@ -148,10 +148,10 @@ basic mode API provided by standard HPKE. We specify the following
 serialization/deserialization scheme for HPKE ciphertexts:
 
 ```text
-    def Serialize(enc, ct):
+    def SerializeHPKECt(enc, ct):
         return I2OSP(len(enc), 4) || I2OSP(len(ct), 4) || enc || ct
         
-    def Deserialize(bytes):
+    def DeserializeHPKECt(bytes):
         len_enc = OS2IP(bytes[0..4])
         len_ct = OS2IP(bytes[4..8])
         return (enc = bytes[8..8 + len_enc], ct = bytes [8 + len_enc ... 8 + len_enc + len_ct])
@@ -161,7 +161,7 @@ serialization/deserialization scheme for HPKE ciphertexts:
 ```text
     def SealDouble(pkR, ptxt):
         enc, ct = SealBase(pkR, "Level-1", "", ptxt, None, None, None)
-        return Serialize(enc, ct)
+        return SerializeHPKECt(enc, ct)
 ```
 
 ### Level-2 Encryption
@@ -175,7 +175,7 @@ serialization/deserialization scheme for HPKE ciphertexts:
 ```text
     def Open(enc, skR, ct):
         ct_inner_serialized = OpenBase(enc, skR, "Level-2", "", ct, None, None, None)
-        (enc_inner, ct_inner) = Deserialize(ct_inner_serialized)
+        (enc_inner, ct_inner) = DeserializeHPKECt(ct_inner_serialized)
         pt = OpenBase(enc_inner, skR, "Level-1", "", ct_inner, None, None , None)
         return pt
 ```
