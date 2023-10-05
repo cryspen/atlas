@@ -149,11 +149,11 @@ serialization/deserialization scheme for HPKE ciphertexts:
 
 ```text
     def Serialize(enc, ct):
-        return I2OSP(len(enc)) || I2OSP(len(ct)) || enc || ct
+        return I2OSP(len(enc), 4) || I2OSP(len(ct), 4) || enc || ct
         
     def Deserialize(bytes):
-        len_enc = O2ISP(bytes[0..4])
-        len_ct = O2ISP(bytes[4..8])
+        len_enc = OS2IP(bytes[0..4])
+        len_ct = OS2IP(bytes[4..8])
         return (enc = bytes[8..8 + len_enc], ct = bytes [8 + len_enc ... 8 + len_enc + len_ct])
 ```
 
