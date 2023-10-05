@@ -1,0 +1,26 @@
+name: Build and deploy ScrambleDB documentation
+
+on:
+    workflow_dispatch:
+
+jobs:
+    docs:
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        steps:
+            - uses: actions/checkout@v3
+
+            - name: Build Documentation
+              run: |
+                cargo doc --no-deps
+                echo "<meta http-equiv=\"refresh\" content=\"0; url=scrambledb\">" > target/doc/index.html
+                cp -r target/doc docs
+
+            - name: Upload Documentation Artifact
+              uses: actions/upload-pages-artifact@v2
+              with:
+                path: "hacspec-scrambledb/docs"
+
+            - name: Deploy Documentation to GitHub Pages
+              id: deployment
+              uses: actions/deploy-pages@v2
