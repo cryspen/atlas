@@ -1,20 +1,29 @@
 # Introduction
 
-In some applications, where a party serves as a relay for batches of
-encrypted values it is required that the outgoing ciphertexts cannot
-be linked to the incoming ciphertexts by an outside (unprivileged)
-observer, i.e. it should be infeasible to tell whether a given part of
-the outgoing batch encrypts the same value as some part of the
-incoming batch.
+In the ScrambleDB system for oblivious data pseudonymization, one
+party serves as an relay for batches of encrypted values intended to
+reach a third party. It is required that the outgoing ciphertexts
+cannot be linked to the incoming ciphertexts by an outside
+(unprivileged) observer, i.e. it should be infeasible to tell whether
+a given part of the outgoing batch encrypts the same value as some
+part of the incoming batch.
+
+One possiblity to realize this would be decryption and re-encryption
+of the ciphertext at the relay using fresh nonces. This will result in
+fresh, unlinkable ciphertexts. However, it requires the relay to be
+able to decrypt incoming messages. In ScrambleDB at least, the relay
+should stay oblivious to the encrypted data it relays, ruling out this
+approach.
 
 There are several public key encryptions schemes which can realize
-this functionality via the ability to rerandomize ciphertexts in a way
-such that rerandomization essentially samples a fresh ciphertext from
-the set of possible ciphertexts encrypting the given message. Because
-of the underlying ciphertext-indistinguishability of these encryption
-schemes a freshly sampled encryption of a message is indistinguishable
-from an encryption of any other incoming message. Examples for such
-schemes include the ElGamal and Pallier public key encryption systems.
+this functionality instead via the ability to rerandomize ciphertexts
+in a way such that rerandomization essentially samples a fresh
+ciphertext from the set of possible ciphertexts encrypting the given
+message. Because of the underlying ciphertext-indistinguishability of
+these encryption schemes a freshly sampled encryption of a message is
+indistinguishable from an encryption of any other incoming
+message. Examples for such schemes include the ElGamal and Pallier
+public key encryption systems.
 
 In practice, public key encryption is often used in a hybrid fashion
 such that the bulk of the content is encrypted using fast symmetric
@@ -22,17 +31,6 @@ encryption using a PKE-encapsulated shared secret. A straightforward
 adaptation of the rerandomization approach is not possible in the
 hybrid setting, since the ciphertext as a whole does not offer the
 algebraic structure that is fundamentally necessary to this approach.
-
-Another possiblity would be decryption and re-encryption of the
-ciphertext at the relay using fresh nonces. This will result in fresh,
-unlinkable ciphertexts. However, it requires the relay be able to
-decrypt using a shared secret between the originator of the message
-and the final recipient. In public key encryption schemes it is
-instead possible to perform rerandomization given only the public key
-of the recipient, without the need to decrypt the message
-first. Indeed it could be an integral part of the applications
-security goals that the relay does not learn the contents of
-ciphertexts.
 
 To address the issues outlined above we propose double hybrid public
 key encryption as a solution to practical, rerandomizable encryption
