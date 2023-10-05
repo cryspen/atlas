@@ -25,6 +25,8 @@ reduc forall y: group_element, bsk: blinding_sk, r: bitstring;
       unblind(bsk, reblind_(blinding_sk_to_pk(bsk), y, r)) = y.
 reduc forall x: group_element, bpk: blinding_pk, k: prf_key, r: bitstring;
       blind_evaluate(k, blind_(bpk, x, r)) = reblind_(bpk, prf(k, x), r).
+reduc forall x: group_element, bpk: blinding_pk, k_1: prf_key, k_2: prf_key, r: bitstring;
+      blind_convert(k_1, k_2, blind_(bpk, prf(k_1, x), r)) = reblind_(bpk, prf(k_2, x), r).
 
 (* The following version of blind evaluation without reblind_
 seemingly leads analysis `scrambledb_pseudonymity` into
@@ -58,27 +60,38 @@ event SourceSent(bitstring).
 event Converted(bitstring, bitstring).
 
 
-let DataSource(input: bitstring, bpk: blinding_pk, ek: pubkey) =
+letfun blind_data(input: bitstring, bpk: blinding_pk, ek: pubkey) =
     let input_data(attribute_id, uid, attribute_value) = input in
     let blinded_uid = blind(bpk, uid) in
     let encryption = penc(ek, attribute_value) in
+    blinded_data(attribute_id, blinded_uid, encryption).
+
+letfun converter_evaluate(input: bitstring, msk: prf_msk, ek: pubkey) =
+    let blinded_data(attribute_id, blinded_uid, encryption) = input in
+    let k = derive_key(msk, attribute_id) in
+    let reencryption = penc(ek, encryption) in
+    let blinded_pseudonym = blind_evaluate(k, blinded_uid) in
+    evaluated_data(attribute_id, blinded_pseudonym, reencryption).
+
+letfun finalize(input: bitstring, bsk: blinding_sk, dk: privkey) =
+    let evaluated_data(attribute_id, blinded_pseudonym, reencryption) = input in
+    let pseudonym = unblind(bsk, blinded_pseudonym) in
+    let value = pdec(dk, pdec(dk, reencryption)) in 
+    final_data(attribute_id, pseudonym, value).
+
+let DataSource(input: bitstring, bpk: blinding_pk, ek: pubkey) =
+    let blinded_data(attribute_id, blinded_uid, encryption) = blind_data(input, bpk, ek) in 
     event SourceSent(input);
     out(c, blinded_data(attribute_id, blinded_uid, encryption)).
 
 let Converter(input: bitstring, msk: prf_msk, ek: pubkey) =
-    let blinded_data(attribute_id, blinded_uid, encryption) = input in
-    let k = derive_key(msk, attribute_id) in
-    let blinded_pseudonym = blind_evaluate(k, blinded_uid) in
-    let reencryption = penc(ek, encryption) in
-    let output = evaluated_data(attribute_id, blinded_pseudonym, reencryption) in
+    let output = converter_evaluate(input, msk, ek) in
     event Converted(input, output);
     out(c, output).
 
 let DataLake(input: bitstring, bsk: blinding_sk, dk: privkey, reveal: bool) =
-    let evaluated_data(attribute_id, blinded_pseudonym, reencryption) = input in
-    let pseudonym = unblind(bsk, blinded_pseudonym) in
-    let value = pdec(dk, pdec(dk, reencryption)) in 
-    event LakeReceived(final_data(attribute_id, pseudonym, value));
-    if reveal then
-    out(c, (attribute_id, pseudonym, value)).
+    let output = finalize(input, bsk, dk) in
+    event LakeReceived(output);
+    if reveal then 
+    out(c, output).
 
