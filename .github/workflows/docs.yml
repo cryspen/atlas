@@ -2,6 +2,13 @@ name: Build and deploy ScrambleDB documentation
 
 on:
     workflow_dispatch:
+    push:
+        branches:
+            - main
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
     docs:
