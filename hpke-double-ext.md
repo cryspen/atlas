@@ -157,24 +157,25 @@ serialization/deserialization scheme for HPKE ciphertexts:
 
 ### Level-1 Encryption
 ```text
-    def SealDouble(pkR, ptxt):
-        enc, ct = SealBase(pkR, "Level-1", "", ptxt, None, None, None)
-        return SerializeHPKECt(enc, ct)
+    def SealDouble(pkR, info, aad, pt, ...):
+        enc, ct = SealBase(pkR, info, aad, ptxt, ...)
+        hpke_serialized = SerializeHPKECt(enc,ct)
+        return hpke_serialized
 ```
 
 ### Level-2 Encryption
 ```text
-    def ReSeal(pkR, ctxt):
-        enc, ct = SealBase(config, pkR, "Level-2", "", ctxt, None, None, None)
+    def ReSealDouble(pkR, info, aad, hpke_serialized, ...):
+        enc, ct = SealBase(pkR, info, aad, hpke_serialized, ...)
         return (enc, ct)
 ```
 
 ### Decryption
 ```text
-    def Open(enc, skR, ct):
-        ct_inner_serialized = OpenBase(enc, skR, "Level-2", "", ct, None, None, None)
-        (enc_inner, ct_inner) = DeserializeHPKECt(ct_inner_serialized)
-        pt = OpenBase(enc_inner, skR, "Level-1", "", ct_inner, None, None , None)
+    def OpenDouble(enc, skR, info-1, aad-1, info-2, aad-2, ct, ...):
+        hpke_serialized = OpenBase(enc, skR, info-2, aad-2, ct, ...)
+        (enc_inner, ct_inner) = DeserializeHPKECt(hpke_serialized)
+        pt = OpenBase(enc_inner, skR, info-1, aad-1, ct_inner, ...)
         return pt
 ```
 
