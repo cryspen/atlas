@@ -26,20 +26,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
 
       - name: Build Documentation
         run: |
           cd hacspec-scrambledb
           cargo doc --no-deps
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=scrambledb\">" > target/doc/index.html
           cp -r target/doc docs
-          cat > docs/index.html <<EOF
-          <!doctype html>
-          <html>
-            <head>
-              <meta http-equiv="refresh" content="0; url=https://cryspen.com/pq/">
-            </head>
-          </html>
-          EOF
 
       - name: Upload Documentation Artifact
         uses: actions/upload-pages-artifact@v2
