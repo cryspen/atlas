@@ -32,10 +32,10 @@ jobs:
           cat > target/doc/index.html <<EOF
           <!doctype html>
           <html>
-          <head><meta http-equiv="refresh" content="0"; url="scrambledb"></head>
+          <head><meta http-equiv="refresh" content="0; url='scrambledb/index.html'"></head>
           </html>
           EOF
-          cp -r target/doc ../docs
+          mv target/doc ../docs
 
       - name: Upload Documentation Artifact
         uses: actions/upload-pages-artifact@v2
