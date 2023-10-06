@@ -13,6 +13,7 @@ concurrency:
 defaults:
   run:
     working-directory: hacspec-scrambledb
+    
 
 permissions:
   contents: read
@@ -21,6 +22,10 @@ permissions:
 
 jobs:
     docs:
+        environment:
+              name: github-pages
+              url: ${{ steps.deployment.outputs.page_url }}
+              
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v3
