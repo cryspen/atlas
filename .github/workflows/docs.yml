@@ -1,4 +1,4 @@
-name: Build and deploy ScrambleDB documentation
+name: Build and Deploy GH Pages for ATLAS
 
 on:
     workflow_dispatch:
