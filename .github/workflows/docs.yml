@@ -26,8 +26,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v3
 
       - name: Build Documentation
         run: |
