@@ -53,6 +53,7 @@ fun input_data(bitstring, group_element, bitstring): bitstring [data].
 fun blinded_data(bitstring, blinded_element, bitstring): bitstring [data].
 fun evaluated_data(bitstring, blinded_element, bitstring): bitstring [data].
 fun final_data(bitstring, group_element, bitstring): bitstring [data].
+fun double_evaluation(bitstring, bitstring): bitstring [data].
 
 (* Events *)
 event LakeReceived(bitstring).
@@ -88,6 +89,14 @@ let Converter(input: bitstring, msk: prf_msk, ek: pubkey) =
     let output = converter_evaluate(input, msk, ek) in
     event Converted(input, output);
     out(c, output).
+
+let DoubleConverter(input1: bitstring, input2: bitstring, msk: prf_msk, ek: pubkey, reverse_order: bool) =
+    let output1 = converter_evaluate(input1, msk, ek) in
+    let output2 = converter_evaluate(input2, msk, ek) in
+    if reverse_order then
+    out (c, double_evaluation(output2, output1))
+    else
+    out (c, double_evaluation(output1, output2)).
 
 let DataLake(input: bitstring, bsk: blinding_sk, dk: privkey, reveal: bool) =
     let output = finalize(input, bsk, dk) in
