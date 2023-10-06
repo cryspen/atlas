@@ -1,0 +1,13 @@
+process
+    new bsk: blinding_sk;
+    new dk: privkey;
+    new msk: prf_msk;
+    let bpk = blinding_sk_to_pk(bsk) in
+    let ek = pk(dk) in
+    out(c, (bpk, ek));
+    out(c, bsk);
+     (in (c, source_input: bitstring); DataSource(source_input, bpk, ek)     |
+     (in (c, lake_input: bitstring);   DataLake(lake_input, bsk, dk, false)) |
+     (in (c, converter_input1: bitstring);
+      in (c, converter_input2: bitstring);
+      DoubleConverter(converter_input1, converter_input2, msk, ek, diff[true, false])))  
