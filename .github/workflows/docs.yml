@@ -3,8 +3,6 @@ name: Build and Deploy GH Pages for ATLAS
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 # However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
@@ -29,15 +27,17 @@ jobs:
 
       - name: Build Documentation
         run: |
-          cd hacspec-scrambledb
-          cargo doc --no-deps
-          echo "<meta http-equiv=\"refresh\" content=\"0; url=scrambledb\">" > target/doc/index.html
-          cp -r target/doc docs
+          cat > index.html <<EOF
+          <!doctype html>
+          <html>
+          Hello Atlas
+          </html>
+          EOF
 
       - name: Upload Documentation Artifact
         uses: actions/upload-pages-artifact@v2
         with:
-          path: "hacspec-scrambledb/docs"
+          path: "."
 
       - name: Deploy Documentation to GitHub Pages
         id: deployment
