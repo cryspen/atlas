@@ -1,15 +1,16 @@
 name: Build and Deploy GH Pages for ATLAS
 
 on:
-    workflow_dispatch:
-    push:
-        branches:
-            - main
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-defaults:
-  run:
-    working-directory: hacspec-scrambledb
-    
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -17,26 +18,29 @@ permissions:
   id-token: write
 
 jobs:
-    docs:
-        environment:
-              name: github-pages
-              url: ${{ steps.deployment.outputs.page_url }}
-              
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v3
+  docs:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
-            - name: Build Documentation
-              run: |
-                cargo doc --no-deps
-                echo "<meta http-equiv=\"refresh\" content=\"0; url=scrambledb\">" > target/doc/index.html
-                cp -r target/doc docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
 
-            - name: Upload Documentation Artifact
-              uses: actions/upload-pages-artifact@v2
-              with:
-                path: "hacspec-scrambledb/docs"
+      - name: Build Documentation
+        run: |
+          cd hacspec-scrambledb
+          cargo doc --no-deps
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=scrambledb\">" > target/doc/index.html
+          cp -r target/doc docs
 
-            - name: Deploy Documentation to GitHub Pages
-              id: deployment
-              uses: actions/deploy-pages@v1
+      - name: Upload Documentation Artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: "hacspec-scrambledb/docs"
+
+      - name: Deploy Documentation to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
