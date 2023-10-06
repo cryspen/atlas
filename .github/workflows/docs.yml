@@ -27,17 +27,20 @@ jobs:
 
       - name: Build Documentation
         run: |
-          cat > index.html <<EOF
+          cd hacspec-scrambledb
+          cargo doc --no-deps
+          cat > target/doc/index.html <<EOF
           <!doctype html>
           <html>
-          Hello Atlas
+          <head><meta http-equiv="refresh" content="0"; url="scrambledb"></head>
           </html>
           EOF
+          cp -r target/doc ../docs
 
       - name: Upload Documentation Artifact
         uses: actions/upload-pages-artifact@v2
         with:
-          path: "."
+          path: "docs"
 
       - name: Deploy Documentation to GitHub Pages
         id: deployment
