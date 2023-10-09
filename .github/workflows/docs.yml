@@ -31,13 +31,24 @@ jobs:
         run: |
           cd hacspec-scrambledb
           cargo doc --no-deps
-          echo "<meta http-equiv=\"refresh\" content=\"0; url=scrambledb\">" > target/doc/index.html
-          cp -r target/doc docs
+          cat > target/doc/index.html <<EOF
+          <!doctype html>
+          <html>
+          <head><meta http-equiv="refresh" content="0; url='scrambledb/index.html'"></head>
+          </html>
+          EOF
+          mv target/doc ../docs
+
+      - name: Fix permissions
+        run: |
+          chmod -c -R +rX "docs/" | while read line; do
+            echo "::warning title=Invalid file permissions automatically fixed::$line"
+          done
 
       - name: Upload Documentation Artifact
         uses: actions/upload-pages-artifact@v2
         with:
-          path: "hacspec-scrambledb/docs"
+          path: "docs"
 
       - name: Deploy Documentation to GitHub Pages
         id: deployment
