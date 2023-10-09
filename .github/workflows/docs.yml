@@ -1,0 +1,55 @@
+name: Build and Deploy GH Pages for ATLAS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  docs:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Documentation
+        run: |
+          cd hacspec-scrambledb
+          cargo doc --no-deps
+          cat > target/doc/index.html <<EOF
+          <!doctype html>
+          <html>
+          <head><meta http-equiv="refresh" content="0; url='scrambledb/index.html'"></head>
+          </html>
+          EOF
+          mv target/doc ../docs
+
+      - name: Fix permissions
+        run: |
+          chmod -c -R +rX "docs/" | while read line; do
+            echo "::warning title=Invalid file permissions automatically fixed::$line"
+          done
+
+      - name: Upload Documentation Artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: "docs"
+
+      - name: Deploy Documentation to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2

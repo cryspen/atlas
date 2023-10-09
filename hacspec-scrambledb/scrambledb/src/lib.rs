@@ -197,8 +197,72 @@
 //! PRP.eval(k, PRP.inverse(k, x)) = PRP.inverse(k, PRP.eval(k, x)) = x
 //! ```
 
-/// security parameter in bytes
+use libcrux::hpke::{aead::AEAD, kdf::KDF, kem::KEM, HPKECiphertext, HPKEConfig, Mode};
+
+/// Security parameter in bytes
 const SECPAR_BYTES: usize = 16;
+
+/// The HPKE Configuration used in the implementation of double HPKE
+/// encryption using the HPKE single-shot API.
+const HPKE_CONF: HPKEConfig = HPKEConfig(
+    Mode::mode_base,
+    KEM::DHKEM_P256_HKDF_SHA256,
+    KDF::HKDF_SHA256,
+    AEAD::ChaCha20Poly1305,
+);
+
+/// A wrapper type to facilitate (de-)serialization of HPKE
+/// ciphertexts to (and from) linear byte vectors.
+pub struct SerializedHPKE {
+    len_kem_output: u32,
+    len_ciphertext: u32,
+    bytes: Vec<u8>,
+}
+
+impl SerializedHPKE {
+    /// Prepare an HPKE ciphertext for serialization by wrapping it in
+    /// a `SerializedHPKE`.
+    pub fn from_hpke_ct(ct: &HPKECiphertext) -> Self {
+        let mut bytes = ct.0.clone();
+        bytes.extend_from_slice(&ct.1);
+
+        Self {
+            len_kem_output: ct.0.len() as u32,
+            len_ciphertext: ct.1.len() as u32,
+            bytes,
+        }
+    }
+
+    /// Reconstruct an HPKE ciphertext from the wrapper type. This
+    /// does not perform validation of the reconstructed ciphertext.
+    pub fn to_hpke_ct(&self) -> HPKECiphertext {
+        HPKECiphertext(
+            self.bytes[0..self.len_kem_output as usize].to_vec(),
+            self.bytes[self.len_kem_output as usize..self.bytes.len()].to_vec(),
+        )
+    }
+
+    /// Serialize the wrapper type to a byte vector.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.len_kem_output.to_be_bytes());
+        bytes.extend_from_slice(&self.len_ciphertext.to_be_bytes());
+        bytes.extend_from_slice(&self.bytes);
+        bytes
+    }
+
+    /// Deseralize a wrapped HPKE ciphertext from a byte vector. This
+    /// does not perform validation of the deserialized ciphertext.
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let len_kem_output = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
+        let len_ciphertext = u32::from_be_bytes(bytes[4..8].try_into().unwrap());
+        Self {
+            len_kem_output,
+            len_ciphertext,
+            bytes: bytes[8..bytes.len()].to_vec(),
+        }
+    }
+}
 
 pub mod table;
 pub mod setup;
@@ -210,4 +274,6 @@ pub mod error;
 
 #[cfg(feature = "wasm")]
 pub mod wasm_demo;
+
+#[cfg(test)]
 mod test_util;
