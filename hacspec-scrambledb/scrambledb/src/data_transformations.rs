@@ -1,8 +1,8 @@
 use hacspec_lib::Randomness;
-use libcrux::hpke::{kem::Nsk, HPKEConfig, HpkeSeal};
-use oprf::coprf::coprf_setup::{BlindingPrivateKey, BlindingPublicKey};
+use libcrux::hpke::{kem::Nsk, HPKEConfig, HpkeOpen, HpkeSeal};
+use oprf::coprf::coprf_setup::BlindingPublicKey;
 
-use crate::{data_types::*, error::Error, SerializedHPKE};
+use crate::{data_types::*, error::Error, setup::StoreContext, SerializedHPKE};
 
 fn pseudonymization_context_string() -> Vec<u8> {
     b"CoPRF-Context-Pseudonymization".to_vec()
@@ -47,26 +47,124 @@ pub fn blind_identifiable_datum(
 }
 
 pub fn pseudonymize_blinded_datum(
+    coprf_context: oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
     ek: &[u8],
     datum: &BlindedIdentifiableDatum,
-) -> BlindedPseudonymizedDatum {
-    todo!()
+    randomness: &mut Randomness,
+) -> Result<BlindedPseudonymizedDatum, Error> {
+    let key = oprf::coprf::coprf_setup::derive_key(
+        &coprf_context,
+        datum.data_value.attribute_name.as_bytes(),
+    )?;
+
+    // Obliviously generate Pseudonym
+    let handle = BlindedPseudonymizedHandle(oprf::coprf::coprf_online::blind_evaluate(
+        key,
+        *bpk,
+        datum.handle.0,
+        randomness,
+    )?);
+
+    // Double encrypt data towards data lake
+    let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
+    let data_value = EncryptedDataValue {
+        attribute_name: datum.data_value.attribute_name.clone(),
+        value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
+            crate::HPKE_CONF,
+            ek,
+            b"Level-2",
+            b"",
+            &datum.data_value.value,
+            None,
+            None,
+            None,
+            randomness.bytes(Nsk(kem))?.to_vec(),
+        )?)
+        .to_bytes(),
+    };
+
+    Ok(BlindedPseudonymizedDatum { handle, data_value })
 }
 
 pub fn convert_blinded_datum(
+    coprf_context: oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
     ek: &[u8],
     conversion_target: &[u8],
     datum: &BlindedPseudonymizedDatum,
-) -> BlindedPseudonymizedDatum {
-    todo!()
+    randomness: &mut Randomness,
+) -> Result<BlindedPseudonymizedDatum, Error> {
+    let key_from = oprf::coprf::coprf_setup::derive_key(
+        &coprf_context,
+        datum.data_value.attribute_name.as_bytes(),
+    )?;
+
+    let key_to = oprf::coprf::coprf_setup::derive_key(&coprf_context, conversion_target)?;
+
+    // Obliviously convert pseudonym
+    let handle = BlindedPseudonymizedHandle(oprf::coprf::coprf_online::blind_convert(
+        *bpk,
+        key_from,
+        key_to,
+        datum.handle.0,
+        randomness,
+    )?);
+
+    // Encrypt data towards data lake
+    let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
+    let data_value = EncryptedDataValue {
+        attribute_name: datum.data_value.attribute_name.clone(),
+        value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
+            crate::HPKE_CONF,
+            ek,
+            b"Level-2",
+            b"",
+            &datum.data_value.value,
+            None,
+            None,
+            None,
+            randomness.bytes(Nsk(kem))?.to_vec(),
+        )?)
+        .to_bytes(),
+    };
+
+    Ok(BlindedPseudonymizedDatum { handle, data_value })
 }
 
 pub fn finalize_blinded_datum(
-    bpk: &BlindingPrivateKey,
-    dk: &[u8],
+    store_context: &StoreContext,
     datum: &BlindedPseudonymizedDatum,
-) -> PseudonymizedDatum {
-    todo!()
+) -> Result<PseudonymizedDatum, Error> {
+    let handle = FinalizedPseudonym(store_context.finalize_pseudonym(datum.handle.0)?);
+
+    let outer_encryption = SerializedHPKE::from_bytes(&datum.data_value.value).to_hpke_ct();
+
+    let inner_encryption = SerializedHPKE::from_bytes(&HpkeOpen(
+        crate::HPKE_CONF,
+        &outer_encryption,
+        &store_context.hpke_sk,
+        b"Level-2",
+        b"",
+        None,
+        None,
+        None,
+    )?)
+    .to_hpke_ct();
+
+    let data_value = DataValue {
+        attribute_name: datum.data_value.attribute_name.clone(),
+        value: HpkeOpen(
+            crate::HPKE_CONF,
+            &inner_encryption,
+            &store_context.hpke_sk,
+            b"Level-1",
+            b"",
+            None,
+            None,
+            None,
+        )?,
+    };
+
+    Ok(PseudonymizedDatum { handle, data_value })
 }

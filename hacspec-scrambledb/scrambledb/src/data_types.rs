@@ -1,6 +1,7 @@
-pub struct Pseudonym(oprf::coprf::coprf_online::Output);
+pub struct RawPseudonym(oprf::coprf::coprf_online::Output);
+pub struct FinalizedPseudonym(pub(crate) [u8; 64]);
 pub struct BlindedIdentifiableHandle(pub(crate) oprf::coprf::coprf_online::BlindInput);
-pub struct BlindedPseudonymizedHandle(oprf::coprf::coprf_online::BlindOutput);
+pub struct BlindedPseudonymizedHandle(pub(crate) oprf::coprf::coprf_online::BlindOutput);
 
 pub struct DataValue {
     pub(crate) attribute_name: String,
@@ -28,6 +29,6 @@ pub struct BlindedPseudonymizedDatum {
 }
 
 pub struct PseudonymizedDatum {
-    pub(crate) handle: Pseudonym,
+    pub(crate) handle: FinalizedPseudonym,
     pub(crate) data_value: DataValue,
 }
