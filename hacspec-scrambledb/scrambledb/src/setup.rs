@@ -155,23 +155,4 @@ impl StoreContext {
     pub fn recover_raw_pseudonym(&self, pseudonym: Pseudonym) -> Result<P256Point, Error> {
         P256Point::from_raw_bytes(prp::prp(pseudonym, &self.k_prp)).map_err(|e| e.into())
     }
-
-    // / - Decrypt table values: As part of the finalization of a split or join
-    // /   conversion, the table values that were encrypted for oblivious processing by
-    // /   the converter can be decrypted.
-    // /
-    // /   ``` text
-    // /   Inputs:
-    // /       context: StoreContext
-    // /       encrypted_value: RPKE.Ciphertext
-    // /
-    // /   Outputs:
-    // /       value: DataValue
-    // /
-    // /   fn decrypt_value(context, encrypted_value):
-    // /       return RPKE.decrypt(context.dk, encrypted_value)
-    // /   ```
-    // pub fn decrypt_value(&self, encrypted_value: EncryptedValue) -> Result<PlainValue, Error> {
-    //     elgamal::decrypt(self.dk, encrypted_value).map_err(|e| e.into())
-    // }
 }

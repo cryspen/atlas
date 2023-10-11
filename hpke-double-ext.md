@@ -1,20 +1,29 @@
 # Introduction
 
-In some applications, where a party serves as a relay for batches of
-encrypted values it is required that the outgoing ciphertexts cannot
-be linked to the incoming ciphertexts by an outside (unprivileged)
-observer, i.e. it should be infeasible to tell whether a given part of
-the outgoing batch encrypts the same value as some part of the
-incoming batch.
+In the ScrambleDB system for oblivious data pseudonymization, one
+party serves as an relay for batches of encrypted values intended to
+reach a third party. It is required that the outgoing ciphertexts
+cannot be linked to the incoming ciphertexts by an outside
+(unprivileged) observer, i.e. it should be infeasible to tell whether
+a given part of the outgoing batch encrypts the same value as some
+part of the incoming batch.
+
+One possiblity to realize this would be decryption and re-encryption
+of the ciphertext at the relay using fresh nonces. This will result in
+fresh, unlinkable ciphertexts. However, it requires the relay to be
+able to decrypt incoming messages. In ScrambleDB at least, the relay
+should stay oblivious to the encrypted data it relays, ruling out this
+approach.
 
 There are several public key encryptions schemes which can realize
-this functionality via the ability to rerandomize ciphertexts in a way
-such that rerandomization essentially samples a fresh ciphertext from
-the set of possible ciphertexts encrypting the given message. Because
-of the underlying ciphertext-indistinguishability of these encryption
-schemes a freshly sampled encryption of a message is indistinguishable
-from an encryption of any other incoming message. Examples for such
-schemes include the ElGamal and Pallier public key encryption systems.
+this functionality instead via the ability to rerandomize ciphertexts
+in a way such that rerandomization essentially samples a fresh
+ciphertext from the set of possible ciphertexts encrypting the given
+message. Because of the underlying ciphertext-indistinguishability of
+these encryption schemes a freshly sampled encryption of a message is
+indistinguishable from an encryption of any other incoming
+message. Examples for such schemes include the ElGamal and Pallier
+public key encryption systems.
 
 In practice, public key encryption is often used in a hybrid fashion
 such that the bulk of the content is encrypted using fast symmetric
@@ -22,17 +31,6 @@ encryption using a PKE-encapsulated shared secret. A straightforward
 adaptation of the rerandomization approach is not possible in the
 hybrid setting, since the ciphertext as a whole does not offer the
 algebraic structure that is fundamentally necessary to this approach.
-
-Another possiblity would be decryption and re-encryption of the
-ciphertext at the relay using fresh nonces. This will result in fresh,
-unlinkable ciphertexts. However, it requires the relay be able to
-decrypt using a shared secret between the originator of the message
-and the final recipient. In public key encryption schemes it is
-instead possible to perform rerandomization given only the public key
-of the recipient, without the need to decrypt the message
-first. Indeed it could be an integral part of the applications
-security goals that the relay does not learn the contents of
-ciphertexts.
 
 To address the issues outlined above we propose double hybrid public
 key encryption as a solution to practical, rerandomizable encryption
@@ -141,6 +139,45 @@ Decryption is only defined on level-2 ciphertexts:
           raise OpenError
         self.IncrementSeq()
         return pt
+        
+## Single-Shot Double HPKE
+HPKE Double encryption can already be implemented using the single-shot
+basic mode API provided by standard HPKE. We specify the following
+serialization/deserialization scheme for HPKE ciphertexts:
+
+```text
+    def SerializeHPKECt(enc, ct):
+        return I2OSP(len(enc), 4) || I2OSP(len(ct), 4) || enc || ct
+        
+    def DeserializeHPKECt(bytes):
+        len_enc = OS2IP(bytes[0..4])
+        len_ct = OS2IP(bytes[4..8])
+        return (enc = bytes[8..8 + len_enc], ct = bytes [8 + len_enc ... 8 + len_enc + len_ct])
+```
+
+### Level-1 Encryption
+```text
+    def SealDouble(pkR, info, aad, pt, ...):
+        enc, ct = SealBase(pkR, info, aad, ptxt, ...)
+        hpke_serialized = SerializeHPKECt(enc,ct)
+        return hpke_serialized
+```
+
+### Level-2 Encryption
+```text
+    def ReSealDouble(pkR, info, aad, hpke_serialized, ...):
+        enc, ct = SealBase(pkR, info, aad, hpke_serialized, ...)
+        return (enc, ct)
+```
+
+### Decryption
+```text
+    def OpenDouble(enc, skR, info-1, aad-1, info-2, aad-2, ct, ...):
+        hpke_serialized = OpenBase(enc, skR, info-2, aad-2, ct, ...)
+        (enc_inner, ct_inner) = DeserializeHPKECt(hpke_serialized)
+        pt = OpenBase(enc_inner, skR, info-1, aad-1, ct_inner, ...)
+        return pt
+```
 
 # Security Notions
 
