@@ -1,16 +1,18 @@
 //! ## Join Conversion
 use hacspec_lib::Randomness;
-use libcrux::hpke::{kem::Nsk, HPKEConfig, HpkePublicKey, HpkeSeal};
-use oprf::coprf::{
-    coprf_online::{blind_convert, prepare_blind_convert},
-    coprf_setup::{derive_key, BlindingPublicKey},
-};
+use libcrux::hpke::HpkePublicKey;
+use oprf::coprf::coprf_setup::BlindingPublicKey;
 
 use crate::{
+    data_transformations::{blind_pseudonymized_datum, convert_blinded_datum},
+    data_types::{
+        BlindedPseudonymizedDatum, BlindedPseudonymizedHandle, DataValue, EncryptedDataValue,
+        FinalizedPseudonym, PseudonymizedDatum,
+    },
     error::Error,
     setup::{ConverterContext, StoreContext},
     table::{BlindTable, Column, ConvertedTable, PseudonymizedTable},
-    SerializedHPKE, SECPAR_BYTES,
+    SECPAR_BYTES,
 };
 
 /// ### Preparation
@@ -60,8 +62,8 @@ use crate::{
 ///     return blind_tables
 /// ```
 pub fn prepare_join_conversion(
-    origin_context: &StoreContext,
-    bpk_target: BlindingPublicKey,
+    store_context: &StoreContext,
+    bpk_receiver: BlindingPublicKey,
     ek_receiver: &HpkePublicKey,
     pseudonymized_tables: Vec<PseudonymizedTable>,
     randomness: &mut Randomness,
@@ -72,24 +74,25 @@ pub fn prepare_join_conversion(
         let mut blind_column_data = Vec::new();
 
         for (pseudonym, value) in table.column().data() {
-            let raw_pseudonym = origin_context.recover_raw_pseudonym(pseudonym)?;
-            let blinded_pseudonym = prepare_blind_convert(bpk_target, raw_pseudonym, randomness)?;
+            let pseudonymized_datum = PseudonymizedDatum {
+                handle: FinalizedPseudonym(pseudonym),
+                data_value: DataValue {
+                    attribute_name: table.column().attribute(),
+                    value: value,
+                },
+            };
+            let blinded_pseudonymized_datum = blind_pseudonymized_datum(
+                &store_context,
+                &bpk_receiver,
+                &ek_receiver,
+                &pseudonymized_datum,
+                randomness,
+            )?;
 
-            let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
-            let encrypted_value = SerializedHPKE::from_hpke_ct(&HpkeSeal(
-                crate::HPKE_CONF,
-                ek_receiver,
-                b"Level-1",
-                b"",
-                &value,
-                None,
-                None,
-                None,
-                randomness.bytes(Nsk(kem))?.to_vec(),
-            )?)
-            .to_bytes();
-
-            blind_column_data.push((blinded_pseudonym, encrypted_value));
+            blind_column_data.push((
+                blinded_pseudonymized_datum.handle.0,
+                blinded_pseudonymized_datum.data_value.value,
+            ));
         }
 
         let mut blind_column = Column::new(table.column().attribute(), blind_column_data);
@@ -118,47 +121,40 @@ pub fn join_identifier(identifier: String) -> String {
 ///
 pub fn join_conversion(
     converter_context: &ConverterContext,
-    bpk_target: BlindingPublicKey,
-    ek_target: &HpkePublicKey,
+    bpk_receiver: BlindingPublicKey,
+    ek_receiver: &HpkePublicKey,
     tables: Vec<BlindTable>,
     randomness: &mut Randomness,
 ) -> Result<Vec<ConvertedTable>, Error> {
     let mut converted_tables = Vec::new();
-    let join_conversion_key = derive_key(
-        &converter_context.coprf_context,
-        randomness.bytes(SECPAR_BYTES)?,
-    )?;
+    let conversion_target = randomness.bytes(SECPAR_BYTES)?.to_owned();
 
     for table in tables {
         for blind_column in table.columns() {
             let attribute = blind_column.attribute();
-            let pseudonym_key = derive_key(&converter_context.coprf_context, attribute.as_bytes())?;
 
             let mut converted_data = Vec::new();
             for (blind_identifier, encrypted_value) in blind_column.data() {
-                let blind_pseudonym = blind_convert(
-                    bpk_target,
-                    pseudonym_key,
-                    join_conversion_key,
-                    blind_identifier,
+                let blinded_pseudonymized_datum = BlindedPseudonymizedDatum {
+                    handle: BlindedPseudonymizedHandle(blind_identifier),
+                    data_value: EncryptedDataValue {
+                        attribute_name: attribute.clone(),
+                        value: encrypted_value,
+                    },
+                };
+                let blinded_pseudonymized_datum = convert_blinded_datum(
+                    &converter_context.coprf_context,
+                    &bpk_receiver,
+                    &ek_receiver,
+                    &conversion_target,
+                    &blinded_pseudonymized_datum,
                     randomness,
                 )?;
 
-                let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
-                let encrypted_value = SerializedHPKE::from_hpke_ct(&HpkeSeal(
-                    crate::HPKE_CONF,
-                    ek_target,
-                    b"Level-2",
-                    b"",
-                    &encrypted_value,
-                    None,
-                    None,
-                    None,
-                    randomness.bytes(Nsk(kem))?.to_vec(),
-                )?)
-                .to_bytes();
-
-                converted_data.push((blind_pseudonym, encrypted_value));
+                converted_data.push((
+                    blinded_pseudonymized_datum.handle.0,
+                    blinded_pseudonymized_datum.data_value.value,
+                ));
             }
             let mut converted_table_column = Column::new(attribute.clone(), converted_data);
             converted_table_column.sort();

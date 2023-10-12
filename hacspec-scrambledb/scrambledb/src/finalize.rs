@@ -1,11 +1,11 @@
 //! # Conversion Finalization
-use libcrux::hpke::HpkeOpen;
 
 use crate::{
+    data_transformations::finalize_blinded_datum,
+    data_types::{BlindedPseudonymizedDatum, BlindedPseudonymizedHandle, EncryptedDataValue},
     error::Error,
     setup::StoreContext,
     table::{Column, ConvertedTable, PseudonymizedTable},
-    SerializedHPKE,
 };
 
 /// The result of a split or join conversion is a set of blinded
@@ -26,34 +26,21 @@ pub fn finalize_conversion(
         let mut pseudonymized_column_data = Vec::new();
 
         for (blinded_pseudonym, encrypted_value) in blinded_table.column().data() {
-            let pseudonym = store_context.finalize_pseudonym(blinded_pseudonym)?;
+            let blinded_pseudonymized_datum = BlindedPseudonymizedDatum {
+                handle: BlindedPseudonymizedHandle(blinded_pseudonym),
+                data_value: EncryptedDataValue {
+                    attribute_name: blinded_table.column().attribute(),
+                    value: encrypted_value,
+                },
+            };
 
-            let outer_encryption = SerializedHPKE::from_bytes(&encrypted_value).to_hpke_ct();
+            let pseudonymized_datum =
+                finalize_blinded_datum(&store_context, &blinded_pseudonymized_datum)?;
 
-            let inner_encryption = SerializedHPKE::from_bytes(&HpkeOpen(
-                crate::HPKE_CONF,
-                &outer_encryption,
-                &store_context.hpke_sk,
-                b"Level-2",
-                b"",
-                None,
-                None,
-                None,
-            )?)
-            .to_hpke_ct();
-
-            let value = HpkeOpen(
-                crate::HPKE_CONF,
-                &inner_encryption,
-                &store_context.hpke_sk,
-                b"Level-1",
-                b"",
-                None,
-                None,
-                None,
-            )?;
-
-            pseudonymized_column_data.push((pseudonym, value));
+            pseudonymized_column_data.push((
+                pseudonymized_datum.handle.0,
+                pseudonymized_datum.data_value.value,
+            ));
         }
 
         let mut pseudonymized_column = Column::new(

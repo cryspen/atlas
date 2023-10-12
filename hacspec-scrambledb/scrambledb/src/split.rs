@@ -1,27 +1,21 @@
 //! # Split Conversion
 use hacspec_lib::Randomness;
-use libcrux::hpke::{kem::Nsk, HPKEConfig, HpkePublicKey, HpkeSeal};
-use oprf::coprf::{
-    coprf_online::{blind, blind_evaluate},
-    coprf_setup::{derive_key, BlindingPublicKey},
-};
+use libcrux::hpke::HpkePublicKey;
+use oprf::coprf::coprf_setup::BlindingPublicKey;
 
 use crate::{
+    data_transformations::{blind_identifiable_datum, pseudonymize_blinded_datum},
+    data_types::{BlindedIdentifiableDatum, DataValue, EncryptedDataValue, IdentifiableDatum},
     error::Error,
     setup::ConverterContext,
     table::{BlindTable, Column, ConvertedTable, PlainTable},
-    SerializedHPKE,
 };
 
-pub fn split_identifier(identifier: String, attribute: String) -> String {
+fn split_identifier(identifier: String, attribute: String) -> String {
     let mut split_identifier = identifier;
     split_identifier.push('-');
     split_identifier.push_str(&attribute);
     split_identifier
-}
-
-pub fn split_conversion_context() -> Vec<u8> {
-    b"Split-".to_vec()
 }
 
 /// ## Preparation
@@ -44,29 +38,17 @@ pub fn prepare_split_conversion(
         let mut blinded_column_data = Vec::new();
 
         for (plaintext_id, plaintext_value) in column.data() {
-            let blinded_id = blind(
-                bpk_receiver,
-                plaintext_id.as_bytes(),
-                split_conversion_context(),
-                randomness,
-            )?;
+            let datum = IdentifiableDatum {
+                handle: plaintext_id,
+                data_value: DataValue {
+                    attribute_name: attribute.clone(),
+                    value: plaintext_value,
+                },
+            };
+            let blinded_datum =
+                blind_identifiable_datum(&bpk_receiver, ek_receiver, &datum, randomness)?;
 
-            let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
-
-            let encrypted_value = SerializedHPKE::from_hpke_ct(&HpkeSeal(
-                crate::HPKE_CONF,
-                ek_receiver,
-                b"Level-1",
-                b"",
-                &plaintext_value,
-                None,
-                None,
-                None,
-                randomness.bytes(Nsk(kem))?.to_vec(),
-            )?)
-            .to_bytes();
-
-            blinded_column_data.push((blinded_id, encrypted_value));
+            blinded_column_data.push((blinded_datum.handle.0, blinded_datum.data_value.value));
         }
         let mut blinded_column = Column::new(attribute, blinded_column_data);
         blinded_column.sort();
@@ -101,29 +83,28 @@ pub fn split_conversion(
     for blinded_column in blinded_table.columns() {
         let attribute = blinded_column.attribute();
 
-        let conversion_key = derive_key(&converter_context.coprf_context, attribute.as_bytes())?;
-
         let mut converted_column_data = Vec::new();
         for (blind_identifier, encrypted_value) in blinded_column.data() {
-            let blinded_pseudonym =
-                blind_evaluate(conversion_key, bpk_receiver, blind_identifier, randomness)?;
+            let blinded_datum = BlindedIdentifiableDatum {
+                handle: crate::data_types::BlindedIdentifiableHandle(blind_identifier),
+                data_value: EncryptedDataValue {
+                    attribute_name: attribute.clone(),
+                    value: encrypted_value,
+                },
+            };
 
-            let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
-            let hpke_ct = HpkeSeal(
-                crate::HPKE_CONF,
+            let blinded_pseudonymized_datum = pseudonymize_blinded_datum(
+                &converter_context.coprf_context,
+                &bpk_receiver,
                 ek_receiver,
-                b"Level-2",
-                b"",
-                &encrypted_value,
-                None,
-                None,
-                None,
-                randomness.bytes(Nsk(kem))?.to_vec(),
+                &blinded_datum,
+                randomness,
             )?;
 
-            let encrypted_value = SerializedHPKE::from_hpke_ct(&hpke_ct).to_bytes();
-
-            converted_column_data.push((blinded_pseudonym, encrypted_value));
+            converted_column_data.push((
+                blinded_pseudonymized_datum.handle.0,
+                blinded_pseudonymized_datum.data_value.value,
+            ));
         }
 
         let mut converted_column = Column::new(attribute.clone(), converted_column_data);
