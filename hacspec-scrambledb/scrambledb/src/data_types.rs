@@ -1,4 +1,3 @@
-pub struct RawPseudonym(oprf::coprf::coprf_online::Output);
 pub struct FinalizedPseudonym(pub(crate) [u8; 64]);
 pub struct BlindedIdentifiableHandle(pub(crate) oprf::coprf::coprf_online::BlindInput);
 pub struct BlindedPseudonymizedHandle(pub(crate) oprf::coprf::coprf_online::BlindOutput);
