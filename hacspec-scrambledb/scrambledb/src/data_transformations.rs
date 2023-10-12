@@ -15,13 +15,26 @@ fn hpke_level_1_info() -> Vec<u8> {
 fn hpke_level_2_info() -> Vec<u8> {
     b"Level-2".to_vec()
 }
+
+/// Blind an identifiable datum as a first step in initial pseudonym
+/// generation.
+///
+/// Inputs:
+/// - bpk: Receiver's blinding public key
+/// - ek: Receiver's public encryption key
+/// - datum: Identifiable datum
+/// - randomness: Random bytes
+///
+/// Output:
+/// [BlindedIdentifiableDatum] such that the datum's handle is blinded for
+/// CoPRF evaluation and the datum's value is level-1 encrypted.
 pub fn blind_identifiable_datum(
     bpk: &BlindingPublicKey,
     ek: &[u8],
     datum: &IdentifiableDatum,
     randomness: &mut Randomness,
 ) -> Result<BlindedIdentifiableDatum, Error> {
-    // Blind orthonym towards data lake
+    // Blind orthonym towards receiver
     let blinded_handle = BlindedIdentifiableHandle(oprf::coprf::coprf_online::blind(
         *bpk,
         datum.handle.as_bytes(),
@@ -53,6 +66,20 @@ pub fn blind_identifiable_datum(
     })
 }
 
+/// Blind a pseudonymous datum as a first step in pseudonym
+/// conversion.
+///
+/// Inputs:
+/// - store_context: The data store's long term private state including the pseudonym
+///   hardening keys
+/// - bpk: Receiver's blinding public key
+/// - ek: Receiver's public encryption key
+/// - datum: Pseudonymized datum
+/// - randomness: Random bytes
+///
+/// Output:
+/// [BlindedPseudonymizedDatum] such that the datum's handle is blinded for
+/// CoPRF conversion and the datum's value is level-1 encrypted.
 pub fn blind_pseudonymized_datum(
     store_context: &StoreContext,
     bpk: &BlindingPublicKey,
@@ -91,6 +118,20 @@ pub fn blind_pseudonymized_datum(
         data_value: encrypted_data_value,
     })
 }
+
+/// Obliviously pseudonymmize a blinded identifiable datum.
+///
+/// Inputs:
+/// - coprf_context: The converter's CoPRF evaluation context
+/// - bpk: The receiver's blinding public key
+/// - ek: The receiver's public encryption key
+/// - datum: A blinded datum output by [blind_identifiable_datum]
+/// - randomness: Random bytes
+///
+/// Output:
+/// [BlindedPseudonymizedDatum] such that the datum's blinded handle has been
+/// obliviously evaluated to a pseudonym and the datum's value has been level-2
+/// encrypted towards the receiver.
 pub fn pseudonymize_blinded_datum(
     coprf_context: &oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
@@ -132,6 +173,19 @@ pub fn pseudonymize_blinded_datum(
     Ok(BlindedPseudonymizedDatum { handle, data_value })
 }
 
+/// Obliviously convert a blinded pseudonymous datum to a given target pseudonym key.
+///
+/// Inputs:
+/// - coprf_context: The Converters CoPRF evaluation context
+/// - bpk: The receiver's blinding public key
+/// - ek: The receiver's public encryption key
+/// - conversion_target: Target pseudonym key identifier
+/// - randomness: Random bytes
+///
+/// Output:
+/// [BlindedPseudonymizedDatum] such that the datum's pseudonymous handle is
+/// converted to the target pseudonym key and the datum's value is level-2
+/// encrypted towards the receiver.
 pub fn convert_blinded_datum(
     coprf_context: &oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
@@ -177,6 +231,18 @@ pub fn convert_blinded_datum(
     Ok(BlindedPseudonymizedDatum { handle, data_value })
 }
 
+/// Finalize a blinded pseudonymous datum for storage or analysis.
+/// 
+/// Inputs:
+/// - store_context: The data store's long term private state including the
+///   receiver's coPRF unblinding key, private decryption key, as well as
+///   pseudonym hardening key 
+/// - datum: blinded pseudonymous datum output by [convert_blinded_datum] or
+///   [pseudonymize_blinded_datum]
+/// 
+/// Output:
+/// [PseudonymizedDatum] such that the datum's pseudonymous handle has been
+/// unblinded and hardened and the datum's value has been decrypted.
 pub fn finalize_blinded_datum(
     store_context: &StoreContext,
     datum: &BlindedPseudonymizedDatum,
