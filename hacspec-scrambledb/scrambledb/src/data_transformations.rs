@@ -232,14 +232,14 @@ pub fn convert_blinded_datum(
 }
 
 /// Finalize a blinded pseudonymous datum for storage or analysis.
-/// 
+///
 /// Inputs:
 /// - store_context: The data store's long term private state including the
 ///   receiver's coPRF unblinding key, private decryption key, as well as
-///   pseudonym hardening key 
+///   pseudonym hardening key
 /// - datum: blinded pseudonymous datum output by [convert_blinded_datum] or
 ///   [pseudonymize_blinded_datum]
-/// 
+///
 /// Output:
 /// [PseudonymizedDatum] such that the datum's pseudonymous handle has been
 /// unblinded and hardened and the datum's value has been decrypted.
