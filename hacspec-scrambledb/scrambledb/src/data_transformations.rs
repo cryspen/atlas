@@ -8,6 +8,13 @@ fn pseudonymization_context_string() -> Vec<u8> {
     b"CoPRF-Context-Pseudonymization".to_vec()
 }
 
+fn hpke_level_1_info() -> Vec<u8> {
+    b"Level-1".to_vec()
+}
+
+fn hpke_level_2_info() -> Vec<u8> {
+    b"Level-2".to_vec()
+}
 pub fn blind_identifiable_datum(
     bpk: &BlindingPublicKey,
     ek: &[u8],
@@ -22,14 +29,14 @@ pub fn blind_identifiable_datum(
         randomness,
     )?);
 
-    // Encrypt data towards data lake
+    // Encrypt data towards receiver
     let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
     let encrypted_data_value = EncryptedDataValue {
         attribute_name: datum.data_value.attribute_name.clone(),
         value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
             crate::HPKE_CONF,
             ek,
-            b"Level-1",
+            &hpke_level_1_info(),
             b"",
             &datum.data_value.value,
             None,
@@ -111,7 +118,7 @@ pub fn pseudonymize_blinded_datum(
         value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
             crate::HPKE_CONF,
             ek,
-            b"Level-2",
+            &hpke_level_2_info(),
             b"",
             &datum.data_value.value,
             None,
@@ -156,7 +163,7 @@ pub fn convert_blinded_datum(
         value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
             crate::HPKE_CONF,
             ek,
-            b"Level-2",
+            &hpke_level_2_info(),
             b"",
             &datum.data_value.value,
             None,
