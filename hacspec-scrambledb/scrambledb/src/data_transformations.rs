@@ -92,7 +92,7 @@ pub fn blind_pseudonymized_datum(
     })
 }
 pub fn pseudonymize_blinded_datum(
-    coprf_context: oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
+    coprf_context: &oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
     ek: &[u8],
     datum: &BlindedIdentifiableDatum,
@@ -133,7 +133,7 @@ pub fn pseudonymize_blinded_datum(
 }
 
 pub fn convert_blinded_datum(
-    coprf_context: oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
+    coprf_context: &oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
     ek: &[u8],
     conversion_target: &[u8],
