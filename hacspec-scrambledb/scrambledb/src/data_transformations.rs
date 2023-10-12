@@ -46,6 +46,44 @@ pub fn blind_identifiable_datum(
     })
 }
 
+pub fn blind_pseudonymized_datum(
+    store_context: &StoreContext,
+    bpk: &BlindingPublicKey,
+    ek: &[u8],
+    datum: &PseudonymizedDatum,
+    randomness: &mut Randomness,
+) -> Result<BlindedPseudonymizedDatum, Error> {
+    // Blind recovered raw pseudonym towards receiver
+    let blinded_handle =
+        BlindedPseudonymizedHandle(oprf::coprf::coprf_online::prepare_blind_convert(
+            *bpk,
+            store_context.recover_raw_pseudonym(datum.handle.0)?,
+            randomness,
+        )?);
+
+    // Encrypt data towards receiver
+    let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
+    let encrypted_data_value = EncryptedDataValue {
+        attribute_name: datum.data_value.attribute_name.clone(),
+        value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
+            crate::HPKE_CONF,
+            ek,
+            &hpke_level_1_info(),
+            b"",
+            &datum.data_value.value,
+            None,
+            None,
+            None,
+            randomness.bytes(Nsk(kem))?.to_vec(),
+        )?)
+        .to_bytes(),
+    };
+
+    Ok(BlindedPseudonymizedDatum {
+        handle: blinded_handle,
+        data_value: encrypted_data_value,
+    })
+}
 pub fn pseudonymize_blinded_datum(
     coprf_context: oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
