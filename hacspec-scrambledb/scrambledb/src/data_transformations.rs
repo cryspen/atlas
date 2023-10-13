@@ -16,17 +16,14 @@ use oprf::coprf::{
 
 use crate::{data_types::*, error::Error, setup::StoreContext, SerializedHPKE};
 
-fn pseudonymization_context_string() -> Vec<u8> {
-    b"CoPRF-Context-Pseudonymization".to_vec()
-}
+/// CoPRF context string for domain separation of intial pseudonymization.
+const PSEUDONYMIZATION_CONTEXT: &[u8] = b"CoPRF-Context-Pseudonymization";
 
-fn hpke_level_1_info() -> Vec<u8> {
-    b"Level-1".to_vec()
-}
+/// HPKE double encryption level 1 `info` string.
+const HPKE_LEVEL_1_INFO: &[u8] = b"Hpke-Level-1";
 
-fn hpke_level_2_info() -> Vec<u8> {
-    b"Level-2".to_vec()
-}
+/// HPKE double encryption level 2 `info` string.
+const HPKE_LEVEL_2_INFO: &[u8] = b"Hpke-Level-2";
 
 /// Blind an identifiable datum as a first step in initial pseudonym
 /// generation.
@@ -50,7 +47,7 @@ pub fn blind_identifiable_datum(
     let blinded_handle = BlindedIdentifiableHandle(blind(
         *bpk,
         datum.handle.as_bytes(),
-        pseudonymization_context_string(),
+        PSEUDONYMIZATION_CONTEXT.to_vec(),
         randomness,
     )?);
 
@@ -61,7 +58,7 @@ pub fn blind_identifiable_datum(
         value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
             crate::HPKE_CONF,
             ek,
-            &hpke_level_1_info(),
+            HPKE_LEVEL_1_INFO,
             b"",
             &datum.data_value.value,
             None,
@@ -113,7 +110,7 @@ pub fn blind_pseudonymized_datum(
         value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
             crate::HPKE_CONF,
             ek,
-            &hpke_level_1_info(),
+            HPKE_LEVEL_1_INFO,
             b"",
             &datum.data_value.value,
             None,
@@ -162,7 +159,7 @@ pub fn pseudonymize_blinded_datum(
         value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
             crate::HPKE_CONF,
             ek,
-            &hpke_level_2_info(),
+            HPKE_LEVEL_2_INFO,
             b"",
             &datum.data_value.value,
             None,
@@ -217,7 +214,7 @@ pub fn convert_blinded_datum(
         value: SerializedHPKE::from_hpke_ct(&HpkeSeal(
             crate::HPKE_CONF,
             ek,
-            &hpke_level_2_info(),
+            HPKE_LEVEL_2_INFO,
             b"",
             &datum.data_value.value,
             None,
@@ -255,7 +252,7 @@ pub fn finalize_blinded_datum(
         crate::HPKE_CONF,
         &outer_encryption,
         &store_context.hpke_sk,
-        b"Level-2",
+        HPKE_LEVEL_2_INFO,
         b"",
         None,
         None,
@@ -269,7 +266,7 @@ pub fn finalize_blinded_datum(
             crate::HPKE_CONF,
             &inner_encryption,
             &store_context.hpke_sk,
-            b"Level-1",
+            HPKE_LEVEL_1_INFO,
             b"",
             None,
             None,
