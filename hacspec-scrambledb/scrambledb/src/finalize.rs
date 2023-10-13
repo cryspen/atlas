@@ -2,7 +2,7 @@
 
 use crate::{
     data_transformations::finalize_blinded_datum,
-    data_types::{BlindedPseudonymizedDatum, BlindedPseudonymizedHandle, EncryptedDataValue},
+    data_types::{BlindedPseudonymizedData, BlindedPseudonymizedHandle, EncryptedDataValue},
     error::Error,
     setup::StoreContext,
     table::{Column, ConvertedTable, PseudonymizedTable},
@@ -26,7 +26,7 @@ pub fn finalize_conversion(
         let mut pseudonymized_column_data = Vec::new();
 
         for (blinded_pseudonym, encrypted_value) in blinded_table.column().data() {
-            let blinded_pseudonymized_datum = BlindedPseudonymizedDatum {
+            let blinded_pseudonymized_datum = BlindedPseudonymizedData {
                 handle: BlindedPseudonymizedHandle(blinded_pseudonym),
                 data_value: EncryptedDataValue {
                     attribute_name: blinded_table.column().attribute(),

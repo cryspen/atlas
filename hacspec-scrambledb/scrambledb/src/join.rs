@@ -6,8 +6,8 @@ use oprf::coprf::coprf_setup::BlindingPublicKey;
 use crate::{
     data_transformations::{blind_pseudonymized_datum, convert_blinded_datum},
     data_types::{
-        BlindedPseudonymizedDatum, BlindedPseudonymizedHandle, DataValue, EncryptedDataValue,
-        FinalizedPseudonym, PseudonymizedDatum,
+        BlindedPseudonymizedData, BlindedPseudonymizedHandle, DataValue, EncryptedDataValue,
+        FinalizedPseudonym, PseudonymizedData,
     },
     error::Error,
     setup::{ConverterContext, StoreContext},
@@ -74,7 +74,7 @@ pub fn prepare_join_conversion(
         let mut blind_column_data = Vec::new();
 
         for (pseudonym, value) in table.column().data() {
-            let pseudonymized_datum = PseudonymizedDatum {
+            let pseudonymized_datum = PseudonymizedData {
                 handle: FinalizedPseudonym(pseudonym),
                 data_value: DataValue {
                     attribute_name: table.column().attribute(),
@@ -135,7 +135,7 @@ pub fn join_conversion(
 
             let mut converted_data = Vec::new();
             for (blind_identifier, encrypted_value) in blind_column.data() {
-                let blinded_pseudonymized_datum = BlindedPseudonymizedDatum {
+                let blinded_pseudonymized_datum = BlindedPseudonymizedData {
                     handle: BlindedPseudonymizedHandle(blind_identifier),
                     data_value: EncryptedDataValue {
                         attribute_name: attribute.clone(),

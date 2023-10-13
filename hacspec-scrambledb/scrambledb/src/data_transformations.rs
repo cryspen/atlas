@@ -31,9 +31,9 @@ fn hpke_level_2_info() -> Vec<u8> {
 pub fn blind_identifiable_datum(
     bpk: &BlindingPublicKey,
     ek: &[u8],
-    datum: &IdentifiableDatum,
+    datum: &IdentifiableData,
     randomness: &mut Randomness,
-) -> Result<BlindedIdentifiableDatum, Error> {
+) -> Result<BlindedIdentifiableData, Error> {
     // Blind orthonym towards receiver
     let blinded_handle = BlindedIdentifiableHandle(oprf::coprf::coprf_online::blind(
         *bpk,
@@ -60,7 +60,7 @@ pub fn blind_identifiable_datum(
         .to_bytes(),
     };
 
-    Ok(BlindedIdentifiableDatum {
+    Ok(BlindedIdentifiableData {
         handle: blinded_handle,
         data_value: encrypted_data_value,
     })
@@ -84,9 +84,9 @@ pub fn blind_pseudonymized_datum(
     store_context: &StoreContext,
     bpk: &BlindingPublicKey,
     ek: &[u8],
-    datum: &PseudonymizedDatum,
+    datum: &PseudonymizedData,
     randomness: &mut Randomness,
-) -> Result<BlindedPseudonymizedDatum, Error> {
+) -> Result<BlindedPseudonymizedData, Error> {
     // Blind recovered raw pseudonym towards receiver
     let blinded_handle =
         BlindedPseudonymizedHandle(oprf::coprf::coprf_online::prepare_blind_convert(
@@ -113,7 +113,7 @@ pub fn blind_pseudonymized_datum(
         .to_bytes(),
     };
 
-    Ok(BlindedPseudonymizedDatum {
+    Ok(BlindedPseudonymizedData {
         handle: blinded_handle,
         data_value: encrypted_data_value,
     })
@@ -136,9 +136,9 @@ pub fn pseudonymize_blinded_datum(
     coprf_context: &oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
     ek: &[u8],
-    datum: &BlindedIdentifiableDatum,
+    datum: &BlindedIdentifiableData,
     randomness: &mut Randomness,
-) -> Result<BlindedPseudonymizedDatum, Error> {
+) -> Result<BlindedPseudonymizedData, Error> {
     let key = oprf::coprf::coprf_setup::derive_key(
         &coprf_context,
         datum.data_value.attribute_name.as_bytes(),
@@ -170,7 +170,7 @@ pub fn pseudonymize_blinded_datum(
         .to_bytes(),
     };
 
-    Ok(BlindedPseudonymizedDatum { handle, data_value })
+    Ok(BlindedPseudonymizedData { handle, data_value })
 }
 
 /// Obliviously convert a blinded pseudonymous datum to a given target pseudonym key.
@@ -191,9 +191,9 @@ pub fn convert_blinded_datum(
     bpk: &BlindingPublicKey,
     ek: &[u8],
     conversion_target: &[u8],
-    datum: &BlindedPseudonymizedDatum,
+    datum: &BlindedPseudonymizedData,
     randomness: &mut Randomness,
-) -> Result<BlindedPseudonymizedDatum, Error> {
+) -> Result<BlindedPseudonymizedData, Error> {
     let key_from = oprf::coprf::coprf_setup::derive_key(
         &coprf_context,
         datum.data_value.attribute_name.as_bytes(),
@@ -228,7 +228,7 @@ pub fn convert_blinded_datum(
         .to_bytes(),
     };
 
-    Ok(BlindedPseudonymizedDatum { handle, data_value })
+    Ok(BlindedPseudonymizedData { handle, data_value })
 }
 
 /// Finalize a blinded pseudonymous datum for storage or analysis.
@@ -245,8 +245,8 @@ pub fn convert_blinded_datum(
 /// unblinded and hardened and the datum's value has been decrypted.
 pub fn finalize_blinded_datum(
     store_context: &StoreContext,
-    datum: &BlindedPseudonymizedDatum,
-) -> Result<PseudonymizedDatum, Error> {
+    datum: &BlindedPseudonymizedData,
+) -> Result<PseudonymizedData, Error> {
     let handle = FinalizedPseudonym(store_context.finalize_pseudonym(datum.handle.0)?);
 
     let outer_encryption = SerializedHPKE::from_bytes(&datum.data_value.value).to_hpke_ct();
@@ -277,5 +277,5 @@ pub fn finalize_blinded_datum(
         )?,
     };
 
-    Ok(PseudonymizedDatum { handle, data_value })
+    Ok(PseudonymizedData { handle, data_value })
 }
