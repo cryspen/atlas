@@ -28,32 +28,32 @@ pub struct EncryptedDataValue {
     pub(crate) attribute_name: String,
 }
 
-pub struct IdentifiableDatum {
 /// An identifiable piece of data.
+pub struct IdentifiableData {
     /// A plain text handle.
     pub(crate) handle: String,
     /// A plain text data value.
     pub(crate) data_value: DataValue,
 }
 
-pub struct BlindedIdentifiableDatum {
 /// The blinded version of an identifiable piece of data.
+pub struct BlindedIdentifiableData {
     /// A blinded plain text handle.
     pub(crate) handle: BlindedIdentifiableHandle,
     /// An encrypted data value.
     pub(crate) data_value: EncryptedDataValue,
 }
 
-pub struct BlindedPseudonymizedDatum {
 /// The blinded version of a pseudonymized piece of data.
+pub struct BlindedPseudonymizedData {
     /// A blinded pseudonymous handle.
     pub(crate) handle: BlindedPseudonymizedHandle,
     /// An encrypted data value.
     pub(crate) data_value: EncryptedDataValue,
 }
 
-pub struct PseudonymizedDatum {
 /// A pseudonymized piece of data.
+pub struct PseudonymizedData {
     /// A pseudonymous handle.
     pub(crate) handle: FinalizedPseudonym,
     /// A plain text data value.

@@ -5,7 +5,7 @@ use oprf::coprf::coprf_setup::BlindingPublicKey;
 
 use crate::{
     data_transformations::{blind_identifiable_datum, pseudonymize_blinded_datum},
-    data_types::{BlindedIdentifiableDatum, DataValue, EncryptedDataValue, IdentifiableDatum},
+    data_types::{BlindedIdentifiableData, DataValue, EncryptedDataValue, IdentifiableData},
     error::Error,
     setup::ConverterContext,
     table::{BlindTable, Column, ConvertedTable, PlainTable},
@@ -38,7 +38,7 @@ pub fn prepare_split_conversion(
         let mut blinded_column_data = Vec::new();
 
         for (plaintext_id, plaintext_value) in column.data() {
-            let datum = IdentifiableDatum {
+            let datum = IdentifiableData {
                 handle: plaintext_id,
                 data_value: DataValue {
                     attribute_name: attribute.clone(),
@@ -85,7 +85,7 @@ pub fn split_conversion(
 
         let mut converted_column_data = Vec::new();
         for (blind_identifier, encrypted_value) in blinded_column.data() {
-            let blinded_datum = BlindedIdentifiableDatum {
+            let blinded_datum = BlindedIdentifiableData {
                 handle: crate::data_types::BlindedIdentifiableHandle(blind_identifier),
                 data_value: EncryptedDataValue {
                     attribute_name: attribute.clone(),
