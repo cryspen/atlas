@@ -27,8 +27,8 @@ pub fn finalize_conversion(
 
         for (blinded_pseudonym, encrypted_value) in blinded_table.column().data() {
             let blinded_pseudonymized_datum = BlindedPseudonymizedData {
-                handle: BlindedPseudonymizedHandle(blinded_pseudonym),
-                data_value: EncryptedDataValue {
+                blinded_handle: BlindedPseudonymizedHandle(blinded_pseudonym),
+                encrypted_data_value: EncryptedDataValue {
                     attribute_name: blinded_table.column().attribute(),
                     value: encrypted_value,
                     encryption_level: 2u8,

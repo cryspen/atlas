@@ -48,7 +48,10 @@ pub fn prepare_split_conversion(
             let blinded_datum =
                 blind_identifiable_datum(&bpk_receiver, ek_receiver, &datum, randomness)?;
 
-            blinded_column_data.push((blinded_datum.handle.0, blinded_datum.data_value.value));
+            blinded_column_data.push((
+                blinded_datum.blinded_handle.0,
+                blinded_datum.encrypted_data_value.value,
+            ));
         }
         let mut blinded_column = Column::new(attribute, blinded_column_data);
         blinded_column.sort();
@@ -86,8 +89,8 @@ pub fn split_conversion(
         let mut converted_column_data = Vec::new();
         for (blind_identifier, encrypted_value) in blinded_column.data() {
             let blinded_datum = BlindedIdentifiableData {
-                handle: crate::data_types::BlindedIdentifiableHandle(blind_identifier),
-                data_value: EncryptedDataValue {
+                blinded_handle: crate::data_types::BlindedIdentifiableHandle(blind_identifier),
+                encrypted_data_value: EncryptedDataValue {
                     attribute_name: attribute.clone(),
                     value: encrypted_value,
                     encryption_level: 1u8,
@@ -103,8 +106,8 @@ pub fn split_conversion(
             )?;
 
             converted_column_data.push((
-                blinded_pseudonymized_datum.handle.0,
-                blinded_pseudonymized_datum.data_value.value,
+                blinded_pseudonymized_datum.blinded_handle.0,
+                blinded_pseudonymized_datum.encrypted_data_value.value,
             ));
         }
 

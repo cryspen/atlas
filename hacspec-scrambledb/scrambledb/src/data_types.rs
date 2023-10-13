@@ -44,17 +44,17 @@ pub struct IdentifiableData {
 /// The blinded version of an identifiable piece of data.
 pub struct BlindedIdentifiableData {
     /// A blinded plain text handle.
-    pub(crate) handle: BlindedIdentifiableHandle,
+    pub(crate) blinded_handle: BlindedIdentifiableHandle,
     /// An encrypted data value.
-    pub(crate) data_value: EncryptedDataValue,
+    pub(crate) encrypted_data_value: EncryptedDataValue,
 }
 
 /// The blinded version of a pseudonymized piece of data.
 pub struct BlindedPseudonymizedData {
     /// A blinded pseudonymous handle.
-    pub(crate) handle: BlindedPseudonymizedHandle,
+    pub(crate) blinded_handle: BlindedPseudonymizedHandle,
     /// An encrypted data value.
-    pub(crate) data_value: EncryptedDataValue,
+    pub(crate) encrypted_data_value: EncryptedDataValue,
 }
 
 /// A pseudonymized piece of data.

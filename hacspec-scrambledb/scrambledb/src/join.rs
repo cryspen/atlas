@@ -90,8 +90,8 @@ pub fn prepare_join_conversion(
             )?;
 
             blind_column_data.push((
-                blinded_pseudonymized_datum.handle.0,
-                blinded_pseudonymized_datum.data_value.value,
+                blinded_pseudonymized_datum.blinded_handle.0,
+                blinded_pseudonymized_datum.encrypted_data_value.value,
             ));
         }
 
@@ -136,8 +136,8 @@ pub fn join_conversion(
             let mut converted_data = Vec::new();
             for (blind_identifier, encrypted_value) in blind_column.data() {
                 let blinded_pseudonymized_datum = BlindedPseudonymizedData {
-                    handle: BlindedPseudonymizedHandle(blind_identifier),
-                    data_value: EncryptedDataValue {
+                    blinded_handle: BlindedPseudonymizedHandle(blind_identifier),
+                    encrypted_data_value: EncryptedDataValue {
                         attribute_name: attribute.clone(),
                         value: encrypted_value,
                         encryption_level: 1u8,
@@ -153,8 +153,8 @@ pub fn join_conversion(
                 )?;
 
                 converted_data.push((
-                    blinded_pseudonymized_datum.handle.0,
-                    blinded_pseudonymized_datum.data_value.value,
+                    blinded_pseudonymized_datum.blinded_handle.0,
+                    blinded_pseudonymized_datum.encrypted_data_value.value,
                 ));
             }
             let mut converted_table_column = Column::new(attribute.clone(), converted_data);
