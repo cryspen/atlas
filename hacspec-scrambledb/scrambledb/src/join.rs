@@ -140,6 +140,7 @@ pub fn join_conversion(
                     data_value: EncryptedDataValue {
                         attribute_name: attribute.clone(),
                         value: encrypted_value,
+                        encryption_level: 1u8,
                     },
                 };
                 let blinded_pseudonymized_datum = convert_blinded_datum(

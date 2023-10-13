@@ -2,6 +2,7 @@
 pub enum Error {
     RandomnessError,
     CorruptedData,
+    InvalidInput,
 }
 
 impl From<oprf::Error> for Error {

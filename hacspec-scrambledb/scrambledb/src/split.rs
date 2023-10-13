@@ -90,6 +90,7 @@ pub fn split_conversion(
                 data_value: EncryptedDataValue {
                     attribute_name: attribute.clone(),
                     value: encrypted_value,
+                    encryption_level: 1u8,
                 },
             };
 

@@ -31,6 +31,7 @@ pub fn finalize_conversion(
                 data_value: EncryptedDataValue {
                     attribute_name: blinded_table.column().attribute(),
                     value: encrypted_value,
+                    encryption_level: 2u8,
                 },
             };
 

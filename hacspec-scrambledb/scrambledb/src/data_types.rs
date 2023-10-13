@@ -29,6 +29,8 @@ pub struct EncryptedDataValue {
     pub(crate) value: Vec<u8>,
     /// The name of the attribute the value belongs to.
     pub(crate) attribute_name: String,
+    /// The encryption level, as understood in terms of [crate::data_transformations::double_hpke].
+    pub(crate) encryption_level: u8,
 }
 
 /// An identifiable piece of data.
