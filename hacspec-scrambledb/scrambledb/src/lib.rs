@@ -269,6 +269,8 @@ pub mod setup;
 pub mod split;
 pub mod join;
 pub mod finalize;
+pub mod data_transformations;
+pub mod data_types;
 
 pub mod error;
 
@@ -277,5 +279,3 @@ pub mod wasm_demo;
 
 #[cfg(test)]
 mod test_util;
-mod data_transformations;
-mod data_types;
