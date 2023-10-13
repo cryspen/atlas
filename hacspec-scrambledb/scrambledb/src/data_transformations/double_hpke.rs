@@ -1,5 +1,6 @@
 //! This module defines HPKE-based double encryption and decryption for use in
-//! individual data tranformations as defined in [crate::data_transformations].
+//! individual data tranformations as defined in
+//! [`data_transformations`](crate::data_transformations).
 //!
 //! A plain text data value can be encrypted once to obtain a level-1
 //! encryption of the data value.
@@ -33,15 +34,15 @@ const HPKE_LEVEL_2_INFO: &[u8] = b"Hpke-Level-2";
 /// Level-1 encrypt a plain text data value.
 ///
 /// Inputs:
-/// - data_value: A plain text data value
-/// - ek: The receivers public encryption key
-/// - randomness: Random bytes
+/// - `data_value`: A plain text data value
+/// - `ek`: The receivers public encryption key
+/// - `randomness`: Random bytes
 ///
 /// Output:
 /// A level-1 encrypted data value.
 ///
 /// Raises:
-/// - CorruptedData: If the internal encryption fails.
+/// - `CorruptedData`: If the internal encryption fails.
 ///
 /// Panics:
 /// - on insufficient randomness
@@ -73,16 +74,16 @@ pub(crate) fn hpke_seal_level_1(
 /// Level-2 encrypt a level-1 encrypted data value.
 ///
 /// Inputs:
-/// - data_value: A level-1 encrypted data value
-/// - ek: The receivers public encryption key
-/// - randomness: Random bytes
+/// - `data_value`: A level-1 encrypted data value
+/// - `ek`: The receivers public encryption key
+/// - `randomness`: Random bytes
 ///
 /// Output:
 /// A level-2 encrypted data value.
 ///
 /// Raises:
-/// - InvalidInput: If the input data value is not level-1 encrypted.
-/// - CorruptedData: If the internal encryption fails.
+/// - `InvalidInput`: If the input data value is not level-1 encrypted.
+/// - `CorruptedData`: If the internal encryption fails.
 ///
 /// Panics:
 /// - on insufficient randomness
@@ -118,15 +119,15 @@ pub(crate) fn hpke_seal_level_2(
 /// Decrypt a level-2 encrypted data value.
 ///
 /// Inputs:
-/// - data_value: A Level-2 encrypted data value
-/// - sk: The receiver's decryption key
+/// - `data_value`: A Level-2 encrypted data value
+/// - `sk`: The receiver's decryption key
 ///
 /// Outputs:
 /// A plain text data value.
 ///
 /// Raises:
-/// - InvalidInput: If the input data value is not level-2 encrypted.
-/// - CorruptedData: If the internal decryption fails, e.g. because of
+/// - `InvalidInput`: If the input data value is not level-2 encrypted.
+/// - `CorruptedData`: If the internal decryption fails, e.g. because of
 ///   inconsistent level-1 and level-2 receivers.
 pub(crate) fn hpke_open_level_2(
     data_value: &EncryptedDataValue,
