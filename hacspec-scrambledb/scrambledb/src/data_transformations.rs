@@ -52,8 +52,8 @@ pub fn blind_identifiable_datum(
     let encrypted_data_value = hpke_seal_level_1(&datum.data_value, ek, randomness)?;
 
     Ok(BlindedIdentifiableData {
-        handle: blinded_handle,
-        data_value: encrypted_data_value,
+        blinded_handle,
+        encrypted_data_value,
     })
 }
 
@@ -89,8 +89,8 @@ pub fn blind_pseudonymized_datum(
     let encrypted_data_value = hpke_seal_level_1(&datum.data_value, ek, randomness)?;
 
     Ok(BlindedPseudonymizedData {
-        handle: blinded_handle,
-        data_value: encrypted_data_value,
+        blinded_handle,
+        encrypted_data_value,
     })
 }
 
@@ -114,15 +114,26 @@ pub fn pseudonymize_blinded_datum(
     datum: &BlindedIdentifiableData,
     randomness: &mut Randomness,
 ) -> Result<BlindedPseudonymizedData, Error> {
-    let key = derive_key(&coprf_context, datum.data_value.attribute_name.as_bytes())?;
+    let key = derive_key(
+        &coprf_context,
+        datum.encrypted_data_value.attribute_name.as_bytes(),
+    )?;
 
     // Obliviously generate raw pseudonym.
-    let handle = BlindedPseudonymizedHandle(blind_evaluate(key, *bpk, datum.handle.0, randomness)?);
+    let blinded_handle = BlindedPseudonymizedHandle(blind_evaluate(
+        key,
+        *bpk,
+        datum.blinded_handle.0,
+        randomness,
+    )?);
 
     // Level-2 encrypt data value towards receiver.
-    let data_value = hpke_seal_level_2(&datum.data_value, ek, randomness)?;
+    let encrypted_data_value = hpke_seal_level_2(&datum.encrypted_data_value, ek, randomness)?;
 
-    Ok(BlindedPseudonymizedData { handle, data_value })
+    Ok(BlindedPseudonymizedData {
+        blinded_handle,
+        encrypted_data_value,
+    })
 }
 
 /// Obliviously convert a blinded pseudonymous datum to a given target pseudonym key.
@@ -147,24 +158,30 @@ pub fn convert_blinded_datum(
     randomness: &mut Randomness,
 ) -> Result<BlindedPseudonymizedData, Error> {
     // Re-derive original pseudonymization key.
-    let key_from = derive_key(&coprf_context, datum.data_value.attribute_name.as_bytes())?;
+    let key_from = derive_key(
+        &coprf_context,
+        datum.encrypted_data_value.attribute_name.as_bytes(),
+    )?;
 
     // Derive target key.
     let key_to = derive_key(&coprf_context, conversion_target)?;
 
     // Obliviously convert pseudonym.
-    let handle = BlindedPseudonymizedHandle(blind_convert(
+    let blinded_handle = BlindedPseudonymizedHandle(blind_convert(
         *bpk,
         key_from,
         key_to,
-        datum.handle.0,
+        datum.blinded_handle.0,
         randomness,
     )?);
 
     // Level-2 encrypt data value towards receiver.
-    let data_value = hpke_seal_level_2(&datum.data_value, ek, randomness)?;
+    let encrypted_data_value = hpke_seal_level_2(&datum.encrypted_data_value, ek, randomness)?;
 
-    Ok(BlindedPseudonymizedData { handle, data_value })
+    Ok(BlindedPseudonymizedData {
+        blinded_handle,
+        encrypted_data_value,
+    })
 }
 
 /// Finalize a blinded pseudonymous datum for storage or analysis.
@@ -184,10 +201,10 @@ pub fn finalize_blinded_datum(
     datum: &BlindedPseudonymizedData,
 ) -> Result<PseudonymizedData, Error> {
     // Finalize pseudonym for storage.
-    let handle = FinalizedPseudonym(store_context.finalize_pseudonym(datum.handle.0)?);
+    let handle = FinalizedPseudonym(store_context.finalize_pseudonym(datum.blinded_handle.0)?);
 
     // Decrypt data value for storage.
-    let data_value = hpke_open_level_2(&datum.data_value, &store_context.hpke_sk)?;
+    let data_value = hpke_open_level_2(&datum.encrypted_data_value, &store_context.hpke_sk)?;
 
     Ok(PseudonymizedData { handle, data_value })
 }
