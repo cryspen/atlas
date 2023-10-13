@@ -1,3 +1,12 @@
+//! This module defines ScrambleDB transformations at the level of individual
+//! pieces of data as defined in [crate::data_types].
+//!
+//! These transformations are:
+//! - blinding identifiable and pseudonymous data
+//! - pseudonymizing blinded identifiable data
+//! - converting blinded pseudonymous data
+//! - finalizing blinded pseudonymous data
+
 use hacspec_lib::Randomness;
 use libcrux::hpke::{kem::Nsk, HPKEConfig, HpkeOpen, HpkeSeal};
 use oprf::coprf::{
