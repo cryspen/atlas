@@ -1,6 +1,9 @@
 use hacspec_lib::Randomness;
 use libcrux::hpke::{kem::Nsk, HPKEConfig, HpkeOpen, HpkeSeal};
-use oprf::coprf::coprf_setup::BlindingPublicKey;
+use oprf::coprf::{
+    coprf_online::{blind, blind_convert, blind_evaluate, prepare_blind_convert},
+    coprf_setup::{derive_key, BlindingPublicKey, CoPRFEvaluatorContext},
+};
 
 use crate::{data_types::*, error::Error, setup::StoreContext, SerializedHPKE};
 
@@ -35,7 +38,7 @@ pub fn blind_identifiable_datum(
     randomness: &mut Randomness,
 ) -> Result<BlindedIdentifiableData, Error> {
     // Blind orthonym towards receiver
-    let blinded_handle = BlindedIdentifiableHandle(oprf::coprf::coprf_online::blind(
+    let blinded_handle = BlindedIdentifiableHandle(blind(
         *bpk,
         datum.handle.as_bytes(),
         pseudonymization_context_string(),
@@ -88,12 +91,11 @@ pub fn blind_pseudonymized_datum(
     randomness: &mut Randomness,
 ) -> Result<BlindedPseudonymizedData, Error> {
     // Blind recovered raw pseudonym towards receiver
-    let blinded_handle =
-        BlindedPseudonymizedHandle(oprf::coprf::coprf_online::prepare_blind_convert(
-            *bpk,
-            store_context.recover_raw_pseudonym(datum.handle.0)?,
-            randomness,
-        )?);
+    let blinded_handle = BlindedPseudonymizedHandle(prepare_blind_convert(
+        *bpk,
+        store_context.recover_raw_pseudonym(datum.handle.0)?,
+        randomness,
+    )?);
 
     // Encrypt data towards receiver
     let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
@@ -133,24 +135,16 @@ pub fn blind_pseudonymized_datum(
 /// obliviously evaluated to a pseudonym and the datum's value has been level-2
 /// encrypted towards the receiver.
 pub fn pseudonymize_blinded_datum(
-    coprf_context: &oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
+    coprf_context: &CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
     ek: &[u8],
     datum: &BlindedIdentifiableData,
     randomness: &mut Randomness,
 ) -> Result<BlindedPseudonymizedData, Error> {
-    let key = oprf::coprf::coprf_setup::derive_key(
-        &coprf_context,
-        datum.data_value.attribute_name.as_bytes(),
-    )?;
+    let key = derive_key(&coprf_context, datum.data_value.attribute_name.as_bytes())?;
 
     // Obliviously generate Pseudonym
-    let handle = BlindedPseudonymizedHandle(oprf::coprf::coprf_online::blind_evaluate(
-        key,
-        *bpk,
-        datum.handle.0,
-        randomness,
-    )?);
+    let handle = BlindedPseudonymizedHandle(blind_evaluate(key, *bpk, datum.handle.0, randomness)?);
 
     // Double encrypt data towards data lake
     let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
@@ -187,22 +181,19 @@ pub fn pseudonymize_blinded_datum(
 /// converted to the target pseudonym key and the datum's value is level-2
 /// encrypted towards the receiver.
 pub fn convert_blinded_datum(
-    coprf_context: &oprf::coprf::coprf_setup::CoPRFEvaluatorContext,
+    coprf_context: &CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
     ek: &[u8],
     conversion_target: &[u8],
     datum: &BlindedPseudonymizedData,
     randomness: &mut Randomness,
 ) -> Result<BlindedPseudonymizedData, Error> {
-    let key_from = oprf::coprf::coprf_setup::derive_key(
-        &coprf_context,
-        datum.data_value.attribute_name.as_bytes(),
-    )?;
+    let key_from = derive_key(&coprf_context, datum.data_value.attribute_name.as_bytes())?;
 
-    let key_to = oprf::coprf::coprf_setup::derive_key(&coprf_context, conversion_target)?;
+    let key_to = derive_key(&coprf_context, conversion_target)?;
 
     // Obliviously convert pseudonym
-    let handle = BlindedPseudonymizedHandle(oprf::coprf::coprf_online::blind_convert(
+    let handle = BlindedPseudonymizedHandle(blind_convert(
         *bpk,
         key_from,
         key_to,
