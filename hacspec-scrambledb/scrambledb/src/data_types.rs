@@ -5,6 +5,9 @@
 //! identifiable or pseudonymous and either form can also be blinded. Data
 //! values may be in plain text or encrypted and always carry with them the
 //! name of the attribute they belong to in plain text.
+
+use oprf::coprf::coprf_online::{BlindInput, BlindOutput};
+
 /// A type for finalized pseudonyms, i.e. those which have been hardened for
 /// storage by applying a PRP.
 pub struct FinalizedPseudonym(pub(crate) [u8; 64]);
