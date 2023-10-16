@@ -2,6 +2,7 @@
 pub enum Error {
     RandomnessError,
     CorruptedData,
+    InvalidInput,
 }
 
 impl From<oprf::Error> for Error {
@@ -14,6 +15,12 @@ impl From<oprf::Error> for Error {
             oprf::Error::ElgamalError => Self::RandomnessError,
             oprf::Error::RandomnessError => Self::RandomnessError,
         }
+    }
+}
+
+impl From<libcrux::hpke::errors::HpkeError> for Error {
+    fn from(_value: libcrux::hpke::errors::HpkeError) -> Self {
+        Self::CorruptedData
     }
 }
 

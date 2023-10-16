@@ -1,26 +1,21 @@
 //! # Split Conversion
-use elgamal::{encrypt, EncryptionKey};
 use hacspec_lib::Randomness;
-use oprf::coprf::{
-    coprf_online::{blind, blind_evaluate},
-    coprf_setup::{derive_key, BlindingPublicKey},
-};
+use libcrux::hpke::HpkePublicKey;
+use oprf::coprf::coprf_setup::BlindingPublicKey;
 
 use crate::{
+    data_transformations::{blind_identifiable_datum, pseudonymize_blinded_datum},
+    data_types::{BlindedIdentifiableData, DataValue, EncryptedDataValue, IdentifiableData},
     error::Error,
     setup::ConverterContext,
     table::{BlindTable, Column, ConvertedTable, PlainTable},
 };
 
-pub fn split_identifier(identifier: String, attribute: String) -> String {
-    let mut split_identifier = identifier.clone();
-    split_identifier.push_str("-");
+fn split_identifier(identifier: String, attribute: String) -> String {
+    let mut split_identifier = identifier;
+    split_identifier.push('-');
     split_identifier.push_str(&attribute);
     split_identifier
-}
-
-pub fn split_conversion_context() -> Vec<u8> {
-    b"Split-".to_vec()
 }
 
 /// ## Preparation
@@ -30,7 +25,7 @@ pub fn split_conversion_context() -> Vec<u8> {
 /// data lake
 /// - Sort each column by the blinded table keys (this implements a random shuffle)
 pub fn prepare_split_conversion(
-    ek_receiver: EncryptionKey,
+    ek_receiver: &HpkePublicKey,
     bpk_receiver: BlindingPublicKey,
     table: PlainTable,
     randomness: &mut Randomness,
@@ -43,16 +38,20 @@ pub fn prepare_split_conversion(
         let mut blinded_column_data = Vec::new();
 
         for (plaintext_id, plaintext_value) in column.data() {
-            let blinded_id = blind(
-                bpk_receiver,
-                plaintext_id.as_bytes(),
-                split_conversion_context(),
-                randomness,
-            )?;
+            let datum = IdentifiableData {
+                handle: plaintext_id,
+                data_value: DataValue {
+                    attribute_name: attribute.clone(),
+                    value: plaintext_value,
+                },
+            };
+            let blinded_datum =
+                blind_identifiable_datum(&bpk_receiver, ek_receiver, &datum, randomness)?;
 
-            let encrypted_value = encrypt(ek_receiver, plaintext_value, randomness)?;
-
-            blinded_column_data.push((blinded_id, encrypted_value));
+            blinded_column_data.push((
+                blinded_datum.blinded_handle.0,
+                blinded_datum.encrypted_data_value.value,
+            ));
         }
         let mut blinded_column = Column::new(attribute, blinded_column_data);
         blinded_column.sort();
@@ -78,7 +77,7 @@ pub fn prepare_split_conversion(
 pub fn split_conversion(
     converter_context: &ConverterContext,
     bpk_receiver: BlindingPublicKey,
-    ek_receiver: EncryptionKey,
+    ek_receiver: &HpkePublicKey,
     blinded_table: BlindTable,
     randomness: &mut Randomness,
 ) -> Result<Vec<ConvertedTable>, Error> {
@@ -87,16 +86,29 @@ pub fn split_conversion(
     for blinded_column in blinded_table.columns() {
         let attribute = blinded_column.attribute();
 
-        let conversion_key = derive_key(&converter_context.coprf_context, attribute.as_bytes())?;
-
         let mut converted_column_data = Vec::new();
         for (blind_identifier, encrypted_value) in blinded_column.data() {
-            let blinded_pseudonym =
-                blind_evaluate(conversion_key, bpk_receiver, blind_identifier, randomness)?;
+            let blinded_datum = BlindedIdentifiableData {
+                blinded_handle: crate::data_types::BlindedIdentifiableHandle(blind_identifier),
+                encrypted_data_value: EncryptedDataValue {
+                    attribute_name: attribute.clone(),
+                    value: encrypted_value,
+                    encryption_level: 1u8,
+                },
+            };
 
-            let encrypted_value = elgamal::rerandomize(ek_receiver, encrypted_value, randomness)?;
+            let blinded_pseudonymized_datum = pseudonymize_blinded_datum(
+                &converter_context.coprf_context,
+                &bpk_receiver,
+                ek_receiver,
+                &blinded_datum,
+                randomness,
+            )?;
 
-            converted_column_data.push((blinded_pseudonym, encrypted_value));
+            converted_column_data.push((
+                blinded_pseudonymized_datum.blinded_handle.0,
+                blinded_pseudonymized_datum.encrypted_data_value.value,
+            ));
         }
 
         let mut converted_column = Column::new(attribute.clone(), converted_column_data);
@@ -137,7 +149,7 @@ mod tests {
 
         // == Blind Table for Pseudonymization ==
         let blind_table = crate::split::prepare_split_conversion(
-            lake_ek,
+            &lake_ek,
             lake_bpk,
             plain_table.clone(),
             &mut randomness,
@@ -148,7 +160,7 @@ mod tests {
         let converted_tables = crate::split::split_conversion(
             &converter_context,
             lake_bpk,
-            lake_ek,
+            &lake_ek,
             blind_table,
             &mut randomness,
         )
@@ -158,7 +170,7 @@ mod tests {
         let lake_tables =
             crate::finalize::finalize_conversion(&lake_context, converted_tables).unwrap();
 
-        let plain_values: Vec<HashSet<p256::P256Point>> = plain_table
+        let plain_values: Vec<HashSet<Vec<u8>>> = plain_table
             .clone()
             .columns()
             .iter()
@@ -168,7 +180,7 @@ mod tests {
         let mut pseudonym_set = HashSet::new();
         // test that data is preserved
         for table in lake_tables {
-            let table_values: HashSet<p256::P256Point> = HashSet::from_iter(table.values());
+            let table_values: HashSet<Vec<u8>> = HashSet::from_iter(table.values());
             assert!(
                 plain_values.iter().any(|set| { *set == table_values }),
                 "Data was not preserved during pseudonymization."

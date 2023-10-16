@@ -1,12 +1,14 @@
 //! ## Join Conversion
-use elgamal::EncryptionKey;
 use hacspec_lib::Randomness;
-use oprf::coprf::{
-    coprf_online::{blind_convert, prepare_blind_convert},
-    coprf_setup::{derive_key, BlindingPublicKey},
-};
+use libcrux::hpke::HpkePublicKey;
+use oprf::coprf::coprf_setup::BlindingPublicKey;
 
 use crate::{
+    data_transformations::{blind_pseudonymized_datum, convert_blinded_datum},
+    data_types::{
+        BlindedPseudonymizedData, BlindedPseudonymizedHandle, DataValue, EncryptedDataValue,
+        FinalizedPseudonym, PseudonymizedData,
+    },
     error::Error,
     setup::{ConverterContext, StoreContext},
     table::{BlindTable, Column, ConvertedTable, PseudonymizedTable},
@@ -60,9 +62,9 @@ use crate::{
 ///     return blind_tables
 /// ```
 pub fn prepare_join_conversion(
-    origin_context: &StoreContext,
-    bpk_target: BlindingPublicKey,
-    ek_target: EncryptionKey,
+    store_context: &StoreContext,
+    bpk_receiver: BlindingPublicKey,
+    ek_receiver: &HpkePublicKey,
     pseudonymized_tables: Vec<PseudonymizedTable>,
     randomness: &mut Randomness,
 ) -> Result<Vec<BlindTable>, Error> {
@@ -72,12 +74,25 @@ pub fn prepare_join_conversion(
         let mut blind_column_data = Vec::new();
 
         for (pseudonym, value) in table.column().data() {
-            let raw_pseudonym = origin_context.recover_raw_pseudonym(pseudonym)?;
-            let blinded_pseudonym = prepare_blind_convert(bpk_target, raw_pseudonym, randomness)?;
+            let pseudonymized_datum = PseudonymizedData {
+                handle: FinalizedPseudonym(pseudonym),
+                data_value: DataValue {
+                    attribute_name: table.column().attribute(),
+                    value: value,
+                },
+            };
+            let blinded_pseudonymized_datum = blind_pseudonymized_datum(
+                &store_context,
+                &bpk_receiver,
+                &ek_receiver,
+                &pseudonymized_datum,
+                randomness,
+            )?;
 
-            let encrypted_value = elgamal::encrypt(ek_target, value, randomness)?;
-
-            blind_column_data.push((blinded_pseudonym, encrypted_value));
+            blind_column_data.push((
+                blinded_pseudonymized_datum.blinded_handle.0,
+                blinded_pseudonymized_datum.encrypted_data_value.value,
+            ));
         }
 
         let mut blind_column = Column::new(table.column().attribute(), blind_column_data);
@@ -106,34 +121,41 @@ pub fn join_identifier(identifier: String) -> String {
 ///
 pub fn join_conversion(
     converter_context: &ConverterContext,
-    bpk_target: BlindingPublicKey,
-    ek_target: EncryptionKey,
+    bpk_receiver: BlindingPublicKey,
+    ek_receiver: &HpkePublicKey,
     tables: Vec<BlindTable>,
     randomness: &mut Randomness,
 ) -> Result<Vec<ConvertedTable>, Error> {
     let mut converted_tables = Vec::new();
-    let join_conversion_key = derive_key(
-        &converter_context.coprf_context,
-        randomness.bytes(SECPAR_BYTES)?,
-    )?;
+    let conversion_target = randomness.bytes(SECPAR_BYTES)?.to_owned();
 
     for table in tables {
         for blind_column in table.columns() {
             let attribute = blind_column.attribute();
-            let pseudonym_key = derive_key(&converter_context.coprf_context, attribute.as_bytes())?;
 
             let mut converted_data = Vec::new();
             for (blind_identifier, encrypted_value) in blind_column.data() {
-                let blind_pseudonym = blind_convert(
-                    bpk_target,
-                    pseudonym_key,
-                    join_conversion_key,
-                    blind_identifier,
+                let blinded_pseudonymized_datum = BlindedPseudonymizedData {
+                    blinded_handle: BlindedPseudonymizedHandle(blind_identifier),
+                    encrypted_data_value: EncryptedDataValue {
+                        attribute_name: attribute.clone(),
+                        value: encrypted_value,
+                        encryption_level: 1u8,
+                    },
+                };
+                let blinded_pseudonymized_datum = convert_blinded_datum(
+                    &converter_context.coprf_context,
+                    &bpk_receiver,
+                    &ek_receiver,
+                    &conversion_target,
+                    &blinded_pseudonymized_datum,
                     randomness,
                 )?;
-                let encrypted_value = elgamal::rerandomize(ek_target, encrypted_value, randomness)?;
 
-                converted_data.push((blind_pseudonym, encrypted_value));
+                converted_data.push((
+                    blinded_pseudonymized_datum.blinded_handle.0,
+                    blinded_pseudonymized_datum.encrypted_data_value.value,
+                ));
             }
             let mut converted_table_column = Column::new(attribute.clone(), converted_data);
             converted_table_column.sort();
@@ -173,7 +195,7 @@ mod tests {
 
         // == Blind Table for Pseudonymization ==
         let blind_table = crate::split::prepare_split_conversion(
-            lake_ek,
+            &lake_ek,
             lake_bpk,
             plain_table.clone(),
             &mut randomness,
@@ -184,7 +206,7 @@ mod tests {
         let converted_tables = crate::split::split_conversion(
             &converter_context,
             lake_bpk,
-            lake_ek,
+            &lake_ek,
             blind_table,
             &mut randomness,
         )
@@ -194,7 +216,7 @@ mod tests {
         let lake_tables =
             crate::finalize::finalize_conversion(&lake_context, converted_tables).unwrap();
 
-        let plain_values: Vec<HashSet<p256::P256Point>> = plain_table
+        let plain_values: Vec<HashSet<Vec<u8>>> = plain_table
             .clone()
             .columns()
             .iter()
@@ -218,7 +240,7 @@ mod tests {
         let blind_tables = crate::join::prepare_join_conversion(
             &lake_context,
             bpk_processor,
-            ek_processor,
+            &ek_processor,
             join_tables,
             &mut randomness,
         )
@@ -227,7 +249,7 @@ mod tests {
         let converted_join_tables = crate::join::join_conversion(
             &converter_context,
             bpk_processor,
-            ek_processor,
+            &ek_processor,
             blind_tables,
             &mut randomness,
         )
@@ -248,7 +270,7 @@ mod tests {
                 );
             }
 
-            let table_values: HashSet<p256::P256Point> = HashSet::from_iter(table.values());
+            let table_values: HashSet<Vec<u8>> = HashSet::from_iter(table.values());
             assert!(
                 plain_values.iter().any(|set| { *set == table_values }),
                 "Data was not preserved during join."

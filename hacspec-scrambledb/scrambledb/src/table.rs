@@ -9,8 +9,8 @@ pub type PlainIdentifier = String;
 
 /// A plain data value is a plaintext value of the underlying
 /// rerandomizable public key encryption scheme.
-pub type PlainValue = elgamal::Plaintext;
-pub type EncryptedValue = elgamal::Ciphertext;
+pub type PlainValue = Vec<u8>;
+pub type EncryptedValue = Vec<u8>;
 pub type BlindIdentifier = BlindInput;
 pub type BlindPseudonym = BlindOutput;
 pub type Pseudonym = [u8; 64];
@@ -23,12 +23,12 @@ pub type PseudonymizedTable = SingleColumnTable<Pseudonym, PlainValue>;
 use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
-pub struct Column<K: Debug, V: Debug> {
+pub struct Column<K, V> {
     attribute: String,
     data: Vec<(K, V)>,
 }
 
-impl<K: Debug, V: Debug> Column<K, V> {
+impl<K, V> Column<K, V> {
     pub fn new(attribute: String, data: Vec<(K, V)>) -> Self {
         Self { attribute, data }
     }
@@ -85,18 +85,18 @@ impl<K: Debug, V: Debug> Column<K, V> {
 }
 
 #[derive(Clone, Debug)]
-pub struct MultiColumnTable<K: Debug, V: Debug> {
+pub struct MultiColumnTable<K, V> {
     identifier: String,
     columns: Vec<Column<K, V>>,
 }
 
-#[derive(Clone, Debug)]
-pub struct SingleColumnTable<K: Debug, V: Debug> {
+#[derive(Clone)]
+pub struct SingleColumnTable<K, V> {
     identifier: String,
     column: Column<K, V>,
 }
 
-impl<K: Debug, V: Debug> SingleColumnTable<K, V> {
+impl<K, V> SingleColumnTable<K, V> {
     pub fn new(identifier: String, column: Column<K, V>) -> Self {
         Self { identifier, column }
     }
@@ -137,7 +137,7 @@ impl<K: Debug, V: Debug> SingleColumnTable<K, V> {
     }
 }
 
-impl<K: Debug, V: Debug> MultiColumnTable<K, V> {
+impl<K, V> MultiColumnTable<K, V> {
     pub fn new(identifier: String, columns: Vec<Column<K, V>>) -> Self {
         Self {
             identifier,

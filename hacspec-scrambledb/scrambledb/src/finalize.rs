@@ -1,5 +1,8 @@
 //! # Conversion Finalization
+
 use crate::{
+    data_transformations::finalize_blinded_datum,
+    data_types::{BlindedPseudonymizedData, BlindedPseudonymizedHandle, EncryptedDataValue},
     error::Error,
     setup::StoreContext,
     table::{Column, ConvertedTable, PseudonymizedTable},
@@ -23,10 +26,22 @@ pub fn finalize_conversion(
         let mut pseudonymized_column_data = Vec::new();
 
         for (blinded_pseudonym, encrypted_value) in blinded_table.column().data() {
-            let pseudonym = store_context.finalize_pseudonym(blinded_pseudonym)?;
-            let value = store_context.decrypt_value(encrypted_value)?;
+            let blinded_pseudonymized_datum = BlindedPseudonymizedData {
+                blinded_handle: BlindedPseudonymizedHandle(blinded_pseudonym),
+                encrypted_data_value: EncryptedDataValue {
+                    attribute_name: blinded_table.column().attribute(),
+                    value: encrypted_value,
+                    encryption_level: 2u8,
+                },
+            };
 
-            pseudonymized_column_data.push((pseudonym, value));
+            let pseudonymized_datum =
+                finalize_blinded_datum(&store_context, &blinded_pseudonymized_datum)?;
+
+            pseudonymized_column_data.push((
+                pseudonymized_datum.handle.0,
+                pseudonymized_datum.data_value.value,
+            ));
         }
 
         let mut pseudonymized_column = Column::new(
