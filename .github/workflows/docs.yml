@@ -31,14 +31,9 @@ jobs:
         run: |
           cd hacspec-scrambledb
           cargo doc --no-deps
-          cat > target/doc/index.html <<EOF
-          <!doctype html>
-          <html>
-          <head><meta http-equiv="refresh" content="0; url='scrambledb/index.html'"></head>
-          </html>
-          EOF
           mv target/doc ../docs
-
+          cp ../pages/index.html ../docs/
+          
       - name: Fix permissions
         run: |
           chmod -c -R +rX "docs/" | while read line; do
