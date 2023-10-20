@@ -27,19 +27,18 @@ pub struct P256FieldElement {}
 #[nat_mod("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551", 32)]
 pub struct P256Scalar {}
 
-
 /// Generate a random P256 scalar using rejection sampling.
-/// 
+///
 /// Inputs:
 /// - `randomness`: Random bytes
 /// - `dst`: Domain separation tag
-/// 
+///
 /// Outputs:
 /// - A random P256 scalar
-/// 
+///
 /// Raises:
 /// - `SamplingError`: If no valid scalar can be found within 256 sampling attempts
-/// 
+///
 /// Panics:
 /// - If the provided random bytes are insufficient
 pub fn random_scalar(randomness: &mut Randomness, dst: &[u8]) -> Result<P256Scalar, Error> {
