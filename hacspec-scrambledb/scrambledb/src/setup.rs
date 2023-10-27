@@ -10,7 +10,10 @@ use oprf::coprf::{
 };
 use p256::P256Point;
 
-use crate::{data_types::{FinalizedPseudonym, BlindedPseudonymizedHandle}, error::Error};
+use crate::{
+    data_types::{BlindedPseudonymizedHandle, FinalizedPseudonym},
+    error::Error,
+};
 
 pub struct ConverterContext {
     pub(crate) coprf_context: CoPRFEvaluatorContext,
@@ -132,8 +135,12 @@ impl StoreContext {
         &self,
         blind_pseudonym: BlindedPseudonymizedHandle,
     ) -> Result<FinalizedPseudonym, Error> {
-        let raw_pseudonym = coprf_online::finalize(&self.coprf_receiver_context, blind_pseudonym.0)?;
-        Ok(FinalizedPseudonym(prp::prp(raw_pseudonym.raw_bytes(), &self.k_prp)))
+        let raw_pseudonym =
+            coprf_online::finalize(&self.coprf_receiver_context, blind_pseudonym.0)?;
+        Ok(FinalizedPseudonym(prp::prp(
+            raw_pseudonym.raw_bytes(),
+            &self.k_prp,
+        )))
     }
 
     /// - Recover Raw Pseudonym: In preparation of a join conversion, the raw
