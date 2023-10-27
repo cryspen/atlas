@@ -50,7 +50,7 @@ event SourceSent(bitstring).
 event Converted(bitstring, bitstring).
 
 (* Data Transformations *)
-letfun blind_identifiable_data(input: bitstring, bpk: blinding_pk, ek: pubkey) =
+letfun blind_data(input: bitstring, bpk: blinding_pk, ek: pubkey) =
     let input_data(attribute_id, uid, attribute_value) = input in
     let blinded_uid = blind(bpk, uid) in
     let encryption = penc(ek, attribute_value) in
