@@ -83,7 +83,7 @@ pub fn blind_pseudonymized_datum(
     // Blind recovered raw pseudonym towards receiver.
     let blinded_handle = BlindedPseudonymizedHandle(prepare_blind_convert(
         *bpk,
-        store_context.recover_raw_pseudonym(datum.handle.0)?,
+        store_context.recover_raw_pseudonym(datum.handle)?,
         randomness,
     )?);
 
@@ -204,7 +204,7 @@ pub fn finalize_blinded_datum(
     datum: &BlindedPseudonymizedData,
 ) -> Result<PseudonymizedData, Error> {
     // Finalize pseudonym for storage.
-    let handle = FinalizedPseudonym(store_context.finalize_pseudonym(datum.blinded_handle.0)?);
+    let handle = store_context.finalize_pseudonym(datum.blinded_handle)?;
 
     // Decrypt data value for storage.
     let data_value = hpke_open_level_2(&datum.encrypted_data_value, &store_context.hpke_sk)?;
