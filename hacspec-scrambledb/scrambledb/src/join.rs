@@ -5,13 +5,10 @@ use oprf::coprf::coprf_setup::BlindingPublicKey;
 
 use crate::{
     data_transformations::{blind_pseudonymized_datum, convert_blinded_datum},
-    data_types::{
-        BlindedPseudonymizedData, BlindedPseudonymizedHandle, DataValue, EncryptedDataValue,
-        FinalizedPseudonym, PseudonymizedData,
-    },
+    data_types::{BlindedPseudonymizedData, PseudonymizedData},
     error::Error,
     setup::{ConverterContext, StoreContext},
-    table::{BlindTable, Column, ConvertedTable, PseudonymizedTable},
+    table::Table,
     SECPAR_BYTES,
 };
 
@@ -65,43 +62,22 @@ pub fn prepare_join_conversion(
     store_context: &StoreContext,
     bpk_receiver: BlindingPublicKey,
     ek_receiver: &HpkePublicKey,
-    pseudonymized_tables: Vec<PseudonymizedTable>,
+    pseudonymized_table: Table<PseudonymizedData>,
     randomness: &mut Randomness,
-) -> Result<Vec<BlindTable>, Error> {
-    let mut blind_columns = Vec::new();
+) -> Result<Table<BlindedPseudonymizedData>, Error> {
+    let mut blinded_data = pseudonymized_table
+        .data()
+        .iter()
+        .map(|entry| {
+            blind_pseudonymized_datum(store_context, &bpk_receiver, ek_receiver, entry, randomness)
+        })
+        .collect::<Result<Vec<BlindedPseudonymizedData>, Error>>()?;
 
-    for table in pseudonymized_tables.iter() {
-        let mut blind_column_data = Vec::new();
-
-        for (pseudonym, value) in table.column().data() {
-            let pseudonymized_datum = PseudonymizedData {
-                handle: FinalizedPseudonym(pseudonym),
-                data_value: DataValue {
-                    attribute_name: table.column().attribute(),
-                    value: value,
-                },
-            };
-            let blinded_pseudonymized_datum = blind_pseudonymized_datum(
-                &store_context,
-                &bpk_receiver,
-                &ek_receiver,
-                &pseudonymized_datum,
-                randomness,
-            )?;
-
-            blind_column_data.push((
-                blinded_pseudonymized_datum.blinded_handle.0,
-                blinded_pseudonymized_datum.encrypted_data_value.value,
-            ));
-        }
-
-        let mut blind_column = Column::new(table.column().attribute(), blind_column_data);
-        blind_column.sort();
-
-        let blind_table = BlindTable::new(table.identifier(), vec![blind_column]);
-        blind_columns.push(blind_table)
-    }
-    Ok(blind_columns)
+    blinded_data.sort();
+    Ok(Table::new(
+        pseudonymized_table.identifier().into(),
+        blinded_data,
+    ))
 }
 
 pub fn join_identifier(identifier: String) -> String {
@@ -123,49 +99,65 @@ pub fn join_conversion(
     converter_context: &ConverterContext,
     bpk_receiver: BlindingPublicKey,
     ek_receiver: &HpkePublicKey,
-    tables: Vec<BlindTable>,
+    table: Table<BlindedPseudonymizedData>,
     randomness: &mut Randomness,
-) -> Result<Vec<ConvertedTable>, Error> {
-    let mut converted_tables = Vec::new();
+) -> Result<Table<BlindedPseudonymizedData>, Error> {
     let conversion_target = randomness.bytes(SECPAR_BYTES)?.to_owned();
+    let mut converted_data = table
+        .data()
+        .iter()
+        .map(|entry| {
+            convert_blinded_datum(
+                &converter_context.coprf_context,
+                &bpk_receiver,
+                ek_receiver,
+                &conversion_target,
+                entry,
+                randomness,
+            )
+        })
+        .collect::<Result<Vec<BlindedPseudonymizedData>, Error>>()?;
 
-    for table in tables {
-        for blind_column in table.columns() {
-            let attribute = blind_column.attribute();
+    converted_data.sort();
 
-            let mut converted_data = Vec::new();
-            for (blind_identifier, encrypted_value) in blind_column.data() {
-                let blinded_pseudonymized_datum = BlindedPseudonymizedData {
-                    blinded_handle: BlindedPseudonymizedHandle(blind_identifier),
-                    encrypted_data_value: EncryptedDataValue {
-                        attribute_name: attribute.clone(),
-                        value: encrypted_value,
-                        encryption_level: 1u8,
-                    },
-                };
-                let blinded_pseudonymized_datum = convert_blinded_datum(
-                    &converter_context.coprf_context,
-                    &bpk_receiver,
-                    &ek_receiver,
-                    &conversion_target,
-                    &blinded_pseudonymized_datum,
-                    randomness,
-                )?;
+    Ok(Table::new(table.identifier().into(), converted_data))
+    // for table in tables {
+    //     for blind_column in table.columns() {
+    //         let attribute = blind_column.attribute();
 
-                converted_data.push((
-                    blinded_pseudonymized_datum.blinded_handle.0,
-                    blinded_pseudonymized_datum.encrypted_data_value.value,
-                ));
-            }
-            let mut converted_table_column = Column::new(attribute.clone(), converted_data);
-            converted_table_column.sort();
-            converted_tables.push(ConvertedTable::new(
-                join_identifier(table.identifier()),
-                converted_table_column,
-            ));
-        }
-    }
-    Ok(converted_tables)
+    //         let mut converted_data = Vec::new();
+    //         for (blind_identifier, encrypted_value) in blind_column.data() {
+    //             let blinded_pseudonymized_datum = BlindedPseudonymizedData {
+    //                 blinded_handle: BlindedPseudonymizedHandle(blind_identifier),
+    //                 encrypted_data_value: EncryptedDataValue {
+    //                     attribute_name: attribute.clone(),
+    //                     value: encrypted_value,
+    //                     encryption_level: 1u8,
+    //                 },
+    //             };
+    //             let blinded_pseudonymized_datum = convert_blinded_datum(
+    //                 &converter_context.coprf_context,
+    //                 &bpk_receiver,
+    //                 &ek_receiver,
+    //                 &conversion_target,
+    //                 &blinded_pseudonymized_datum,
+    //                 randomness,
+    //             )?;
+
+    //             converted_data.push((
+    //                 blinded_pseudonymized_datum.blinded_handle.0,
+    //                 blinded_pseudonymized_datum.encrypted_data_value.value,
+    //             ));
+    //         }
+    //         let mut converted_table_column = Column::new(attribute.clone(), converted_data);
+    //         converted_table_column.sort();
+    //         converted_tables.push(ConvertedTable::new(
+    //             join_identifier(table.identifier()),
+    //             converted_table_column,
+    //         ));
+    //     }
+    // }
+    // Ok(converted_tables)
 }
 
 #[cfg(test)]
@@ -216,24 +208,31 @@ mod tests {
         let lake_tables =
             crate::finalize::finalize_conversion(&lake_context, converted_tables).unwrap();
 
-        let plain_values: Vec<HashSet<Vec<u8>>> = plain_table
-            .clone()
-            .columns()
-            .iter()
-            .map(|column| HashSet::from_iter(column.values()))
-            .collect();
-
         let mut pseudonym_set = HashSet::new();
 
-        for table in lake_tables.clone() {
+        for entry in lake_tables.data() {
             // store lake_pseudonyms for test against join pseudonyms
-            for key in table.keys() {
-                pseudonym_set.insert(key);
-            }
+            pseudonym_set.insert(entry.handle.clone());
         }
 
         // select first two lake tables for join
-        let join_tables = vec![lake_tables[0].clone(), lake_tables[1].clone()];
+        let join_table = Table::new(
+            "Join".into(),
+            lake_tables
+                .data()
+                .iter()
+                .filter_map(|entry| {
+                    if entry.data_value.attribute_name == "Address"
+                        || entry.data_value.attribute_name == "Favorite Color"
+                    {
+                        Some(entry.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        );
+
         let processor_context = StoreContext::setup(&mut randomness).unwrap();
 
         let (ek_processor, bpk_processor) = processor_context.public_keys();
@@ -241,7 +240,7 @@ mod tests {
             &lake_context,
             bpk_processor,
             &ek_processor,
-            join_tables,
+            join_table,
             &mut randomness,
         )
         .unwrap();
@@ -259,20 +258,21 @@ mod tests {
             crate::finalize::finalize_conversion(&processor_context, converted_join_tables)
                 .unwrap();
 
-        for table in joined_tables {
+        for entry in joined_tables.data() {
             let mut lake_pseudonyms = pseudonym_set.clone();
 
             // test if all pseudonyms are fresh compared to lake_pseudonyms
-            for key in table.keys() {
-                assert!(
-                    lake_pseudonyms.insert(key),
-                    "Generated pseudonyms are not unique."
-                );
-            }
 
-            let table_values: HashSet<Vec<u8>> = HashSet::from_iter(table.values());
             assert!(
-                plain_values.iter().any(|set| { *set == table_values }),
+                lake_pseudonyms.insert(entry.handle.clone()),
+                "Generated pseudonyms are not unique."
+            );
+
+            assert!(
+                plain_table
+                    .data()
+                    .iter()
+                    .any(|entry| entry.data_value == entry.data_value),
                 "Data was not preserved during join."
             );
         }
