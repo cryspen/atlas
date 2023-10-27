@@ -1,16 +1,22 @@
-const attribute_id: bitstring.
-const uid_0: group_element.
+
+(*const uid_0: group_element.
 const uid_1: group_element.
 const attribute_value_0: bitstring.
-const attribute_value_1: bitstring.
+const attribute_value_1: bitstring.*)
 
-process
+const attribute_id: bitstring.
+
+process`
     new bsk: blinding_sk;
     new dk: privkey;
     new msk: prf_msk;
     let bpk = blinding_sk_to_pk(bsk) in
     let ek = pk(dk) in
     out(c, (bpk, ek));
+    in (c, attribute_value_0: bitstring);
+    in (c, attribute_value_1: bitstring);
+    in (c, uid_0: group_element);
+    in (c, uid_1: group_element);
     let input_0= input_data(attribute_id, uid_0, attribute_value_0) in
     let input_1= input_data(attribute_id, uid_1, attribute_value_1) in  
     (DataSource(diff[input_0, input_1], bpk, ek) |

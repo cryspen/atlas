@@ -28,16 +28,6 @@ reduc forall x: group_element, bpk: blinding_pk, k: prf_key, r: bitstring;
 reduc forall x: group_element, bpk: blinding_pk, k_1: prf_key, k_2: prf_key, r: bitstring;
       blind_convert(k_1, k_2, blind_(bpk, prf(k_1, x), r)) = reblind_(bpk, prf(k_2, x), r).
 
-(* The following version of blind evaluation without reblind_
-seemingly leads analysis `scrambledb_pseudonymity` into
-non-termination:
-
-reduc forall y: group_element, bsk: blinding_sk, r: bitstring;
-      unblind(bsk, blind_(blinding_sk_to_pk(bsk), y, r)) = y.
-reduc forall x: group_element, bpk: blinding_pk, k: prf_key, r: bitstring;
-      blind_evaluate(k, blind_(bpk, x, r)) = blind_(bpk, prf(k, x), r).
-*)
-
 (* Public Key Encryption *)
 type pubkey.
 type privkey.
@@ -53,15 +43,14 @@ fun input_data(bitstring, group_element, bitstring): bitstring [data].
 fun blinded_data(bitstring, blinded_element, bitstring): bitstring [data].
 fun evaluated_data(bitstring, blinded_element, bitstring): bitstring [data].
 fun final_data(bitstring, group_element, bitstring): bitstring [data].
-fun double_evaluation(bitstring, bitstring): bitstring [data].
 
 (* Events *)
 event LakeReceived(bitstring).
 event SourceSent(bitstring).
 event Converted(bitstring, bitstring).
 
-
-letfun blind_data(input: bitstring, bpk: blinding_pk, ek: pubkey) =
+(* Data Transformations *)
+letfun blind_identifiable_data(input: bitstring, bpk: blinding_pk, ek: pubkey) =
     let input_data(attribute_id, uid, attribute_value) = input in
     let blinded_uid = blind(bpk, uid) in
     let encryption = penc(ek, attribute_value) in
@@ -80,27 +69,21 @@ letfun finalize(input: bitstring, bsk: blinding_sk, dk: privkey) =
     let value = pdec(dk, pdec(dk, reencryption)) in 
     final_data(attribute_id, pseudonym, value).
 
+(* Protocol Participants *)
 let DataSource(input: bitstring, bpk: blinding_pk, ek: pubkey) =
     let blinded_data(attribute_id, blinded_uid, encryption) = blind_data(input, bpk, ek) in 
     event SourceSent(input);
     out(c, blinded_data(attribute_id, blinded_uid, encryption)).
 
 let Converter(input: bitstring, msk: prf_msk, ek: pubkey) =
-    let output = converter_evaluate(input, msk, ek) in
-    event Converted(input, output);
-    out(c, output).
-
-let DoubleConverter(input1: bitstring, input2: bitstring, msk: prf_msk, ek: pubkey, reverse_order: bool) =
-    let output1 = converter_evaluate(input1, msk, ek) in
-    let output2 = converter_evaluate(input2, msk, ek) in
-    if reverse_order then
-    out (c, double_evaluation(output2, output1))
-    else
-    out (c, double_evaluation(output1, output2)).
+        let output = converter_evaluate(input, msk, ek) in
+        event Converted(input, output);
+        out(c, output).
 
 let DataLake(input: bitstring, bsk: blinding_sk, dk: privkey, reveal: bool) =
-    let output = finalize(input, bsk, dk) in
-    event LakeReceived(output);
-    if reveal then 
-    out(c, output).
+        let output = finalize(input, bsk, dk) in
+        event LakeReceived(output);
+        if reveal then 
+        out(c, output).
+
 
