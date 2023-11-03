@@ -3,7 +3,7 @@ functionality given by Anja Lehmann in "ScrambleDB: Oblivious
 (Chameleon) Pseudonymization-as-a-Service" as part of the ScrambleDB
 system. *)
 
-free c: channel.
+channel c.
 
 type group_element.
 fun h2g(bitstring): group_element. (* Hash-to-Group *)
@@ -12,8 +12,9 @@ fun h2g(bitstring): group_element. (* Hash-to-Group *)
 type coprf_msk.
 type coprf_key.
 
-fun coprf_derive_key(coprf_msk, bitstring): prf_key.
+fun coprf_derive_key(coprf_msk, bitstring): coprf_key.
 fun coprf_evaluate(coprf_key, group_element): group_element.
+fun coprf_convert(coprf_key, coprf_key, group_element): group_element.
 
 (* Blinding *)
 type blinding_pk.
@@ -23,25 +24,22 @@ fun bsk2bpk(blinding_sk): blinding_pk.
 type blind_input.
 type blind_output.
 fun bi2g(blind_input): group_element [typeConverter].
-fun bo2g(blind_ouptut): group_element [typeConverter].
+fun bo2g(blind_output): group_element [typeConverter].
 
 fun coprf_blind_(blinding_pk, group_element, bitstring): blind_input.
-letfun coprf_blind(bpk: blinding_pk, x: bitstring) = new r:bitstring; coprf_blind_(bpk, h2g(x), r).
+letfun coprf_blind_input(bpk: blinding_pk, x: bitstring) = new r:bitstring; coprf_blind_(bpk, h2g(x), r).
+letfun coprf_blind_output(bpk: blinding_pk, x: group_element) = new r:bitstring; coprf_blind_(bpk, x, r).
 
-equation forall k: coprf_key, bpk: blinding_pk, x: group_element, r: bitstring;
-         coprf_blind_evaluate(k, coprf_blind_(bpk, x, r)) = coprf_blind_(bpk, coprf_evaluate(k, x), r).
+fun coprf_blind_evaluate(coprf_key, blinding_pk, blind_input): blind_output.
+fun coprf_blind_convert(coprf_key, coprf_key, blinding_pk, blind_input): blind_output.
+fun coprf_unblind(blinding_sk, blind_output): group_element.
 
-reduc forall y: blind_output, bsk: blinding_sk, r: bitstring;
-      coprf_unblind(bsk, coprf_blind_(bsk2bpk(bsk), y, r)) = y.
+equation forall bsk: blinding_sk, k: coprf_key, x: group_element, r: bitstring;
+         coprf_unblind(bsk, coprf_blind_evaluate(k, bsk2bpk(bsk), coprf_blind_(bsk2bpk(bsk), x, r))) = coprf_evaluate(k, x).
 
-fun reblind_(blinding_pk, group_element, bitstring): blinded_element.
+equation forall bsk: blinding_sk, k1: coprf_key, k2: coprf_key, x: group_element, r: bitstring;
+         coprf_unblind(bsk, coprf_blind_convert(k1, k2, bsk2bpk(bsk), coprf_blind_(bsk2bpk(bsk), x, r))) = coprf_convert(k1, k2, x).
 
-reduc forall bsk: blindind_sk, r: bitstring;
-      coprf_unblind(bsk, blind(bsk2bpk(bsk), x))
-reduc forall x: group_element, bpk: blinding_pk, k: prf_key, r: bitstring;
-      blind_evaluate(k, blind_(bpk, x, r)) = reblind_(bpk, prf(k, x), r).
-reduc forall x: group_element, bpk: blinding_pk, k_1: prf_key, k_2: prf_key, r: bitstring;
-      blind_convert(k_1, k_2, blind_(bpk, prf(k_1, x), r)) = reblind_(bpk, prf(k_2, x), r).
 
 (* Public Key Encryption *)
 type pubkey.
@@ -52,53 +50,164 @@ letfun penc(pk: pubkey, msg: bitstring) = new r:bitstring; penc_(pk, msg, r).
 reduc forall sk: privkey, msg: bitstring, r: bitstring; 
       pdec(sk, penc_(pk(sk), msg, r)) = msg.
 
+(* PRP for pseudonym hardening *)
+type prp_key.
+type nym.
+fun prp(prp_key, group_element): nym.
+reduc forall k_prp: prp_key, x: group_element; prp_inv(k_prp, prp(k_prp, x)) = x.
+
+
+
 (* Model of ScrambleDB *)
 (* Protocol Messages *)
 
-(* IdentifiableData = (uid, attribute_type, value)*)
+(* IdentifiableData = (orthonym, attribute_type, value)*)
 fun identifiable_data(bitstring, bitstring, bitstring): bitstring [data].
-fun blinded_data(bitstring, blinded_element, bitstring): bitstring [data].
-fun evaluated_data(bitstring, blinded_element, bitstring): bitstring [data].
-fun final_data(bitstring, group_element, bitstring): bitstring [data].
 
-(* Events *)
-event LakeReceived(bitstring).
-event SourceSent(bitstring).
-event Converted(bitstring, bitstring).
+(* BlindedIdentifiableData = (blinded_orthonym, attribute_type, encrypted_value) *)
+fun blinded_identifiable_data(blind_input, bitstring, bitstring): bitstring [data].
+
+(* BlindedPseudonymizedOutputData = (blinded_pseudonym, attribute_type, encrypted_value) *)
+fun blinded_pseudonymized_output_data(blind_output, bitstring, bitstring): bitstring [data].
+
+(* BlindedPseudonymizedInputData = (blinded_pseudonym, attribute_type, encrypted_value) *)
+fun blinded_pseudonymized_input_data(blind_input, bitstring, bitstring): bitstring [data].
+
+(* PseudonymizedData = (nym, attribute_type, encrypted_value) *)
+fun pseudonymized_data(nym, bitstring, bitstring): bitstring [data].
+
+(* DataAvailable = (attribute_type) *)
+fun data_available(bitstring): bitstring [data].
+
+(* DataRequest = (attribute_type, bpk_receiver, ek_receiver) *)
+fun data_request(bitstring, blinding_pk, pubkey): bitstring [data].
+
+(* ConversionRequest = (blinded_pseudonymized_data, bpk_reveiver, ek_receiver) *)
+fun conversion_request(bitstring, blinding_pk, pubkey): bitstring [data].
 
 (* Data Transformations *)
-letfun blind_data(input: bitstring, bpk: blinding_pk, ek: pubkey) =
+letfun blind_identifiable_data(input: bitstring, bpk: blinding_pk, ek: pubkey) =
     let identifiable_data(orthonym, attribute_type, data_value) = input in
-    let blinded_orthonym = coprf_blind(bpk, h2g(uid)) in
-    let encryption = penc(ek, attribute_value) in
-    blinded_data(attribute_id, blinded_uid, encryption).
+    let blinded_orthonym = coprf_blind_input(bpk, orthonym) in
+    let encrypted_value = penc(ek, data_value) in
+    blinded_identifiable_data(blinded_orthonym, attribute_type, encrypted_value).
 
-letfun converter_evaluate(input: bitstring, msk: prf_msk, ek: pubkey) =
-    let blinded_data(attribute_id, blinded_uid, encryption) = input in
-    let k = derive_key(msk, attribute_id) in
-    let reencryption = penc(ek, encryption) in
-    let blinded_pseudonym = blind_evaluate(k, blinded_uid) in
-    evaluated_data(attribute_id, blinded_pseudonym, reencryption).
+letfun blind_pseudonymized_data(input: bitstring, bpk: blinding_pk, ek: pubkey, k_prp: prp_key) =
+    let pseudonymized_data(pseudonym, attribute_type, data_value) = input in
+    let blinded_pseudonym = coprf_blind_output(bpk, prp_inv(k_prp, pseudonym)) in
+    let encrypted_value = penc(ek, data_value) in
+    blinded_pseudonymized_input_data(blinded_pseudonym, attribute_type, encrypted_value).
 
-letfun finalize(input: bitstring, bsk: blinding_sk, dk: privkey) =
-    let evaluated_data(attribute_id, blinded_pseudonym, reencryption) = input in
-    let pseudonym = unblind(bsk, blinded_pseudonym) in
-    let value = pdec(dk, pdec(dk, reencryption)) in 
-    final_data(attribute_id, pseudonym, value).
+letfun pseudonymize_blinded_data(input: bitstring, msk: coprf_msk, bpk: blinding_pk, ek: pubkey) =
+    let blinded_identifiable_data(blinded_orthonym, attribute_type, encrypted_value) = input in
+    let k = coprf_derive_key(msk, attribute_type) in
+    let reencrypted_value = penc(ek, encrypted_value) in
+    let blinded_pseudonym = coprf_blind_evaluate(k, bpk, blinded_orthonym) in
+    blinded_pseudonymized_output_data(blinded_pseudonym, attribute_type, reencrypted_value).
+
+letfun convert_blinded_data(input: bitstring, msk: coprf_msk, bpk: blinding_pk, ek: pubkey, conversion_target: bitstring) =
+    let blinded_pseudonymized_input_data(blinded_input_pseudonym, attribute_type, encrypted_value) = input in
+    let k_original = coprf_derive_key(msk, attribute_type) in
+    let k_conversion = coprf_derive_key(msk, conversion_target) in
+    let reencrypted_value = penc(ek, encrypted_value) in
+    let blinded_output_pseudonym = coprf_blind_convert(k_original, k_conversion, bpk, blinded_input_pseudonym) in
+    blinded_pseudonymized_output_data(blinded_output_pseudonym, attribute_type, reencrypted_value).
+
+
+letfun finalize_pseudonymized_data(input: bitstring, bsk: blinding_sk, dk: privkey, k_prp: prp_key) =
+    let blinded_pseudonymized_output_data(blinded_pseudonym, attribute_type, reencrypted_value) = input in
+    let pseudonym = prp(k_prp, coprf_unblind(bsk, blinded_pseudonym)) in
+    let value = pdec(dk, pdec(dk, reencrypted_value)) in 
+    pseudonymized_data(pseudonym, attribute_type, value).
+
+table lake_data(nym, bitstring, bitstring).
+
+(* Events *)
+event BlindedOrthonym(bitstring).
+event Pseudonymized(bitstring, bitstring).
+event Finalized(bitstring).
+
+event BlindedPseudonym(bitstring).
+event Converted(bitstring, bitstring).
+event Joined(bitstring).
+
+event ConverterLeak(bitstring).
+event LeakLakeKeys().
+event LeakProcessorKeys().
 
 (* Protocol Participants *)
 let DataSource(input: bitstring, bpk: blinding_pk, ek: pubkey) =
-    let blinded_data(attribute_id, blinded_uid, encryption) = blind_data(input, bpk, ek) in 
-    event SourceSent(input);
-    out(c, blinded_data(attribute_id, blinded_uid, encryption)).
+    let blinded_identifiable_data(blinded_orthonym, attribute_type, encrypted_value) = blind_identifiable_data(input, bpk, ek) in 
+    event BlindedOrthonym(input);
+    out(c, blinded_identifiable_data(blinded_orthonym, attribute_type, encrypted_value)).
 
-let Converter(input: bitstring, msk: prf_msk, ek: pubkey) =
-        let output = converter_evaluate(input, msk, ek) in
-        event Converted(input, output);
-        out(c, output).
 
-let DataLake(input: bitstring, bsk: blinding_sk, dk: privkey, reveal: bool) =
-        let output = finalize(input, bsk, dk) in
-        event LakeReceived(output);
-        if reveal then 
-        out(c, output).
+(* Parameter `leak_input` controls whether the Converter leaks the
+unprocessed inputs to the adversary.*)
+let Converter(msk: coprf_msk, bpk_lake: blinding_pk, ek_lake: pubkey, leak_input: bool) =
+    (
+        (* Pseudonymization *)
+        in(c, input: bitstring);
+        let output = pseudonymize_blinded_data(input, msk, bpk_lake, ek_lake) in
+        event Pseudonymized(input, output);
+        out(c, output);
+        if leak_input then
+           event ConverterLeak(input);  
+           out(c, input)
+   ) | (
+       (* Conversion *)
+        in(c, input: bitstring);
+        let conversion_request(blind_pseudonymized_input, bpk, ek) = input in
+        new conversion_target: bitstring;
+        let output = convert_blinded_data(blind_pseudonymized_input, msk, bpk, ek, conversion_target) in
+        event Pseudonymized(blind_pseudonymized_input, output);
+        out(c, output);
+        if leak_input then
+           event ConverterLeak(input);
+           out(c, input)
+   ).
+
+
+(* Parameter `leak_keys` controls whether the secret keys are leaked to the adversary. *)
+let DataLake(bsk: blinding_sk, dk: privkey, k_prp: prp_key, leak_keys: bool) =
+    (
+        (* Pseudonym Finalization *)
+        in(c, input: bitstring);
+        let pseudonymized_data(pseudonym, attribute_type, value) = finalize_pseudonymized_data(input, bsk, dk, k_prp) in
+        event Finalized(pseudonymized_data(pseudonym, attribute_type, value));
+        insert lake_data(pseudonym, attribute_type, value);
+        out(c, data_available(attribute_type))
+    ) | (
+        (* Blind Pseudonymized Data *)
+        in(c, request: bitstring);
+        let data_request(attribute_type, bpk_receiver, ek_receiver) = request in
+        get lake_data(pseudonym, =attribute_type, value) in
+        let input = pseudonymized_data(pseudonym, attribute_type, value) in
+        let blinded_output = blind_pseudonymized_data(input, bpk_receiver, ek_receiver, k_prp) in
+        event BlindedPseudonym(blinded_output);
+        out(c, conversion_request(blinded_output, bpk_receiver, ek_receiver))
+    ) | (
+        if leak_keys then
+            event LeakLakeKeys();
+            out(c, bsk);
+            out(c, dk) 
+    ).
+
+(* Parameter `leak_keys` controls whether the secret keys are leaked to the adversary. *)
+let DataProcessor(bsk: blinding_sk, dk: privkey, k_prp: prp_key, leak_keys: bool) =
+    (
+        (* Request Available data for conversion *)
+        in(c, input: bitstring);
+        let data_available(attribute_type) = input in
+        out(c, data_request(attribute_type, bsk2bpk(bsk), pk(dk)))
+    ) | (
+        (* Join Finalization *)
+        in(c, input: bitstring);    
+        let pseudonymous_data = finalize_pseudonymized_data(input, bsk, dk, k_prp) in
+        event Joined(pseudonymous_data)
+    ) | (
+        if leak_keys then
+            event LeakProcessorKeys();
+            out(c, bsk);
+            out(c, dk)
+    ).
