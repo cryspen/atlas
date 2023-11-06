@@ -1,4 +1,4 @@
-//! # Split Conversion
+//! # Pseudonymization
 use hacspec_lib::Randomness;
 use libcrux::hpke::HpkePublicKey;
 use oprf::coprf::coprf_setup::BlindingPublicKey;
@@ -11,13 +11,20 @@ use crate::{
     table::Table,
 };
 
-/// ## Preparation
+/// ## Blinding Orthonymous Tables
 ///
-/// - For each column of the table, go entry by entry, blinding the table key for the
-/// data lake as coPRF receiver and additionaly encrypting the entry value towards the
-/// data lake
-/// - Sort each column by the blinded table keys (this implements a random shuffle)
-pub fn prepare_split_conversion(
+/// Prepare a table of orthonymous data values for pseudonymization by applying
+/// the blinding operation on each entry and shuffling the result.
+///
+/// Inputs:
+/// - `ek_receiver`: The receiver's public encryption key
+/// - `bpk_receiver`: The receiver's public blinding key
+/// - `table`: A table of identifiable data values
+/// - `randomness`: Random bytes
+///
+/// Outputs:
+/// A table of blinded identifiable data.
+pub fn blind_orthonymous_table(
     ek_receiver: &HpkePublicKey,
     bpk_receiver: BlindingPublicKey,
     table: Table<IdentifiableData>,
@@ -34,20 +41,22 @@ pub fn prepare_split_conversion(
     Ok(Table::new(table.identifier().into(), blinded_table_entries))
 }
 
-/// ## Conversion
-/// One part of the joint creation of pseudonomized and unlinkable data to
-/// be fed into the data lake.  The input table is part of a
-/// pseudonymization request by a data source. Its data contents are
-/// encrypted towards the data lake and the keys (unpseudonymized
-/// identifiers) are blinded to allow conversion.
+/// ## Oblivious Pseudonymization
 ///
-/// The output tables are to be fed into the data lake. Each table
-/// corresponds to one column (one data attribute) of the original
-/// table. All table entries have been assigned pseudonymized keys. In
-/// addition the entry ciphertexts have been rerandomized and table rows
-/// have been shuffled to prevent correlation of the incoming with the
-/// outgoing table data.
-pub fn split_conversion(
+/// Obliviously pseudonymize a table of blinded orthonymous data values by
+/// applying the oblivious pseudonymization operation on each entry and
+/// shuffling the result.
+///
+/// Inputs:
+/// - `converter_context`: The Converter's coPRF evaluation context
+/// - `ek_receiver`: The receiver's public encryption key
+/// - `bpk_receiver`: The receiver's public blinding key
+/// - `blinded_table`: A table of blinded identifiable data values
+/// - `randomness`: Random bytes
+///
+/// Outputs:
+/// A table of blinded pseudonymized data.
+pub fn pseudonymize_blinded_table(
     converter_context: &ConverterContext,
     bpk_receiver: BlindingPublicKey,
     ek_receiver: &HpkePublicKey,
@@ -101,7 +110,7 @@ mod tests {
         let (lake_ek, lake_bpk) = lake_context.public_keys();
 
         // == Blind Table for Pseudonymization ==
-        let blind_table = crate::split::prepare_split_conversion(
+        let blind_table = crate::split::blind_orthonymous_table(
             &lake_ek,
             lake_bpk,
             plain_table.clone(),
@@ -110,7 +119,7 @@ mod tests {
         .unwrap();
 
         // == Blind Pseudonymized Table ==
-        let converted_tables = crate::split::split_conversion(
+        let converted_tables = crate::split::pseudonymize_blinded_table(
             &converter_context,
             lake_bpk,
             &lake_ek,
@@ -121,7 +130,7 @@ mod tests {
 
         // == Unblinded Pseudonymized Table ==
         let lake_tables =
-            crate::finalize::finalize_conversion(&lake_context, converted_tables).unwrap();
+            crate::finalize::finalize_blinded_table(&lake_context, converted_tables).unwrap();
 
         let mut pseudonym_set = HashSet::new();
         // test that data is preserved

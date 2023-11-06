@@ -76,7 +76,7 @@ pub fn run(table: serde_json::Value) {
     let (ek_processor, bpk_processor) = processor_context.public_keys();
 
     // Split conversion
-    let blind_source_table = crate::split::prepare_split_conversion(
+    let blind_source_table = crate::split::blind_orthonymous_table(
         &ek_lake,
         bpk_lake,
         source_table.clone(),
@@ -84,7 +84,7 @@ pub fn run(table: serde_json::Value) {
     )
     .unwrap();
 
-    let blind_split_tables = crate::split::split_conversion(
+    let blind_split_tables = crate::split::pseudonymize_blinded_table(
         &converter_context,
         bpk_lake,
         &ek_lake,
@@ -94,7 +94,7 @@ pub fn run(table: serde_json::Value) {
     .unwrap();
 
     let finalized_split_tables =
-        crate::finalize::finalize_conversion(&lake_context, blind_split_tables.clone()).unwrap();
+        crate::finalize::finalize_blinded_table(&lake_context, blind_split_tables.clone()).unwrap();
 
     // Join conversion
     let join_table_selection = Table::new(
@@ -114,7 +114,7 @@ pub fn run(table: serde_json::Value) {
             .collect(),
     );
 
-    let blind_pre_join_tables = crate::join::prepare_join_conversion(
+    let blind_pre_join_tables = crate::join::blind_pseudonymous_table(
         &lake_context,
         bpk_processor,
         &ek_processor,
@@ -123,7 +123,7 @@ pub fn run(table: serde_json::Value) {
     )
     .unwrap();
 
-    let blind_joined_tables = crate::join::join_conversion(
+    let blind_joined_tables = crate::join::convert_blinded_table(
         &converter_context,
         bpk_processor,
         &ek_processor,
@@ -133,7 +133,7 @@ pub fn run(table: serde_json::Value) {
     .unwrap();
 
     let joined_tables =
-        crate::finalize::finalize_conversion(&processor_context, blind_joined_tables.clone())
+        crate::finalize::finalize_blinded_table(&processor_context, blind_joined_tables.clone())
             .unwrap();
 
     // == Visualization ==

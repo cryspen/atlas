@@ -1,4 +1,4 @@
-//! ## Join Conversion
+//! # Pseudonym Conversion
 use hacspec_lib::Randomness;
 use libcrux::hpke::HpkePublicKey;
 use oprf::coprf::coprf_setup::BlindingPublicKey;
@@ -12,53 +12,21 @@ use crate::{
     SECPAR_BYTES,
 };
 
-/// ### Preparation
-/// In order to process a join request on a number of pseudonymized
-/// columns, they are prepared as follows:
-/// - To allow for conversion to the join pseudonym, the unblinded coPRF
-///   outputs are first retrieved from the lake pseudonyms by applying the
-///   inverse of the PRP used when the data was imported to the lake.
-/// - Afterwards a blinding of these coPRF outputs is performed towards
-///   the data processor as receiver.
-/// - In addition the table values are encrypted towards the data
-///   processor.
+/// ## Blinding Pseudonymous Tables
 ///
-/// ``` text
+/// Prepare a table of pseudonymous data values for join conversion by applying
+/// the blinding operation on each entry and shuffling the result.
+///
 /// Inputs:
-///     context: StoreContext
-///     bpk_target: coPRF.BlindingPublicKey
-///     ek_target: RPKE.EncryptionKey
-///     pseudonymized_tables: List of PseudonymizedTables
-///     randomness: uniformly random bytes
+/// - `store_context`: The data store's pseudonymization context
+/// - `ek_receiver`: The receiver's public encryption key
+/// - `bpk_receiver`: The receiver's public blinding key
+/// - `pseudonymized_table`: A table of pseudonymous data values
+/// - `randomness`: Random bytes
 ///
-/// Output:
-///     blinded_tables: List of BlindedTables
-///
-/// fn prepare_join_conversion(context,
-///                            bpk_target,
-///                            ek_target,
-///                            pseudonymized_tables,
-///                            randomness):
-///     let blind_tables = Vec::new();
-///     for table in pseudonymized_tables {
-///         let blind_column = BlindColumn::new(table.column.attribute());
-///
-///         for (pseudonym, value) in table.column() {
-///             let raw_pseudonym = recover_raw_pseudonym(context, pseudonym);
-///             let blinded_pseudonym = prepare_blind_convert(bpk_target, raw_pseudonym, randomness);
-///
-///             let encrypted_value = RPKE.encrypt(ek_target, value, randomness);
-///
-///             blind_column.push((blinded_pseudonym, encrypted_value));
-///         }
-///         blind_column.sort();
-///
-///         let blind_table = BlindTable::new(table.identifier(), vec![blind_column]);
-///         blind_tables.push(blind_table)
-///     }
-///     return blind_tables
-/// ```
-pub fn prepare_join_conversion(
+/// Outputs:
+/// A table of blinded pseudonymous data values.
+pub fn blind_pseudonymous_table(
     store_context: &StoreContext,
     bpk_receiver: BlindingPublicKey,
     ek_receiver: &HpkePublicKey,
@@ -87,15 +55,22 @@ pub fn join_identifier(identifier: String) -> String {
     join_identifier
 }
 
-/// ### Conversion
-/// Join requests are processed by blindly converting coPRF outputs to a
-/// fresh-per-session join evaluation key.
+/// ## Oblivious Conversion
 ///
-/// For each of the blinded columns sent for joining by the lake, the
-/// pseudonymous column table key is blindly converted to a fresh join
-/// evaluation key.
+/// Obliviously convert a table of blinded pseudonymous data values to fresh
+/// join-pseudonyms by applying the pseudonym conversion transformation to
+/// each entry and shuffling the result.
 ///
-pub fn join_conversion(
+/// Inputs:
+/// - `converter_context`: The Converter's coPRF conversion context
+/// - `bpk_receiver`: The receiver's public blinding key
+/// - `ek_receiver`: The receiver's public encryption key
+/// - `table`: A table of blinded pseudonymous data values
+/// - `randomness`: Random bytes
+///
+/// Outputs:
+/// A table of consistently join-pseudonymized data values.
+pub fn convert_blinded_table(
     converter_context: &ConverterContext,
     bpk_receiver: BlindingPublicKey,
     ek_receiver: &HpkePublicKey,
@@ -121,43 +96,6 @@ pub fn join_conversion(
     converted_data.sort();
 
     Ok(Table::new(table.identifier().into(), converted_data))
-    // for table in tables {
-    //     for blind_column in table.columns() {
-    //         let attribute = blind_column.attribute();
-
-    //         let mut converted_data = Vec::new();
-    //         for (blind_identifier, encrypted_value) in blind_column.data() {
-    //             let blinded_pseudonymized_datum = BlindedPseudonymizedData {
-    //                 blinded_handle: BlindedPseudonymizedHandle(blind_identifier),
-    //                 encrypted_data_value: EncryptedDataValue {
-    //                     attribute_name: attribute.clone(),
-    //                     value: encrypted_value,
-    //                     encryption_level: 1u8,
-    //                 },
-    //             };
-    //             let blinded_pseudonymized_datum = convert_blinded_datum(
-    //                 &converter_context.coprf_context,
-    //                 &bpk_receiver,
-    //                 &ek_receiver,
-    //                 &conversion_target,
-    //                 &blinded_pseudonymized_datum,
-    //                 randomness,
-    //             )?;
-
-    //             converted_data.push((
-    //                 blinded_pseudonymized_datum.blinded_handle.0,
-    //                 blinded_pseudonymized_datum.encrypted_data_value.value,
-    //             ));
-    //         }
-    //         let mut converted_table_column = Column::new(attribute.clone(), converted_data);
-    //         converted_table_column.sort();
-    //         converted_tables.push(ConvertedTable::new(
-    //             join_identifier(table.identifier()),
-    //             converted_table_column,
-    //         ));
-    //     }
-    // }
-    // Ok(converted_tables)
 }
 
 #[cfg(test)]
@@ -186,7 +124,7 @@ mod tests {
         let (lake_ek, lake_bpk) = lake_context.public_keys();
 
         // == Blind Table for Pseudonymization ==
-        let blind_table = crate::split::prepare_split_conversion(
+        let blind_table = crate::split::blind_orthonymous_table(
             &lake_ek,
             lake_bpk,
             plain_table.clone(),
@@ -195,7 +133,7 @@ mod tests {
         .unwrap();
 
         // == Blind Pseudonymized Table ==
-        let converted_tables = crate::split::split_conversion(
+        let converted_tables = crate::split::pseudonymize_blinded_table(
             &converter_context,
             lake_bpk,
             &lake_ek,
@@ -206,7 +144,7 @@ mod tests {
 
         // == Unblinded Pseudonymized Table ==
         let lake_tables =
-            crate::finalize::finalize_conversion(&lake_context, converted_tables).unwrap();
+            crate::finalize::finalize_blinded_table(&lake_context, converted_tables).unwrap();
 
         let mut pseudonym_set = HashSet::new();
 
@@ -236,7 +174,7 @@ mod tests {
         let processor_context = StoreContext::setup(&mut randomness).unwrap();
 
         let (ek_processor, bpk_processor) = processor_context.public_keys();
-        let blind_tables = crate::join::prepare_join_conversion(
+        let blind_tables = crate::join::blind_pseudonymous_table(
             &lake_context,
             bpk_processor,
             &ek_processor,
@@ -245,7 +183,7 @@ mod tests {
         )
         .unwrap();
 
-        let converted_join_tables = crate::join::join_conversion(
+        let converted_join_tables = crate::join::convert_blinded_table(
             &converter_context,
             bpk_processor,
             &ek_processor,
@@ -255,7 +193,7 @@ mod tests {
         .unwrap();
 
         let joined_tables =
-            crate::finalize::finalize_conversion(&processor_context, converted_join_tables)
+            crate::finalize::finalize_blinded_table(&processor_context, converted_join_tables)
                 .unwrap();
 
         for entry in joined_tables.data() {

@@ -1,5 +1,3 @@
-//! # Conversion Finalization
-
 use crate::{
     data_transformations::finalize_blinded_datum,
     data_types::{BlindedPseudonymizedData, PseudonymizedData},
@@ -8,15 +6,22 @@ use crate::{
     table::Table,
 };
 
-/// The result of a split or join conversion is a set of blinded
-/// pseudonymized tables which have been encrypted towards a data store.
+/// ## Finalization of Pseudonymous and Converted Tables
 ///
-/// For permanent storage of the pseudonymized data, the raw pseudonyms have
-/// to be unblinded and subsequently hardened into permanent pseudonyms.
+/// Finalization of pseudonyms is the same regardless of pseudonym type,
+/// i.e. whether they are long term storage pseudonyms at the Data Lake or
+/// join pseudonyms at a Data Processor.
 ///
-/// In addition the encrypted values need to be decrypted to be available
-/// for future conversions towards other data stores.
-pub fn finalize_conversion(
+/// Finalize a table of blinded pseudonymized data values by applying the
+/// finalization operation on each entry and shuffling the result:
+///
+/// Inputs:
+/// - `store_context`: The data store's pseudonymization context
+/// - `table`: A table of blinded pseudonymized data values
+///
+/// Output:
+/// A table of pseudonymized data values.
+pub fn finalize_blinded_table(
     store_context: &StoreContext,
     table: Table<BlindedPseudonymizedData>,
 ) -> Result<Table<PseudonymizedData>, Error> {
