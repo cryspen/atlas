@@ -71,7 +71,7 @@ pub fn hash_to_group(bytes: &[u8], context_string: &[u8]) -> Result<P256Point, E
 fn serialize_deserialize() {
     use hacspec_lib::Randomness;
     let p: P256Point = p256::p256_point_mul_base(
-        p256::random_scalar(&mut Randomness::new(vec![0xab; 32])).unwrap(),
+        p256::random_scalar(&mut Randomness::new(vec![0xab; 32]), b"OPRF-Test").unwrap(),
     )
     .unwrap();
 
