@@ -103,8 +103,8 @@ pub fn run(table: serde_json::Value) {
             .data()
             .iter()
             .filter_map(|entry| {
-                if entry.data_value.attribute_name == "Address"
-                    || entry.data_value.attribute_name == "Favorite Color"
+                if entry.data_value.attribute_name == DEMO_COLUMN_NAMES[0]
+                    || entry.data_value.attribute_name == DEMO_COLUMN_NAMES[1]
                 {
                     Some(entry.clone())
                 } else {
@@ -170,7 +170,7 @@ pub fn run(table: serde_json::Value) {
         );
 
         let lake_table_element = dom_insert_column_table(&"data-lake-tables", &column, &document);
-        fill_pseudonymized_pseudonymized_column(
+        fill_pseudonymized_column(
             &lake_table_element,
             finalized_split_tables
                 .data()
@@ -180,7 +180,7 @@ pub fn run(table: serde_json::Value) {
         );
     }
 
-    for column in ["Address", "Favorite Color"] {
+    for column in DEMO_COLUMN_NAMES[0..2].iter() {
         let converter_input_element_2 =
             dom_insert_column_table(&"converter-input-2", column, &document);
 
@@ -189,7 +189,7 @@ pub fn run(table: serde_json::Value) {
             blind_pre_join_tables
                 .data()
                 .iter()
-                .filter(|entry| entry.encrypted_data_value.attribute_name == column)
+                .filter(|entry| entry.encrypted_data_value.attribute_name == *column)
                 .collect(),
         );
 
@@ -200,18 +200,18 @@ pub fn run(table: serde_json::Value) {
             blind_joined_tables
                 .data()
                 .iter()
-                .filter(|entry| entry.encrypted_data_value.attribute_name == column)
+                .filter(|entry| entry.encrypted_data_value.attribute_name == *column)
                 .collect(),
         );
 
         let lake_table_element =
             dom_insert_column_table(&"data-processor-joined", &column, &document);
-        fill_pseudonymized_pseudonymized_column(
+        fill_pseudonymized_column(
             &lake_table_element,
             joined_tables
                 .data()
                 .iter()
-                .filter(|entry| entry.data_value.attribute_name == column)
+                .filter(|entry| entry.data_value.attribute_name == *column)
                 .collect(),
         );
     }
@@ -286,7 +286,7 @@ fn fill_blinded_pseudonymized_column(
     }
 }
 
-fn fill_pseudonymized_pseudonymized_column(
+fn fill_pseudonymized_column(
     table_element: &HtmlTableElement,
     table_data: Vec<&PseudonymizedData>,
 ) {
