@@ -12,6 +12,9 @@ use crate::{
     Error,
 };
 
+/// Domain separator for scalar sampling during CoPRF key generation.
+const DST_KEYGEN: &[u8] = b"CoPRF-KeyGeneration";
+
 /// As blinding is performed by Elgamal encryption, the blinding public
 /// key is an Elgamal encryption key.
 pub type BlindingPublicKey = elgamal::EncryptionKey;
@@ -124,5 +127,6 @@ pub fn derive_key(context: &CoPRFEvaluatorContext, key_id: &[u8]) -> Result<CoPR
 
     let random_bytes = sha256::hash(&key_material);
 
-    p256::random_scalar(&mut Randomness::new(random_bytes.to_vec())).map_err(|e| e.into())
+    p256::random_scalar(&mut Randomness::new(random_bytes.to_vec()), DST_KEYGEN)
+        .map_err(|e| e.into())
 }
