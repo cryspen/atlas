@@ -10,13 +10,18 @@ use oprf::coprf::coprf_online::{BlindInput, BlindOutput};
 
 /// A type for finalized pseudonyms, i.e. those which have been hardened for
 /// storage by applying a PRP.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(test, derive(Hash))]
 pub struct FinalizedPseudonym(pub(crate) [u8; 64]);
 /// A type for blinded identifiable handles.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BlindedIdentifiableHandle(pub(crate) BlindInput);
 /// A type for  blinded pseudonymous handles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BlindedPseudonymizedHandle(pub(crate) BlindOutput);
 
 /// A plain text data value.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DataValue {
     /// A byte string encoding the data value.
     pub(crate) value: Vec<u8>,
@@ -24,6 +29,7 @@ pub struct DataValue {
     pub(crate) attribute_name: String,
 }
 /// An encrypted data value.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EncryptedDataValue {
     /// A byte string encoding the encrypted data value.
     pub(crate) value: Vec<u8>,
@@ -34,14 +40,22 @@ pub struct EncryptedDataValue {
 }
 
 /// An identifiable piece of data.
+///
+/// `PartialOrd` derive:
+/// When derived on structs, it will produce a lexicographic ordering based on
+/// the top-to-bottom declaration order of the struct’s members.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IdentifiableData {
     /// A plain text handle.
+    /// Because `PartialOrd` is derived, the order for this struct is
+    /// lexicographical on this handle.
     pub(crate) handle: String,
     /// A plain text data value.
     pub(crate) data_value: DataValue,
 }
 
 /// The blinded version of an identifiable piece of data.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BlindedIdentifiableData {
     /// A blinded plain text handle.
     pub(crate) blinded_handle: BlindedIdentifiableHandle,
@@ -50,6 +64,7 @@ pub struct BlindedIdentifiableData {
 }
 
 /// The blinded version of a pseudonymized piece of data.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BlindedPseudonymizedData {
     /// A blinded pseudonymous handle.
     pub(crate) blinded_handle: BlindedPseudonymizedHandle,
@@ -58,6 +73,7 @@ pub struct BlindedPseudonymizedData {
 }
 
 /// A pseudonymized piece of data.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PseudonymizedData {
     /// A pseudonymous handle.
     pub(crate) handle: FinalizedPseudonym,

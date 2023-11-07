@@ -11,8 +11,8 @@ use oprf::coprf::{
 use p256::P256Point;
 
 use crate::{
+    data_types::{BlindedPseudonymizedHandle, FinalizedPseudonym},
     error::Error,
-    table::{BlindPseudonym, Pseudonym},
 };
 
 pub struct ConverterContext {
@@ -131,9 +131,16 @@ impl StoreContext {
     ///     context.coprf_receiver_context.finalize(blind_pseudonym);
     ///     return PRP.eval(context.k_prp, raw_pseudonym)
     /// ```
-    pub fn finalize_pseudonym(&self, blind_pseudonym: BlindPseudonym) -> Result<Pseudonym, Error> {
-        let raw_pseudonym = coprf_online::finalize(&self.coprf_receiver_context, blind_pseudonym)?;
-        Ok(prp::prp(raw_pseudonym.raw_bytes(), &self.k_prp))
+    pub fn finalize_pseudonym(
+        &self,
+        blind_pseudonym: BlindedPseudonymizedHandle,
+    ) -> Result<FinalizedPseudonym, Error> {
+        let raw_pseudonym =
+            coprf_online::finalize(&self.coprf_receiver_context, blind_pseudonym.0)?;
+        Ok(FinalizedPseudonym(prp::prp(
+            raw_pseudonym.raw_bytes(),
+            &self.k_prp,
+        )))
     }
 
     /// - Recover Raw Pseudonym: In preparation of a join conversion, the raw
@@ -152,7 +159,7 @@ impl StoreContext {
     ///   fn recover_raw_pseudonym(context, pseudonym):
     ///       return PRP.invert(context.k_prp, pseudonym)
     ///   ```
-    pub fn recover_raw_pseudonym(&self, pseudonym: Pseudonym) -> Result<P256Point, Error> {
-        P256Point::from_raw_bytes(prp::prp(pseudonym, &self.k_prp)).map_err(|e| e.into())
+    pub fn recover_raw_pseudonym(&self, pseudonym: FinalizedPseudonym) -> Result<P256Point, Error> {
+        P256Point::from_raw_bytes(prp::prp(pseudonym.0, &self.k_prp)).map_err(|e| e.into())
     }
 }

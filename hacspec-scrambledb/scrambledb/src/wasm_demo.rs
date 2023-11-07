@@ -2,21 +2,24 @@ use hacspec_lib::Randomness;
 use wasm_bindgen::prelude::*;
 
 use wasm_bindgen::JsCast;
-use web_sys::HtmlTableRowElement;
+
 use web_sys::{Document, HtmlTableElement};
 
-use crate::table::BlindIdentifier;
-use crate::table::Column;
-use crate::table::ConvertedTable;
-use crate::table::EncryptedValue;
-use crate::table::MultiColumnTable;
-use crate::table::Pseudonym;
-use crate::table::SingleColumnTable;
+use crate::data_types::BlindedIdentifiableData;
+use crate::data_types::BlindedIdentifiableHandle;
+use crate::data_types::BlindedPseudonymizedData;
+use crate::data_types::BlindedPseudonymizedHandle;
+use crate::data_types::DataValue;
+use crate::data_types::EncryptedDataValue;
+use crate::data_types::FinalizedPseudonym;
+use crate::data_types::IdentifiableData;
+use crate::data_types::PseudonymizedData;
 use crate::{
     setup::{ConverterContext, StoreContext},
-    table::{BlindTable, PlainTable, PseudonymizedTable},
+    table::Table,
 };
-use std::fmt::Debug;
+
+use std::fmt::Display;
 
 use gloo_utils::format::JsValueSerdeExt;
 
@@ -30,22 +33,27 @@ pub fn init_table(table: JsValue) {
     run(table)
 }
 
-pub fn generate_plain_table(table: serde_json::Value) -> PlainTable {
-    let mut columns = Vec::new();
-    let column_names = ["Address", "Date of Birth", "Favourite Color"];
-    for column in column_names {
-        let mut column_values = vec![];
+const DEMO_COLUMN_NAMES: [&str; 3] = ["Address", "Date of Birth", "Favourite Color"];
+
+pub fn generate_plain_table(table: serde_json::Value) -> Table<IdentifiableData> {
+    let mut data = Vec::new();
+    for column in DEMO_COLUMN_NAMES {
         for i in 0..table.as_array().unwrap().len() {
             let row = &table[i];
 
             let encoded_value = row[column].as_str().unwrap().as_bytes().to_vec();
 
-            column_values.push((row["Identity"].as_str().unwrap().to_string(), encoded_value));
+            data.push(IdentifiableData {
+                handle: row["Identity"].as_str().unwrap().to_string(),
+                data_value: DataValue {
+                    value: encoded_value,
+                    attribute_name: column.into(),
+                },
+            });
         }
-        columns.push(Column::new(column.to_string(), column_values));
     }
 
-    PlainTable::new(String::from("ExampleTable"), columns)
+    Table::new("ExampleTable".into(), data)
 }
 
 pub fn run(table: serde_json::Value) {
@@ -68,7 +76,7 @@ pub fn run(table: serde_json::Value) {
     let (ek_processor, bpk_processor) = processor_context.public_keys();
 
     // Split conversion
-    let blind_source_table = crate::split::prepare_split_conversion(
+    let blind_source_table = crate::split::blind_orthonymous_table(
         &ek_lake,
         bpk_lake,
         source_table.clone(),
@@ -76,7 +84,7 @@ pub fn run(table: serde_json::Value) {
     )
     .unwrap();
 
-    let blind_split_tables = crate::split::split_conversion(
+    let blind_split_tables = crate::split::pseudonymize_blinded_table(
         &converter_context,
         bpk_lake,
         &ek_lake,
@@ -86,15 +94,27 @@ pub fn run(table: serde_json::Value) {
     .unwrap();
 
     let finalized_split_tables =
-        crate::finalize::finalize_conversion(&lake_context, blind_split_tables.clone()).unwrap();
+        crate::finalize::finalize_blinded_table(&lake_context, blind_split_tables.clone()).unwrap();
 
     // Join conversion
-    let join_table_selection = vec![
-        finalized_split_tables[0].clone(),
-        finalized_split_tables[1].clone(),
-    ];
+    let join_table_selection = Table::new(
+        "Join".into(),
+        finalized_split_tables
+            .data()
+            .iter()
+            .filter_map(|entry| {
+                if entry.data_value.attribute_name == DEMO_COLUMN_NAMES[0]
+                    || entry.data_value.attribute_name == DEMO_COLUMN_NAMES[1]
+                {
+                    Some(entry.clone())
+                } else {
+                    None
+                }
+            })
+            .collect(),
+    );
 
-    let blind_pre_join_tables = crate::join::prepare_join_conversion(
+    let blind_pre_join_tables = crate::join::blind_pseudonymous_table(
         &lake_context,
         bpk_processor,
         &ek_processor,
@@ -103,7 +123,7 @@ pub fn run(table: serde_json::Value) {
     )
     .unwrap();
 
-    let blind_joined_tables = crate::join::join_conversion(
+    let blind_joined_tables = crate::join::convert_blinded_table(
         &converter_context,
         bpk_processor,
         &ek_processor,
@@ -113,7 +133,7 @@ pub fn run(table: serde_json::Value) {
     .unwrap();
 
     let joined_tables =
-        crate::finalize::finalize_conversion(&processor_context, blind_joined_tables.clone())
+        crate::finalize::finalize_blinded_table(&processor_context, blind_joined_tables.clone())
             .unwrap();
 
     // == Visualization ==
@@ -126,51 +146,81 @@ pub fn run(table: serde_json::Value) {
     //     dom_insert_multicolumn_table(&"data-source-table-plain", &source_table, &document);
     // fill_plain_table(&source_table_dom, &source_table);
 
-    // == Blind Table for Pseudonymization ==
-    let converter_input_1 = dom_insert_multicolumn_table_single_id(
-        &"converter-input-1",
-        &blind_source_table,
-        &document,
-    );
-    fill_blind_table_single_id(&converter_input_1, &blind_source_table);
+    for column in DEMO_COLUMN_NAMES {
+        // Converter Input
+        let converter_input_1 = dom_insert_column_table(&"converter-input-1", column, &document);
+        fill_blind_column(
+            &converter_input_1,
+            blind_source_table
+                .data()
+                .iter()
+                .filter(|entry| entry.encrypted_data_value.attribute_name == column)
+                .collect(),
+        );
 
-    // == Blind Pseudonymized Table ==
-    for converted_table in blind_split_tables.iter() {
-        let table_element =
-            dom_insert_column_table(&"converter-output-1", &converted_table, &document);
-        fill_blind_column(&table_element, converted_table);
+        let converted_table_element =
+            dom_insert_column_table(&"converter-output-1", column, &document);
+        fill_blinded_pseudonymized_column(
+            &converted_table_element,
+            blind_split_tables
+                .data()
+                .iter()
+                .filter(|entry| entry.encrypted_data_value.attribute_name == column)
+                .collect(),
+        );
+
+        let lake_table_element = dom_insert_column_table(&"data-lake-tables", &column, &document);
+        fill_pseudonymized_column(
+            &lake_table_element,
+            finalized_split_tables
+                .data()
+                .iter()
+                .filter(|entry| entry.data_value.attribute_name == column)
+                .collect(),
+        );
     }
 
-    // == Unblinded Pseudonymized Table ==
-    for lake_table in finalized_split_tables.iter() {
+    for column in DEMO_COLUMN_NAMES[0..2].iter() {
+        let converter_input_element_2 =
+            dom_insert_column_table(&"converter-input-2", column, &document);
+
+        fill_blinded_pseudonymized_column(
+            &converter_input_element_2,
+            blind_pre_join_tables
+                .data()
+                .iter()
+                .filter(|entry| entry.encrypted_data_value.attribute_name == *column)
+                .collect(),
+        );
+
+        let converter_output_element_2 =
+            dom_insert_column_table(&"converter-output-2", column, &document);
+        fill_blinded_pseudonymized_column(
+            &converter_output_element_2,
+            blind_joined_tables
+                .data()
+                .iter()
+                .filter(|entry| entry.encrypted_data_value.attribute_name == *column)
+                .collect(),
+        );
+
         let lake_table_element =
-            dom_insert_column_table(&"data-lake-tables", &lake_table, &document);
-        fill_pseudonymized_column(&lake_table_element, lake_table);
-    }
-
-    // select first two lake tables for join
-    for table in blind_pre_join_tables.iter() {
-        let converter_input_2 =
-            dom_insert_multicolumn_table(&"converter-input-2", &table, &document);
-        fill_blind_table(&converter_input_2, &table);
-    }
-
-    for table in blind_joined_tables.iter() {
-        let converter_output_2 = dom_insert_column_table(&"converter-output-2", &table, &document);
-        fill_blind_column(&converter_output_2, &table);
-    }
-
-    for lake_table in joined_tables.iter() {
-        let lake_table_element =
-            dom_insert_column_table(&"data-processor-joined", &lake_table, &document);
-        fill_pseudonymized_column(&lake_table_element, lake_table);
+            dom_insert_column_table(&"data-processor-joined", &column, &document);
+        fill_pseudonymized_column(
+            &lake_table_element,
+            joined_tables
+                .data()
+                .iter()
+                .filter(|entry| entry.data_value.attribute_name == *column)
+                .collect(),
+        );
     }
 }
 
-// Create a table skeleton for pseudonymous table
-fn dom_insert_column_table<K: Debug + Clone, V: Debug + Clone>(
+// Create a table skeleton for a table skeleton
+fn dom_insert_column_table(
     element_id: &str,
-    table: &SingleColumnTable<K, V>,
+    header: &str,
     document: &Document,
 ) -> HtmlTableElement {
     let table_div = document.get_element_by_id(element_id).unwrap();
@@ -193,7 +243,7 @@ fn dom_insert_column_table<K: Debug + Clone, V: Debug + Clone>(
     let id_cell = header_row.insert_cell().unwrap();
     id_cell.set_text_content(Some(&"ID"));
     let header_cell = header_row.insert_cell().unwrap();
-    header_cell.set_text_content(Some(&table.column().attribute()));
+    header_cell.set_text_content(Some(header));
 
     t_head.append_child(&header_row).unwrap();
 
@@ -201,188 +251,96 @@ fn dom_insert_column_table<K: Debug + Clone, V: Debug + Clone>(
     table_element
 }
 
-// creates a table skeleton for a multicolumn table.
-fn dom_insert_multicolumn_table<K: Debug, V: Debug>(
-    element_id: &str,
-    table: &MultiColumnTable<K, V>,
-    document: &Document,
-) -> HtmlTableElement
-where
-    K: Clone,
-    V: Clone,
-{
-    let table_div = document.get_element_by_id(element_id).unwrap();
-
-    let table_element: HtmlTableElement = document
-        .create_element("table")
-        .unwrap()
-        .dyn_into::<web_sys::HtmlTableElement>()
-        .unwrap();
-
-    let t_head = table_element.create_t_head();
-
-    let header_row = document
-        .create_element("tr")
-        .unwrap()
-        .dyn_into::<web_sys::HtmlTableRowElement>()
-        .unwrap();
-    header_row.set_attribute("class", "tableheader").unwrap();
-
-    for colum in table.columns() {
-        let id_cell = header_row.insert_cell().unwrap();
-        id_cell.set_text_content(Some(&"ID"));
-        let header_cell = header_row.insert_cell().unwrap();
-        header_cell.set_text_content(Some(&colum.attribute()));
-    }
-
-    t_head.append_child(&header_row).unwrap();
-
-    table_div.append_child(&table_element).unwrap();
-    table_element
-}
-
-// creates a table skeleton for a multicolumn table where only the first id column is shown.
-fn dom_insert_multicolumn_table_single_id<K: Debug, V: Debug>(
-    element_id: &str,
-    table: &MultiColumnTable<K, V>,
-    document: &Document,
-) -> HtmlTableElement
-where
-    K: Clone,
-    V: Clone,
-{
-    let table_div = document.get_element_by_id(element_id).unwrap();
-
-    let table_element: HtmlTableElement = document
-        .create_element("table")
-        .unwrap()
-        .dyn_into::<web_sys::HtmlTableElement>()
-        .unwrap();
-
-    let t_head = table_element.create_t_head();
-
-    let header_row = document
-        .create_element("tr")
-        .unwrap()
-        .dyn_into::<web_sys::HtmlTableRowElement>()
-        .unwrap();
-    header_row.set_attribute("class", "tableheader").unwrap();
-
-    let id_cell = header_row.insert_cell().unwrap();
-    id_cell.set_text_content(Some(&"ID"));
-
-    for colum in table.columns() {
-        let header_cell = header_row.insert_cell().unwrap();
-        header_cell.set_text_content(Some(&colum.attribute()));
-    }
-
-    t_head.append_child(&header_row).unwrap();
-
-    table_div.append_child(&table_element).unwrap();
-    table_element
-}
-// fn fill_plain_table(table_element: &HtmlTableElement, plain_table: &PlainTable) {
-//     for row in plain_table.rows() {
-//         let html_row = table_element
-//             .insert_row()
-//             .unwrap()
-//             .dyn_into::<web_sys::HtmlTableRowElement>()
-//             .unwrap();
-//         for (key, value) in row {
-//             insert_cell(&html_row, TableCell::PlainID(key));
-//             insert_cell(&html_row, TableCell::PlainValue(value));
-//         }
-//     }
-// }
-
-fn fill_blind_table(table_element: &HtmlTableElement, blind_table: &BlindTable) {
-    for row in blind_table.rows() {
+fn fill_blind_column(table_element: &HtmlTableElement, table_data: Vec<&BlindedIdentifiableData>) {
+    for blinded_data in table_data {
         let html_row = table_element
             .insert_row()
             .unwrap()
             .dyn_into::<web_sys::HtmlTableRowElement>()
             .unwrap();
 
-        for (key, value) in row {
-            insert_cell(&html_row, TableCell::BlindID(key));
-            insert_cell(&html_row, TableCell::BlindValue(value));
-        }
+        let cell = html_row.insert_cell().unwrap();
+        cell.set_text_content(Some(&blinded_data.blinded_handle.to_string()));
+
+        let cell = html_row.insert_cell().unwrap();
+        cell.set_text_content(Some(&blinded_data.encrypted_data_value.to_string()));
     }
 }
 
-fn fill_blind_table_single_id(table_element: &HtmlTableElement, blind_table: &BlindTable) {
-    for row in blind_table.rows() {
+fn fill_blinded_pseudonymized_column(
+    table_element: &HtmlTableElement,
+    table_data: Vec<&BlindedPseudonymizedData>,
+) {
+    for blinded_data in table_data {
         let html_row = table_element
             .insert_row()
             .unwrap()
             .dyn_into::<web_sys::HtmlTableRowElement>()
             .unwrap();
 
-        insert_cell(&html_row, TableCell::BlindID(row[0].0));
-        insert_cell(&html_row, TableCell::BlindValue(row[0].1.clone()));
+        let cell = html_row.insert_cell().unwrap();
+        cell.set_text_content(Some(&blinded_data.blinded_handle.to_string()));
 
-        for (_key, value) in row.iter().skip(1) {
-            insert_cell(&html_row, TableCell::BlindValue(value.clone()));
-        }
+        let cell = html_row.insert_cell().unwrap();
+        cell.set_text_content(Some(&blinded_data.encrypted_data_value.to_string()));
     }
 }
 
-fn fill_pseudonymized_column(table_element: &HtmlTableElement, table: &PseudonymizedTable) {
-    for (key, value) in table.column().data() {
+fn fill_pseudonymized_column(
+    table_element: &HtmlTableElement,
+    table_data: Vec<&PseudonymizedData>,
+) {
+    for blinded_data in table_data {
         let html_row = table_element
             .insert_row()
             .unwrap()
             .dyn_into::<web_sys::HtmlTableRowElement>()
             .unwrap();
 
-        insert_cell(&html_row, TableCell::Pseudonym(key));
-        insert_cell(
-            &html_row,
-            TableCell::PlainValue(String::from_utf8_lossy(&value).to_string()),
-        );
+        let cell = html_row.insert_cell().unwrap();
+        cell.set_text_content(Some(&blinded_data.handle.to_string()));
+
+        let cell = html_row.insert_cell().unwrap();
+        cell.set_text_content(Some(&blinded_data.data_value.to_string()));
     }
 }
 
-fn fill_blind_column(table_element: &HtmlTableElement, table: &ConvertedTable) {
-    for (key, value) in table.column().data() {
-        let html_row = table_element
-            .insert_row()
-            .unwrap()
-            .dyn_into::<web_sys::HtmlTableRowElement>()
-            .unwrap();
-
-        insert_cell(&html_row, TableCell::BlindID(key));
-        insert_cell(&html_row, TableCell::BlindValue(value));
+impl Display for FinalizedPseudonym {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NYM({}...)", hex::encode(&self.0[0..5]))
     }
 }
 
-enum TableCell {
-    PlainValue(String),
-    BlindID(BlindIdentifier),
-    BlindValue(EncryptedValue),
-    Pseudonym(Pseudonym),
-}
-
-impl TableCell {
-    fn to_string(&self) -> String {
-        match &self {
-            TableCell::PlainValue(v) => v.clone(),
-            TableCell::BlindID(b) => String::from(format!(
-                "BLIND-ID({}..., {}...)",
-                &hex::encode(b.0.raw_bytes())[0..5],
-                &hex::encode(b.1.raw_bytes())[0..5],
-            )),
-            TableCell::BlindValue(b) => {
-                format!("ENC({}...)", &hex::encode(b)[0..5],)
-            }
-            TableCell::Pseudonym(nym) => {
-                String::from(format!("NYM({}...)", &hex::encode(nym)[0..5]))
-            }
-        }
+impl Display for BlindedIdentifiableHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "BLIND_ID({}..., {}...)",
+            hex::encode(&self.0 .0.raw_bytes()[0..5]),
+            hex::encode(&self.0 .1.raw_bytes()[0..5]),
+        )
     }
 }
 
-fn insert_cell(row: &HtmlTableRowElement, value: TableCell) {
-    let cell = row.insert_cell().unwrap();
-    cell.set_text_content(Some(&value.to_string()));
+impl Display for BlindedPseudonymizedHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "BLIND_NYM({}..., {}...)",
+            hex::encode(&self.0 .0.raw_bytes()[0..5]),
+            hex::encode(&self.0 .1.raw_bytes()[0..5]),
+        )
+    }
+}
+
+impl Display for DataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", String::from_utf8(self.value.clone()).unwrap())
+    }
+}
+
+impl Display for EncryptedDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ENC({}...)", hex::encode(&self.value[0..5]),)
+    }
 }

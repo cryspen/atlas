@@ -1,125 +1,87 @@
-//! # Split Conversion
+//! # Pseudonymization
 use hacspec_lib::Randomness;
 use libcrux::hpke::HpkePublicKey;
 use oprf::coprf::coprf_setup::BlindingPublicKey;
 
 use crate::{
     data_transformations::{blind_identifiable_datum, pseudonymize_blinded_datum},
-    data_types::{BlindedIdentifiableData, DataValue, EncryptedDataValue, IdentifiableData},
+    data_types::{BlindedIdentifiableData, BlindedPseudonymizedData, IdentifiableData},
     error::Error,
     setup::ConverterContext,
-    table::{BlindTable, Column, ConvertedTable, PlainTable},
+    table::Table,
 };
 
-fn split_identifier(identifier: String, attribute: String) -> String {
-    let mut split_identifier = identifier;
-    split_identifier.push('-');
-    split_identifier.push_str(&attribute);
-    split_identifier
-}
-
-/// ## Preparation
+/// ## Blinding Orthonymous Tables
 ///
-/// - For each column of the table, go entry by entry, blinding the table key for the
-/// data lake as coPRF receiver and additionaly encrypting the entry value towards the
-/// data lake
-/// - Sort each column by the blinded table keys (this implements a random shuffle)
-pub fn prepare_split_conversion(
+/// Prepare a table of orthonymous data values for pseudonymization by applying
+/// the blinding operation on each entry and shuffling the result.
+///
+/// Inputs:
+/// - `ek_receiver`: The receiver's public encryption key
+/// - `bpk_receiver`: The receiver's public blinding key
+/// - `table`: A table of identifiable data values
+/// - `randomness`: Random bytes
+///
+/// Outputs:
+/// A table of blinded identifiable data.
+pub fn blind_orthonymous_table(
     ek_receiver: &HpkePublicKey,
     bpk_receiver: BlindingPublicKey,
-    table: PlainTable,
+    table: Table<IdentifiableData>,
     randomness: &mut Randomness,
-) -> Result<BlindTable, Error> {
-    let mut blinded_columns = Vec::new();
+) -> Result<Table<BlindedIdentifiableData>, Error> {
+    let mut blinded_table_entries = table
+        .data()
+        .iter()
+        .map(|entry| blind_identifiable_datum(&bpk_receiver, ek_receiver, entry, randomness))
+        .collect::<Result<Vec<BlindedIdentifiableData>, Error>>()?;
 
-    for column in table.columns() {
-        let attribute = column.attribute();
+    blinded_table_entries.sort();
 
-        let mut blinded_column_data = Vec::new();
-
-        for (plaintext_id, plaintext_value) in column.data() {
-            let datum = IdentifiableData {
-                handle: plaintext_id,
-                data_value: DataValue {
-                    attribute_name: attribute.clone(),
-                    value: plaintext_value,
-                },
-            };
-            let blinded_datum =
-                blind_identifiable_datum(&bpk_receiver, ek_receiver, &datum, randomness)?;
-
-            blinded_column_data.push((
-                blinded_datum.blinded_handle.0,
-                blinded_datum.encrypted_data_value.value,
-            ));
-        }
-        let mut blinded_column = Column::new(attribute, blinded_column_data);
-        blinded_column.sort();
-
-        blinded_columns.push(blinded_column);
-    }
-    Ok(BlindTable::new(table.identifier(), blinded_columns))
+    Ok(Table::new(table.identifier().into(), blinded_table_entries))
 }
 
-/// ## Conversion
-/// One part of the joint creation of pseudonomized and unlinkable data to
-/// be fed into the data lake.  The input table is part of a
-/// pseudonymization request by a data source. Its data contents are
-/// encrypted towards the data lake and the keys (unpseudonymized
-/// identifiers) are blinded to allow conversion.
+/// ## Oblivious Pseudonymization
 ///
-/// The output tables are to be fed into the data lake. Each table
-/// corresponds to one column (one data attribute) of the original
-/// table. All table entries have been assigned pseudonymized keys. In
-/// addition the entry ciphertexts have been rerandomized and table rows
-/// have been shuffled to prevent correlation of the incoming with the
-/// outgoing table data.
-pub fn split_conversion(
+/// Obliviously pseudonymize a table of blinded orthonymous data values by
+/// applying the oblivious pseudonymization operation on each entry and
+/// shuffling the result.
+///
+/// Inputs:
+/// - `converter_context`: The Converter's coPRF evaluation context
+/// - `ek_receiver`: The receiver's public encryption key
+/// - `bpk_receiver`: The receiver's public blinding key
+/// - `blinded_table`: A table of blinded identifiable data values
+/// - `randomness`: Random bytes
+///
+/// Outputs:
+/// A table of blinded pseudonymized data.
+pub fn pseudonymize_blinded_table(
     converter_context: &ConverterContext,
     bpk_receiver: BlindingPublicKey,
     ek_receiver: &HpkePublicKey,
-    blinded_table: BlindTable,
+    blinded_table: Table<BlindedIdentifiableData>,
     randomness: &mut Randomness,
-) -> Result<Vec<ConvertedTable>, Error> {
-    let mut converted_tables = Vec::new();
-
-    for blinded_column in blinded_table.columns() {
-        let attribute = blinded_column.attribute();
-
-        let mut converted_column_data = Vec::new();
-        for (blind_identifier, encrypted_value) in blinded_column.data() {
-            let blinded_datum = BlindedIdentifiableData {
-                blinded_handle: crate::data_types::BlindedIdentifiableHandle(blind_identifier),
-                encrypted_data_value: EncryptedDataValue {
-                    attribute_name: attribute.clone(),
-                    value: encrypted_value,
-                    encryption_level: 1u8,
-                },
-            };
-
-            let blinded_pseudonymized_datum = pseudonymize_blinded_datum(
+) -> Result<Table<BlindedPseudonymizedData>, Error> {
+    let mut blinded_pseudonymized_entries = blinded_table
+        .data()
+        .iter()
+        .map(|entry| {
+            pseudonymize_blinded_datum(
                 &converter_context.coprf_context,
                 &bpk_receiver,
                 ek_receiver,
-                &blinded_datum,
+                entry,
                 randomness,
-            )?;
+            )
+        })
+        .collect::<Result<Vec<BlindedPseudonymizedData>, Error>>()?;
+    blinded_pseudonymized_entries.sort();
 
-            converted_column_data.push((
-                blinded_pseudonymized_datum.blinded_handle.0,
-                blinded_pseudonymized_datum.encrypted_data_value.value,
-            ));
-        }
-
-        let mut converted_column = Column::new(attribute.clone(), converted_column_data);
-        converted_column.sort();
-        converted_tables.push(ConvertedTable::new(
-            split_identifier(blinded_table.identifier(), attribute),
-            converted_column,
-        ));
-    }
-
-    Ok(converted_tables)
+    Ok(Table::new(
+        blinded_table.identifier().into(),
+        blinded_pseudonymized_entries,
+    ))
 }
 
 #[cfg(test)]
@@ -148,7 +110,7 @@ mod tests {
         let (lake_ek, lake_bpk) = lake_context.public_keys();
 
         // == Blind Table for Pseudonymization ==
-        let blind_table = crate::split::prepare_split_conversion(
+        let blind_table = crate::split::blind_orthonymous_table(
             &lake_ek,
             lake_bpk,
             plain_table.clone(),
@@ -157,7 +119,7 @@ mod tests {
         .unwrap();
 
         // == Blind Pseudonymized Table ==
-        let converted_tables = crate::split::split_conversion(
+        let converted_tables = crate::split::pseudonymize_blinded_table(
             &converter_context,
             lake_bpk,
             &lake_ek,
@@ -168,31 +130,25 @@ mod tests {
 
         // == Unblinded Pseudonymized Table ==
         let lake_tables =
-            crate::finalize::finalize_conversion(&lake_context, converted_tables).unwrap();
-
-        let plain_values: Vec<HashSet<Vec<u8>>> = plain_table
-            .clone()
-            .columns()
-            .iter()
-            .map(|column| HashSet::from_iter(column.values()))
-            .collect();
+            crate::finalize::finalize_blinded_table(&lake_context, converted_tables).unwrap();
 
         let mut pseudonym_set = HashSet::new();
         // test that data is preserved
-        for table in lake_tables {
-            let table_values: HashSet<Vec<u8>> = HashSet::from_iter(table.values());
+        for pseudonymized_data in lake_tables.data() {
             assert!(
-                plain_values.iter().any(|set| { *set == table_values }),
+                // plain_values.iter().any(|set| { *set == table_values }),
+                plain_table
+                    .data()
+                    .iter()
+                    .any(|entry| entry.data_value == pseudonymized_data.data_value),
                 "Data was not preserved during pseudonymization."
             );
 
             // test if all pseudonyms are unique
-            for key in table.keys() {
-                assert!(
-                    pseudonym_set.insert(key),
-                    "Generated pseudonyms are not unique."
-                );
-            }
+            assert!(
+                pseudonym_set.insert(pseudonymized_data.handle.clone()),
+                "Generated pseudonyms are not unique."
+            );
         }
     }
 }

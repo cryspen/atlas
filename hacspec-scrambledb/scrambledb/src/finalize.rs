@@ -1,60 +1,37 @@
-//! # Conversion Finalization
-
 use crate::{
     data_transformations::finalize_blinded_datum,
-    data_types::{BlindedPseudonymizedData, BlindedPseudonymizedHandle, EncryptedDataValue},
+    data_types::{BlindedPseudonymizedData, PseudonymizedData},
     error::Error,
     setup::StoreContext,
-    table::{Column, ConvertedTable, PseudonymizedTable},
+    table::Table,
 };
 
-/// The result of a split or join conversion is a set of blinded
-/// pseudonymized tables which have been encrypted towards a data store.
+/// ## Finalization of Pseudonymous and Converted Tables
 ///
-/// For permanent storage of the pseudonymized data, the raw pseudonyms have
-/// to be unblinded and subsequently hardened into permanent pseudonyms.
+/// Finalization of pseudonyms is the same regardless of pseudonym type,
+/// i.e. whether they are long term storage pseudonyms at the Data Lake or
+/// join pseudonyms at a Data Processor.
 ///
-/// In addition the encrypted values need to be decrypted to be available
-/// for future conversions towards other data stores.
-pub fn finalize_conversion(
+/// Finalize a table of blinded pseudonymized data values by applying the
+/// finalization operation on each entry and shuffling the result:
+///
+/// Inputs:
+/// - `store_context`: The data store's pseudonymization context
+/// - `table`: A table of blinded pseudonymized data values
+///
+/// Output:
+/// A table of pseudonymized data values.
+pub fn finalize_blinded_table(
     store_context: &StoreContext,
-    converted_tables: Vec<ConvertedTable>,
-) -> Result<Vec<PseudonymizedTable>, Error> {
-    let mut pseudonymized_tables = Vec::new();
+    table: Table<BlindedPseudonymizedData>,
+) -> Result<Table<PseudonymizedData>, Error> {
+    let mut pseudonymized_data = table
+        .data()
+        .iter()
+        .map(|entry| finalize_blinded_datum(store_context, entry))
+        .collect::<Result<Vec<PseudonymizedData>, Error>>()?;
 
-    for blinded_table in converted_tables {
-        let mut pseudonymized_column_data = Vec::new();
+    pseudonymized_data.sort();
 
-        for (blinded_pseudonym, encrypted_value) in blinded_table.column().data() {
-            let blinded_pseudonymized_datum = BlindedPseudonymizedData {
-                blinded_handle: BlindedPseudonymizedHandle(blinded_pseudonym),
-                encrypted_data_value: EncryptedDataValue {
-                    attribute_name: blinded_table.column().attribute(),
-                    value: encrypted_value,
-                    encryption_level: 2u8,
-                },
-            };
-
-            let pseudonymized_datum =
-                finalize_blinded_datum(&store_context, &blinded_pseudonymized_datum)?;
-
-            pseudonymized_column_data.push((
-                pseudonymized_datum.handle.0,
-                pseudonymized_datum.data_value.value,
-            ));
-        }
-
-        let mut pseudonymized_column = Column::new(
-            blinded_table.column().attribute(),
-            pseudonymized_column_data,
-        );
-        pseudonymized_column.sort();
-
-        pseudonymized_tables.push(PseudonymizedTable::new(
-            blinded_table.identifier(),
-            pseudonymized_column,
-        ))
-    }
-
-    Ok(pseudonymized_tables)
+    Ok(Table::new(table.identifier().into(), pseudonymized_data))
 }
