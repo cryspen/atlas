@@ -1,7 +1,6 @@
 const orthonym_0: bitstring.
 const orthonym_1: bitstring.
-const data_value_0: bitstring.
-const data_value_1: bitstring.
+const data_value: bitstring.
 const attribute_type: bitstring.
 
 process
@@ -12,8 +11,9 @@ process
     let bpk = bsk2bpk(bsk) in
     let ek = pk(dk) in
     out(c, (bpk, ek));
-    let input_0= identifiable_data(orthonym_0, attribute_type, data_value_0) in
-    let input_1= identifiable_data(orthonym_1, attribute_type, data_value_1) in  
+    let input_0= identifiable_data(orthonym_0, attribute_type, data_value) in
+    let input_1= identifiable_data(orthonym_1, attribute_type, data_value) in  
     (DataSource(diff[input_0, input_1], bpk, ek) |
-    (in (c, lake_input: bitstring); DataLake(lake_input, bsk, dk, k_prp, false)) |
-    (in (c, converter_input: bitstring); Converter(converter_input, msk, false)))
+    DataLake(bsk, dk, k_prp, false) |
+    Converter(msk, bpk, ek, false)  |
+    (new bsk: blinding_sk; new dk: privkey; new k_prp: prp_key; DataProcessor(bsk, dk, k_prp, false)))
