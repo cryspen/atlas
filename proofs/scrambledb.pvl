@@ -79,11 +79,11 @@ fun pseudonymized_data(nym, bitstring, bitstring): bitstring [data].
 (* DataAvailable = (attribute_type) *)
 fun data_available(bitstring): bitstring [data].
 
-(* DataRequest = (attribute_type, bpk_receiver, ek_receiver) *)
-fun data_request(bitstring, blinding_pk, pubkey): bitstring [data].
+(* DataRequest = (conversion_target, attribute_type, bpk_receiver, ek_receiver) *)
+fun data_request(bitstring, bitstring, blinding_pk, pubkey): bitstring [data].
 
-(* ConversionRequest = (blinded_pseudonymized_data, bpk_reveiver, ek_receiver) *)
-fun conversion_request(bitstring, blinding_pk, pubkey): bitstring [data].
+(* ConversionRequest = (conversion_target, blinded_pseudonymized_data, bpk_reveiver, ek_receiver) *)
+fun conversion_request(bitstring, bitstring, blinding_pk, pubkey): bitstring [data].
 
 (* Data Transformations *)
 letfun blind_identifiable_data(input: bitstring, bpk: blinding_pk, ek: pubkey) =
@@ -112,7 +112,6 @@ letfun convert_blinded_data(input: bitstring, msk: coprf_msk, bpk: blinding_pk, 
     let reencrypted_value = penc(ek, encrypted_value) in
     let blinded_output_pseudonym = coprf_blind_convert(k_original, k_conversion, bpk, blinded_input_pseudonym) in
     blinded_pseudonymized_output_data(blinded_output_pseudonym, attribute_type, reencrypted_value).
-
 
 letfun finalize_pseudonymized_data(input: bitstring, bsk: blinding_sk, dk: privkey, k_prp: prp_key) =
     let blinded_pseudonymized_output_data(blinded_pseudonym, attribute_type, reencrypted_value) = input in
@@ -157,8 +156,7 @@ let Converter(msk: coprf_msk, bpk_lake: blinding_pk, ek_lake: pubkey, leak_input
    ) | (
        (* Conversion *)
         in(c, input: bitstring);
-        let conversion_request(blind_pseudonymized_input, bpk, ek) = input in
-        new conversion_target: bitstring;
+        let conversion_request(conversion_target, blind_pseudonymized_input, bpk, ek) = input in
         let output = convert_blinded_data(blind_pseudonymized_input, msk, bpk, ek, conversion_target) in
         event Pseudonymized(blind_pseudonymized_input, output);
         out(c, output);
@@ -180,12 +178,12 @@ let DataLake(bsk: blinding_sk, dk: privkey, k_prp: prp_key, leak_keys: bool) =
     ) | (
         (* Blind Pseudonymized Data *)
         in(c, request: bitstring);
-        let data_request(attribute_type, bpk_receiver, ek_receiver) = request in
+        let data_request(conversion_target, attribute_type, bpk_receiver, ek_receiver) = request in
         get lake_data(pseudonym, =attribute_type, value) in
         let input = pseudonymized_data(pseudonym, attribute_type, value) in
         let blinded_output = blind_pseudonymized_data(input, bpk_receiver, ek_receiver, k_prp) in
         event BlindedPseudonym(blinded_output);
-        out(c, conversion_request(blinded_output, bpk_receiver, ek_receiver))
+        out(c, conversion_request(conversion_target, blinded_output, bpk_receiver, ek_receiver))
     ) | (
         if leak_keys then
             event LeakLakeKeys();
@@ -199,7 +197,8 @@ let DataProcessor(bsk: blinding_sk, dk: privkey, k_prp: prp_key, leak_keys: bool
         (* Request Available data for conversion *)
         in(c, input: bitstring);
         let data_available(attribute_type) = input in
-        out(c, data_request(attribute_type, bsk2bpk(bsk), pk(dk)))
+        new conversion_target: bitstring;
+        out(c, data_request(conversion_target, attribute_type, bsk2bpk(bsk), pk(dk)))
     ) | (
         (* Join Finalization *)
         in(c, input: bitstring);    
