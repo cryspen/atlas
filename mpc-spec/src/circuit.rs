@@ -163,26 +163,26 @@ impl Circuit {
             total_input_width += party_input_width;
         }
 
-        for (i, g) in self.gates.iter().enumerate() {
-            match g {
-                &WiredGate::Input(x) => {
-                    if x != i || i >= total_input_width {
-                        return Err(CircuitError::InvalidGate(i));
+        for (gate_index, gate) in self.gates.iter().enumerate() {
+            match *gate {
+                WiredGate::Input(x) => {
+                    if x != gate_index || gate_index >= total_input_width {
+                        return Err(CircuitError::InvalidGate(gate_index));
                     }
                 }
-                &WiredGate::Xor(x, y) => {
-                    if x >= i || y >= i || i < total_input_width {
-                        return Err(CircuitError::InvalidGate(i));
+                WiredGate::Xor(x, y) => {
+                    if x >= gate_index || y >= gate_index || gate_index < total_input_width {
+                        return Err(CircuitError::InvalidGate(gate_index));
                     }
                 }
-                &WiredGate::And(x, y) => {
-                    if x >= i || y >= i || i < total_input_width {
-                        return Err(CircuitError::InvalidGate(i));
+                WiredGate::And(x, y) => {
+                    if x >= gate_index || y >= gate_index || gate_index < total_input_width {
+                        return Err(CircuitError::InvalidGate(gate_index));
                     }
                 }
-                &WiredGate::Not(x) => {
-                    if x >= i || i < total_input_width {
-                        return Err(CircuitError::InvalidGate(i));
+                WiredGate::Not(x) => {
+                    if x >= gate_index || gate_index < total_input_width {
+                        return Err(CircuitError::InvalidGate(gate_index));
                     }
                 }
             }
@@ -194,9 +194,9 @@ impl Circuit {
         }
 
         // Validate output wire bounds.
-        for &o in self.output_gates.iter() {
-            if o >= self.gates.len() {
-                return Err(CircuitError::InvalidOutputWire(o));
+        for &output_wire in self.output_gates.iter() {
+            if output_wire >= self.gates.len() {
+                return Err(CircuitError::InvalidOutputWire(output_wire));
             }
         }
 
