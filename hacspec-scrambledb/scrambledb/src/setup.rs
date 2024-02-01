@@ -19,10 +19,17 @@ pub struct ConverterContext {
     pub(crate) coprf_context: CoPRFEvaluatorContext,
 }
 
+/// A data store's private decryption key.
+pub struct StoreDecryptionKey(pub(crate) Vec<u8>);
+
+/// A data store's public encryption key.
+#[derive(Clone)]
+pub struct StoreEncryptionKey(pub(crate) Vec<u8>);
+
 pub struct StoreContext {
     coprf_receiver_context: CoPRFReceiverContext,
-    pub(crate) hpke_sk: Vec<u8>,
-    hpke_pk: Vec<u8>,
+    pub(crate) dk: StoreDecryptionKey,
+    ek: StoreEncryptionKey,
     k_prp: [u8; 32],
 }
 
@@ -81,16 +88,14 @@ impl StoreContext {
     pub fn setup(randomness: &mut Randomness) -> Result<Self, Error> {
         let receiver_context = CoPRFReceiverContext::new(randomness);
 
-        let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
-        let (hpke_sk, hpke_pk) =
-            GenerateKeyPair(kem, randomness.bytes(Nsk(kem)).unwrap().to_vec())?;
+        let (dk, ek) = generate_store_keys(randomness)?;
 
         let k_prp = randomness.bytes(32)?.try_into()?;
 
         Ok(Self {
             coprf_receiver_context: receiver_context,
-            hpke_sk,
-            hpke_pk,
+            dk,
+            ek,
             k_prp,
         })
     }
@@ -111,8 +116,8 @@ impl StoreContext {
     ///     let bpk = context.coprf_receiver_context.public_key()
     ///     return (ek, bpk);
     /// ```
-    pub fn public_keys(&self) -> (Vec<u8>, BlindingPublicKey) {
-        (self.hpke_pk.clone(), self.coprf_receiver_context.get_bpk())
+    pub fn public_keys(&self) -> (StoreEncryptionKey, BlindingPublicKey) {
+        (self.ek.clone(), self.coprf_receiver_context.get_bpk())
     }
 
     /// - Finalize Pseudonym: As part of the finalization of a split or join
@@ -162,4 +167,12 @@ impl StoreContext {
     pub fn recover_raw_pseudonym(&self, pseudonym: FinalizedPseudonym) -> Result<P256Point, Error> {
         P256Point::from_raw_bytes(prp::prp(pseudonym.0, &self.k_prp)).map_err(|e| e.into())
     }
+}
+
+fn generate_store_keys(
+    randomness: &mut Randomness,
+) -> Result<(StoreDecryptionKey, StoreEncryptionKey), Error> {
+    let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
+    let (hpke_sk, hpke_pk) = GenerateKeyPair(kem, randomness.bytes(Nsk(kem)).unwrap().to_vec())?;
+    Ok((StoreDecryptionKey(hpke_sk), StoreEncryptionKey(hpke_pk)))
 }

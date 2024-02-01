@@ -13,9 +13,11 @@ use oprf::coprf::{
     coprf_setup::{derive_key, BlindingPublicKey, CoPRFEvaluatorContext},
 };
 
-use crate::{data_types::*, error::Error, setup::StoreContext};
-
-use self::double_hpke::{hpke_open_level_2, hpke_seal_level_1, hpke_seal_level_2};
+use crate::{
+    data_types::*,
+    error::Error,
+    setup::{StoreContext, StoreEncryptionKey},
+};
 
 pub(crate) mod double_hpke;
 
@@ -37,7 +39,7 @@ const PSEUDONYMIZATION_CONTEXT: &[u8] = b"CoPRF-Context-Pseudonymization";
 /// level-1 encrypted.
 pub fn blind_identifiable_datum(
     bpk: &BlindingPublicKey,
-    ek: &[u8],
+    ek: &StoreEncryptionKey,
     datum: &IdentifiableData,
     randomness: &mut Randomness,
 ) -> Result<BlindedIdentifiableData, Error> {
@@ -49,13 +51,31 @@ pub fn blind_identifiable_datum(
         randomness,
     )?);
 
-    // Level-1 encrypt data value towards receiver.
-    let encrypted_data_value = hpke_seal_level_1(&datum.data_value, ek, randomness)?;
+    // Encrypt data value towards receiver.
+    let encrypted_data_value = encrypt_data_value(&datum.data_value, ek, randomness)?;
 
     Ok(BlindedIdentifiableData {
         blinded_handle,
         encrypted_data_value,
     })
+}
+
+/// Encrypt a data value towards a data store.
+///
+/// Inputs:
+/// - `data`: The data value to encrypt.
+/// - `ek`: The receiver's public encryption key.
+/// - `randomness`: Random bytes
+///
+/// Output:
+/// A new [EncryptedDataValue], the encryption of `data`.
+fn encrypt_data_value(
+    data: &DataValue,
+    ek: &StoreEncryptionKey,
+    randomness: &mut Randomness,
+) -> Result<EncryptedDataValue, Error> {
+    let encrypted_data_value = double_hpke::hpke_seal_level_1(&data, &ek.0, randomness)?;
+    Ok(encrypted_data_value)
 }
 
 /// Blind a pseudonymous datum as a first step in pseudonym
@@ -76,7 +96,7 @@ pub fn blind_identifiable_datum(
 pub fn blind_pseudonymized_datum(
     store_context: &StoreContext,
     bpk: &BlindingPublicKey,
-    ek: &[u8],
+    ek: &StoreEncryptionKey,
     datum: &PseudonymizedData,
     randomness: &mut Randomness,
 ) -> Result<BlindedPseudonymizedData, Error> {
@@ -87,8 +107,8 @@ pub fn blind_pseudonymized_datum(
         randomness,
     )?);
 
-    // Level-1 encrypt data value towards receiver.
-    let encrypted_data_value = hpke_seal_level_1(&datum.data_value, ek, randomness)?;
+    // Encrypt data value towards receiver.
+    let encrypted_data_value = encrypt_data_value(&datum.data_value, ek, randomness)?;
 
     Ok(BlindedPseudonymizedData {
         blinded_handle,
@@ -112,7 +132,7 @@ pub fn blind_pseudonymized_datum(
 pub fn pseudonymize_blinded_datum(
     coprf_context: &CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
-    ek: &[u8],
+    ek: &StoreEncryptionKey,
     datum: &BlindedIdentifiableData,
     randomness: &mut Randomness,
 ) -> Result<BlindedPseudonymizedData, Error> {
@@ -129,13 +149,30 @@ pub fn pseudonymize_blinded_datum(
         randomness,
     )?);
 
-    // Level-2 encrypt data value towards receiver.
-    let encrypted_data_value = hpke_seal_level_2(&datum.encrypted_data_value, ek, randomness)?;
+    // Rerandomize encrypted data value towards receiver.
+    let encrypted_data_value = rerandomize_encryption(&datum.encrypted_data_value, ek, randomness)?;
 
     Ok(BlindedPseudonymizedData {
         blinded_handle,
         encrypted_data_value,
     })
+}
+
+/// Rerandomize the encryption of an encrypted data value.
+///
+/// Inputs:
+/// - `data`: The encrypted data value.
+/// - `ek`: The receiver's public encryption key.
+/// - `randomness`: Random bytes
+///
+/// Output:
+/// A new, rerandomized [EncryptedDataValue].
+fn rerandomize_encryption(
+    data: &EncryptedDataValue,
+    ek: &StoreEncryptionKey,
+    randomness: &mut Randomness,
+) -> Result<EncryptedDataValue, Error> {
+    Ok(double_hpke::hpke_seal_level_2(&data, &ek.0, randomness)?)
 }
 
 /// Obliviously convert a blinded pseudonymous datum to a given target pseudonym key.
@@ -154,7 +191,7 @@ pub fn pseudonymize_blinded_datum(
 pub fn convert_blinded_datum(
     coprf_context: &CoPRFEvaluatorContext,
     bpk: &BlindingPublicKey,
-    ek: &[u8],
+    ek: &StoreEncryptionKey,
     conversion_target: &[u8],
     datum: &BlindedPseudonymizedData,
     randomness: &mut Randomness,
@@ -177,8 +214,8 @@ pub fn convert_blinded_datum(
         randomness,
     )?);
 
-    // Level-2 encrypt data value towards receiver.
-    let encrypted_data_value = hpke_seal_level_2(&datum.encrypted_data_value, ek, randomness)?;
+    // Rerandomize encrypted data value towards receiver.
+    let encrypted_data_value = rerandomize_encryption(&datum.encrypted_data_value, ek, randomness)?;
 
     Ok(BlindedPseudonymizedData {
         blinded_handle,
@@ -207,7 +244,22 @@ pub fn finalize_blinded_datum(
     let handle = store_context.finalize_pseudonym(datum.blinded_handle)?;
 
     // Decrypt data value for storage.
-    let data_value = hpke_open_level_2(&datum.encrypted_data_value, &store_context.hpke_sk)?;
+    let data_value = decrypt_data_value(&datum.encrypted_data_value, store_context)?;
 
     Ok(PseudonymizedData { handle, data_value })
+}
+
+/// Decrypt an encrypted data value.
+///
+/// Inputs:
+/// - `data`: The value to decrypt.
+/// - `store_context`: The data store's long term private state, including in particular its decryption key.
+///
+/// Output:
+/// The decrypted [DataValue] or an [Error] on decryption failure.
+fn decrypt_data_value(
+    data: &EncryptedDataValue,
+    store_context: &StoreContext,
+) -> Result<DataValue, Error> {
+    Ok(double_hpke::hpke_open_level_2(&data, &store_context.dk.0)?)
 }

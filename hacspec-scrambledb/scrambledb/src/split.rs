@@ -1,13 +1,12 @@
 //! # Pseudonymization
 use hacspec_lib::Randomness;
-use libcrux::hpke::HpkePublicKey;
 use oprf::coprf::coprf_setup::BlindingPublicKey;
 
 use crate::{
     data_transformations::{blind_identifiable_datum, pseudonymize_blinded_datum},
     data_types::{BlindedIdentifiableData, BlindedPseudonymizedData, IdentifiableData},
     error::Error,
-    setup::ConverterContext,
+    setup::{ConverterContext, StoreEncryptionKey},
     table::Table,
 };
 
@@ -25,7 +24,7 @@ use crate::{
 /// Outputs:
 /// A table of blinded identifiable data.
 pub fn blind_orthonymous_table(
-    ek_receiver: &HpkePublicKey,
+    ek_receiver: &StoreEncryptionKey,
     bpk_receiver: BlindingPublicKey,
     table: Table<IdentifiableData>,
     randomness: &mut Randomness,
@@ -59,7 +58,7 @@ pub fn blind_orthonymous_table(
 pub fn pseudonymize_blinded_table(
     converter_context: &ConverterContext,
     bpk_receiver: BlindingPublicKey,
-    ek_receiver: &HpkePublicKey,
+    ek_receiver: &StoreEncryptionKey,
     blinded_table: Table<BlindedIdentifiableData>,
     randomness: &mut Randomness,
 ) -> Result<Table<BlindedPseudonymizedData>, Error> {
