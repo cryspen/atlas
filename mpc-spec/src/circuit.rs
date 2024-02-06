@@ -151,7 +151,7 @@ impl Circuit {
         if self.input_widths.is_empty() {
             return Err(CircuitError::EmptyInputSpecification);
         }
-        for input_width in self.input_widths.iter() {
+        for input_width in &self.input_widths {
             if *input_width == 0 {
                 return Err(CircuitError::InvalidInputSpecification);
             }
@@ -159,7 +159,7 @@ impl Circuit {
 
         // Check gate and gate sequence validity.
         let mut total_input_width = 0;
-        for party_input_width in self.input_widths.iter() {
+        for party_input_width in &self.input_widths {
             total_input_width += party_input_width;
         }
 
@@ -194,7 +194,7 @@ impl Circuit {
         }
 
         // Validate output wire bounds.
-        for &output_wire in self.output_gates.iter() {
+        for &output_wire in &self.output_gates {
             if output_wire >= self.gates.len() {
                 return Err(CircuitError::InvalidOutputWire(output_wire));
             }
@@ -248,7 +248,7 @@ impl Circuit {
 
         let mut wire_evaluations: Vec<bool> = inputs.iter().flat_map(|b| b.clone()).collect();
 
-        for gate in self.gates.iter() {
+        for gate in &self.gates {
             let output_bit = match gate {
                 WiredGate::Input(x) => wire_evaluations[*x],
                 WiredGate::Xor(x, y) => wire_evaluations[*x] ^ wire_evaluations[*y],
