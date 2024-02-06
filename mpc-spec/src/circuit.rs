@@ -126,6 +126,40 @@ pub enum CircuitError {
     InvalidInputSpecification,
 }
 
+impl std::fmt::Display for CircuitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CircuitError::PartyInputMismatch(expected_inputs, actual_inputs) => write!(
+                f,
+                "Expected {} input bits for a party, but received {} input bits.",
+                *expected_inputs, *actual_inputs
+            ),
+            CircuitError::PartyCountMismatch(expected_parties, actual_parties) => write!(
+                f,
+                "Expected inputs for {} parties, but received inputs for {} parties.",
+                *expected_parties, *actual_parties
+            ),
+            CircuitError::InvalidGate(gate_index) => write!(
+                f,
+                "Gate {}: Out of order placement or invalid wiring.",
+                *gate_index
+            ),
+            CircuitError::InvalidOutputWire(oob_index) => {
+                write!(f, "Output index out of bounds: {}", *oob_index)
+            }
+            CircuitError::EmptyOutputSpecification => {
+                write!(f, "Circuit does not specify output bits.")
+            }
+            CircuitError::EmptyInputSpecification => {
+                write!(f, "Circuit does not specify any party inputs.")
+            }
+            CircuitError::InvalidInputSpecification => {
+                write!(f, "Circuit specifies an empty party input.")
+            }
+        }
+    }
+}
+
 impl Circuit {
     /// Number of parties expected to contribute inputs to the circuit.
     pub fn number_of_parties(&self) -> usize {
