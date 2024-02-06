@@ -109,10 +109,10 @@ pub struct Circuit {
 pub enum CircuitError {
     /// The provided party input does not match the number of input bits for
     /// that party expected by the circuit.
-    PartyInputMismatch,
+    PartyInputMismatch(usize, usize),
     /// The provided set of inputs does not match the number of party inputs
     /// expected by the circuit.
-    PartyCountMismatch,
+    PartyCountMismatch(usize, usize),
     /// The gate with the specified wire index contains invalid gate connections
     /// or is placed out of sequence.
     InvalidGate(usize),
