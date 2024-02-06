@@ -247,12 +247,18 @@ impl Circuit {
     ///   corresponding parties' expected input width.
     pub fn validate_input_vectors(&self, inputs: &[Vec<bool>]) -> Result<(), CircuitError> {
         if self.number_of_parties() != inputs.len() {
-            return Err(CircuitError::PartyCountMismatch);
+            return Err(CircuitError::PartyCountMismatch(
+                self.number_of_parties(),
+                inputs.len(),
+            ));
         }
 
         for (party, &expected_input_gates) in self.input_widths.iter().enumerate() {
             if expected_input_gates != inputs[party].len() {
-                return Err(CircuitError::PartyInputMismatch);
+                return Err(CircuitError::PartyInputMismatch(
+                    expected_input_gates,
+                    inputs[party].len(),
+                ));
             }
         }
 
