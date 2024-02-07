@@ -72,18 +72,18 @@ pub type WireIndex = usize;
 #[derive(Debug, Clone)]
 pub enum WiredGate {
     /// An input wire, with its value coming directly from one of the parties.
-    /// Its [WireIndex] must refer to its own gate index.
+    /// Its [`WireIndex`] must refer to its own gate index.
     Input(WireIndex),
     /// A logical XOR gate attached to the two specified input wires. The
-    /// [WireIndex] of each input wire must refer to a lower index than the
+    /// [`WireIndex`] of each input wire must refer to a lower index than the
     /// gate's own index.
     Xor(WireIndex, WireIndex),
     /// A logical AND gate attached to the two specified input wires. The
-    /// [WireIndex] of each input wire must refer to a lower index than the
+    /// [`WireIndex`] of each input wire must refer to a lower index than the
     /// gate's own index.
     And(WireIndex, WireIndex),
     /// A logical NOT gate attached to the specified input wire. The
-    /// [WireIndex] of the input wire must refer to a lower index than the
+    /// [`WireIndex`] of the input wire must refer to a lower index than the
     /// gate's own index.
     Not(WireIndex),
 }
@@ -95,7 +95,7 @@ pub type InputWidth = usize;
 #[derive(Debug, Clone)]
 pub struct Circuit {
     /// The bit-width of the inputs expected by the different parties,
-    /// [InputWidth] at index `i` representing the number of input bits for
+    /// [`InputWidth`] at index `i` representing the number of input bits for
     /// party `i`.
     pub input_widths: Vec<InputWidth>,
     /// The circuit's gates.
