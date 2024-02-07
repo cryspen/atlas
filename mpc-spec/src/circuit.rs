@@ -131,30 +131,30 @@ impl std::fmt::Display for CircuitError {
         match self {
             CircuitError::PartyInputMismatch(expected_inputs, actual_inputs) => write!(
                 f,
-                "Expected {} input bits for a party, but received {} input bits.",
+                "expected {} input bits for a party, but received {} input bits",
                 *expected_inputs, *actual_inputs
             ),
             CircuitError::PartyCountMismatch(expected_parties, actual_parties) => write!(
                 f,
-                "Expected inputs for {} parties, but received inputs for {} parties.",
+                "expected inputs for {} parties, but received inputs for {} parties",
                 *expected_parties, *actual_parties
             ),
             CircuitError::InvalidGate(gate_index) => write!(
                 f,
-                "Gate {}: Out of order placement or invalid wiring.",
+                "found out of order placement or invalid wiring at gate index {}",
                 *gate_index
             ),
             CircuitError::InvalidOutputWire(oob_index) => {
-                write!(f, "Output index out of bounds: {}", *oob_index)
+                write!(f, "output index {} is out of bounds", *oob_index)
             }
             CircuitError::EmptyOutputSpecification => {
-                write!(f, "Circuit does not specify output bits.")
+                write!(f, "circuit does not specify output bits")
             }
             CircuitError::EmptyInputSpecification => {
-                write!(f, "Circuit does not specify any party inputs.")
+                write!(f, "circuit does not specify any party inputs")
             }
             CircuitError::InvalidInputSpecification => {
-                write!(f, "Circuit specifies an empty party input.")
+                write!(f, "circuit specifies an empty party input")
             }
         }
     }
