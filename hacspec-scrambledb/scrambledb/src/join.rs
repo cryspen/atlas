@@ -1,13 +1,12 @@
 //! # Pseudonym Conversion
 use hacspec_lib::Randomness;
-use libcrux::hpke::HpkePublicKey;
 use oprf::coprf::coprf_setup::BlindingPublicKey;
 
 use crate::{
     data_transformations::{blind_pseudonymized_datum, convert_blinded_datum},
     data_types::{BlindedPseudonymizedData, PseudonymizedData},
     error::Error,
-    setup::{ConverterContext, StoreContext},
+    setup::{ConverterContext, StoreContext, StoreEncryptionKey},
     table::Table,
     SECPAR_BYTES,
 };
@@ -29,7 +28,7 @@ use crate::{
 pub fn blind_pseudonymous_table(
     store_context: &StoreContext,
     bpk_receiver: BlindingPublicKey,
-    ek_receiver: &HpkePublicKey,
+    ek_receiver: &StoreEncryptionKey,
     pseudonymized_table: Table<PseudonymizedData>,
     randomness: &mut Randomness,
 ) -> Result<Table<BlindedPseudonymizedData>, Error> {
@@ -73,7 +72,7 @@ pub fn join_identifier(identifier: String) -> String {
 pub fn convert_blinded_table(
     converter_context: &ConverterContext,
     bpk_receiver: BlindingPublicKey,
-    ek_receiver: &HpkePublicKey,
+    ek_receiver: &StoreEncryptionKey,
     table: Table<BlindedPseudonymizedData>,
     randomness: &mut Randomness,
 ) -> Result<Table<BlindedPseudonymizedData>, Error> {
