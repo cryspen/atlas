@@ -23,4 +23,5 @@ pub const COMPUTATIONAL_SECURITY: usize = 128 / 8;
 pub const STATISTICAL_SECURITY: usize = 128 / 8;
 
 pub mod circuit;
+pub mod messages;
 pub mod primitives;
