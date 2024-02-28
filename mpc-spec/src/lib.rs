@@ -24,4 +24,6 @@ pub const STATISTICAL_SECURITY: usize = 128 / 8;
 
 pub mod circuit;
 pub mod messages;
+pub mod party;
 pub mod primitives;
+pub mod utils;
