@@ -62,7 +62,7 @@ pub enum FPreResponse {
 /// - top-level protocol messages
 /// - suprotocol messages (incomplete)
 ///   - messages for the FPre subprotocol
-///   - (not currently) messages for the remaining sub-protocols the implement
+///   - (not currently) messages for the remaining sub-protocols which implement
 ///     FPre
 pub enum MPCMessage {
     /// A garbled AND gate, to be sent to the evaluator
