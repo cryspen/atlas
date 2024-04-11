@@ -1,9 +1,10 @@
 //! Utility functions for the MPC specification.
 
+use crate::messages::MPCMessage;
 use crate::party::ChannelConfig;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::messages::MPCMessage;
+pub mod ideal_fpre;
 pub mod rand;
 
 /// Set up channel configurations for parties. Returns a vector of Channel Configurations.
@@ -61,5 +62,3 @@ pub fn set_up_channels_ideal(n: usize) -> (IdealFPreChannelConfig, Vec<ChannelCo
         channel_configs,
     )
 }
-
-pub mod ideal_fpre;
