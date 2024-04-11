@@ -2,11 +2,7 @@
 //! phases of the protocol.
 
 use crate::{
-    circuit::Circuit,
-    messages::MPCMessage,
-    primitives::mac::MacKey,
-    utils::rand::Randomness,
-    Error,
+    circuit::Circuit, messages::MPCMessage, primitives::mac::MacKey, utils::rand::Randomness, Error,
 };
 use std::sync::mpsc::{Receiver, Sender};
 
@@ -104,8 +100,8 @@ impl Party {
                 continue;
             }
 
-            self.channels.parties[i % num_parties]
-                .send(round_function(self.id, i % num_parties))
+            self.channels.parties[i]
+                .send(round_function(self.id, i))
                 .unwrap();
         }
 
