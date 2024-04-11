@@ -1,6 +1,6 @@
 use std::thread;
 
-use mpc_spec::circuit::{Circuit, WiredGate};
+use mpc_engine::circuit::{Circuit, WiredGate};
 
 use rand::RngCore;
 
@@ -24,14 +24,14 @@ fn main() {
 
     // Set up channels
     let (fpre_channel_config, mut party_channels) =
-        mpc_spec::utils::set_up_channels_ideal(num_parties);
+        mpc_engine::utils::set_up_channels_ideal(num_parties);
 
     let fpre_join_handle = thread::spawn(move || {
         let mut rng = rand::thread_rng();
         let mut bytes = [0u8; 64];
         rng.fill_bytes(&mut bytes);
-        let rng = mpc_spec::utils::rand::Randomness::new(bytes.to_vec());
-        let mut fpre = mpc_spec::utils::ideal_fpre::FPre::new(fpre_channel_config, rng);
+        let rng = mpc_engine::utils::rand::Randomness::new(bytes.to_vec());
+        let mut fpre = mpc_engine::utils::ideal_fpre::FPre::new(fpre_channel_config, rng);
         let _ = fpre.run();
     });
 
@@ -43,8 +43,8 @@ fn main() {
         let c = circuit.clone();
         let party_join_handle = thread::spawn(move || {
             let bytes = vec![0, 1, 2, 3];
-            let rng = mpc_spec::utils::rand::Randomness::new(bytes);
-            let mut p = mpc_spec::party::Party::new(channel_config, &c, rng);
+            let rng = mpc_engine::utils::rand::Randomness::new(bytes);
+            let mut p = mpc_engine::party::Party::new(channel_config, &c, rng);
 
             let _ = p.run();
         });
