@@ -36,7 +36,6 @@ impl Randomness {
 
         let out = &self.bytes[self.pointer];
         self.pointer += 1;
-        let out = out >> 7;
         Ok(out & 0x1 == 0x1)
     }
 }
