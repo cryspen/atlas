@@ -9,6 +9,7 @@ members = [
     "prp",
     "sha256",
     "hmac",
+    "mpc-engine"
 ]
 resolver = "2"
 
