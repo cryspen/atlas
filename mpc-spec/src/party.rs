@@ -104,8 +104,8 @@ impl Party {
                 continue;
             }
 
-            self.channels.parties[i % num_parties]
-                .send(round_function(self.id, i % num_parties))
+            self.channels.parties[i]
+                .send(round_function(self.id, i))
                 .unwrap();
         }
 
