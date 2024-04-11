@@ -1,0 +1,25 @@
+query attribute_id: bitstring, uid: group_element, pseudonym: group_element, attribute_value: bitstring;
+       event(LakeReceived(final_data(attribute_id, pseudonym, attribute_value)));
+       event(LakeReceived(final_data(attribute_id, pseudonym, attribute_value)))
+       ==> event(SourceSent(input_data(attribute_id, uid, attribute_value))).
+
+query attribute_id: bitstring, pseudonym: group_element, attribute_value: bitstring;
+       event(SourceSent(input_data(attribute_id, pseudonym, attribute_value))).
+
+query x: bitstring, y: bitstring;
+       event(Converted(x, y)).
+
+const attribute_id: bitstring.
+const uid: group_element.
+const attribute_value: bitstring.
+
+process
+    new bsk: blinding_sk;
+    new dk: privkey;
+    new msk: prf_msk;
+    let bpk = blinding_sk_to_pk(bsk) in
+    let ek = pk(dk) in
+    let input = input_data(attribute_id, uid, attribute_value) in
+    (DataSource(input, bpk, ek) |
+    (in (c, lake_input: bitstring); DataLake(lake_input, bsk, dk, false)) |
+    (in (c, converter_input: bitstring); Converter(converter_input, msk, ek)))
