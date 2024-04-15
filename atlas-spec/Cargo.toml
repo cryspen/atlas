@@ -9,7 +9,8 @@ members = [
     "prp",
     "sha256",
     "hmac",
-    "mpc-engine"
+    "mpc-engine",
+    "chacha20poly1305",
 ]
 resolver = "2"
 
@@ -23,3 +24,4 @@ prp = { path = "./prp" }
 sha256 = { path = "./sha256" }
 hmac = { path = "./hmac" }
 natmod = { path = "./natmod" }
+chacha20poly1305 = { pathc = "./chacha20poly1305" }
