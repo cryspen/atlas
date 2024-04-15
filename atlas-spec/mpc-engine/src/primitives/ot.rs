@@ -2,6 +2,8 @@
 
 use hacspec_lib::Randomness;
 
+use crate::Error;
+
 /// The OT sender's first message.
 pub enum OTSender_first {
     /// The sender's first message.
@@ -23,9 +25,13 @@ pub enum OTSender_second {
 }
 
 /// Generate the first sender message.
-pub fn sender_first(entropy: &mut Randomness, left: u8, right: u8) -> OTSender_first {
+pub fn sender_first(
+    entropy: &mut Randomness,
+    left: u8,
+    right: u8,
+) -> Result<OTSender_first, Error> {
     let dst = b"test";
-    let y = p256::random_scalar(entropy, dst);
+    let y = p256::random_scalar(entropy, dst)?;
 
     todo!()
 }

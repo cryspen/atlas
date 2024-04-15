@@ -16,6 +16,17 @@ pub enum Error {
     OtherError,
 }
 
+impl From<p256::Error> for Error {
+    fn from(value: p256::Error) -> Self {
+        match value {
+            p256::Error::InvalidAddition
+            | p256::Error::DeserializeError
+            | p256::Error::PointAtInfinity => Self::OtherError,
+            p256::Error::SamplingError => Self::InsufficientRandomness,
+        }
+    }
+}
+
 /// The computational security parameter, in bytes.
 pub const COMPUTATIONAL_SECURITY: usize = 128 / 8;
 
