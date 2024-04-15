@@ -8,6 +8,49 @@ use crate::{
     COMPUTATIONAL_SECURITY,
 };
 
+/// Messages that must be handled by the 1-out-of-2 Oblivious Transfer
+/// subprotocol, or ideal functionality.
+pub enum FOT {
+    /// The sender inputs to an OT session.
+    Sender {
+        /// The sender of the OT.
+        from: usize,
+        /// The receiver of the OT.
+        to: usize,
+        /// The left input to the OT.
+        left: u8,
+        /// The right input to the OT.
+        right: u8,
+    },
+    /// The receiver input to an OT session.
+    Receiver {
+        /// The sender of the OT.
+        from: usize,
+        /// The receiver of the OT.
+        to: usize,
+        /// Whether the receiver chose the left output or not.
+        choose_left: bool,
+    },
+
+    /// The sender's output in the OT, specifiying that the session is over.
+    SenderResponse {
+        /// The sender of the OT.
+        from: usize,
+        /// The receiver of the OT.
+        to: usize,
+    },
+
+    /// The receiver's output in the OT.
+    ReceiverResponse {
+        /// The receiver of the OT.
+        from: usize,
+        /// The receiver of the OT.
+        to: usize,
+        /// The receiver's output in the OT.
+        output: u8,
+    },
+}
+
 /// Messages that must be handled by the preprocessing subprotocol, or ideal functionality.
 pub enum FPreRequest {
     /// A party initialization request. from the indicated party.
