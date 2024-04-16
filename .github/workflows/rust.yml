@@ -1,4 +1,4 @@
-name: Build and test ScrambleDB
+name: Build and test ATLAS specification
 
 on: 
   workflow_dispatch:
@@ -13,7 +13,7 @@ env:
 
 defaults:
   run:
-    working-directory: hacspec-scrambledb
+    working-directory: atlas-spec
   
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
