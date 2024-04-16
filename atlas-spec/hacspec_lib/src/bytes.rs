@@ -44,3 +44,21 @@ impl<const LEN: usize> Conversions for [u64; LEN] {
         out
     }
 }
+
+impl<const LEN: usize> Conversions for [u32; LEN] {
+    fn to_le_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(LEN * 4);
+        for item in self {
+            out.extend_from_slice(&item.to_le_bytes());
+        }
+        out
+    }
+}
+
+pub fn bytes_to_le_u32s(input: &[u8]) -> Vec<u32> {
+    let mut out = Vec::new();
+    for block in input.chunks(4) {
+        out.push(u32::from_le_bytes(block.try_into().unwrap()));
+    }
+    out
+}
