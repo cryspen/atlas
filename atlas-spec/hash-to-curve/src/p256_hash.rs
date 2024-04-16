@@ -1,5 +1,7 @@
+//! This module implements Hash-to-Curve for NIST P-256.
+
 use crate::Error;
-use hacspec_lib::{i2osp, FunctionalVec, hacspec_helper::NatMod};
+use hacspec_lib::{hacspec_helper::NatMod, i2osp, FunctionalVec};
 use p256::{is_square, sgn0, sqrt, P256FieldElement, P256Point, P256Scalar};
 use sha256::hash;
 
@@ -59,6 +61,7 @@ fn strxor(a: &[u8], b: &[u8]) -> Vec<u8> {
     a.iter().zip(b.iter()).map(|(a, b)| a ^ b).collect()
 }
 
+/// Hash a message to a P256 field element.
 pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256FieldElement>, Error> {
     let len_in_bytes = count * L;
     let uniform_bytes = expand_message(msg, dst, len_in_bytes)?;
@@ -72,6 +75,7 @@ pub fn hash_to_field(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256Fie
     Ok(u)
 }
 
+/// Hash a message to a P256 scalar.
 pub fn hash_to_scalar(msg: &[u8], dst: &[u8], count: usize) -> Result<Vec<P256Scalar>, Error> {
     let len_in_bytes = count * L;
     let uniform_bytes = expand_message(msg, dst, len_in_bytes)?;
@@ -116,6 +120,7 @@ fn map_to_curve(u: P256FieldElement) -> P256Point {
     output.into()
 }
 
+/// Hash a message to a point in P256.
 pub fn hash_to_curve(msg: &[u8], dst: &[u8]) -> Result<P256Point, Error> {
     let u: Vec<P256FieldElement> = hash_to_field(msg, dst, 2)?;
     let q0 = map_to_curve(u[0]);

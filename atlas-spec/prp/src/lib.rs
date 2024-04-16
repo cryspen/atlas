@@ -10,7 +10,7 @@ type ChaChaKey = [u8; 32];
 fn chacha20_line(a: usize, b: usize, d: usize, s: u32, m: State) -> State {
     let mut state = m;
     state[a] = state[a].wrapping_add(state[b]);
-    state[d] = state[d] ^ state[a];
+    state[d] ^= state[a];
     state[d] = state[d].rotate_left(s);
     state
 }
@@ -44,7 +44,7 @@ pub fn chacha20_rounds(state: State) -> State {
 
 pub fn chacha20_core(ctr: u32, st0: State) -> State {
     let mut state = st0;
-    state[12] = state[12] + ctr;
+    state[12] += ctr;
     let k = chacha20_rounds(state);
     add_state(state, k)
 }

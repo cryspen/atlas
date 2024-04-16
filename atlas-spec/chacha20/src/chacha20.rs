@@ -13,9 +13,8 @@ pub type ChaChaKey = [u8; 32];
 
 fn chacha20_line(a: StateIdx, b: StateIdx, d: StateIdx, s: usize, m: State) -> State {
     let mut state = m;
-    // TODO: we can't write += or ^= here right now :(
     state[a] = state[a].wrapping_add(state[b]);
-    state[d] = state[d] ^ state[a];
+    state[d] ^= state[a];
     state[d] = state[d].rotate_left(s as u32);
     state
 }
@@ -55,7 +54,7 @@ pub fn chacha20_rounds(state: State) -> State {
 
 pub fn chacha20_core(ctr: u32, st0: State) -> State {
     let mut state = st0;
-    state[12] = state[12] + ctr;
+    state[12] += ctr;
     let k = chacha20_rounds(state);
     for i in 0..16 {
         state[i] = state[i].wrapping_add(k[i]);
@@ -95,7 +94,7 @@ pub fn chacha20_key_block0(key: ChaChaKey, iv: ChaChaIV) -> Block {
 
 pub fn chacha20_encrypt_block(st0: State, ctr: u32, plain: &[u8]) -> Block {
     let st = chacha20_core(ctr, st0);
-    let pl: State = bytes_to_le_u32s(&plain).try_into().unwrap();
+    let pl: State = bytes_to_le_u32s(plain).try_into().unwrap();
     let mut st_new = [0u32; 16];
     for i in 0..16 {
         st_new[i] = st[i] ^ pl[i];
@@ -106,7 +105,7 @@ pub fn chacha20_encrypt_block(st0: State, ctr: u32, plain: &[u8]) -> Block {
 
 pub fn chacha20_encrypt_last(st0: State, ctr: u32, plain: &[u8]) -> Vec<u8> {
     let mut b = [0u8; 64];
-    b[0..plain.len()].copy_from_slice(&plain);
+    b[0..plain.len()].copy_from_slice(plain);
     b = chacha20_encrypt_block(st0, ctr, &b).try_into().unwrap();
     b[0..plain.len()].to_owned()
 }
@@ -120,8 +119,8 @@ pub fn chacha20_update(st0: State, m: &[u8]) -> Vec<u8> {
         let b = chacha20_encrypt_block(st0, i as u32, msg_block);
         blocks_out.extend_from_slice(&b);
     }
-    if last_block.len() != 0 {
-        let b = chacha20_encrypt_last(st0, n_blocks as u32, &last_block);
+    if !last_block.is_empty() {
+        let b = chacha20_encrypt_last(st0, n_blocks as u32, last_block);
         blocks_out.extend_from_slice(&b);
     }
     blocks_out

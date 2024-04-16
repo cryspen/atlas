@@ -3,9 +3,7 @@
 
 use hacspec_lib::Randomness;
 
-use crate::{
-    circuit::Circuit, messages::MPCMessage, primitives::mac::MacKey, Error,
-};
+use crate::{circuit::Circuit, messages::MPCMessage, primitives::mac::MacKey, Error};
 use std::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug)]
@@ -115,10 +113,8 @@ impl Party {
     }
 
     /// Process an incoming message.
-    fn process_message(&mut self, msg: MPCMessage) {
-        match msg {
-            _ => todo!(),
-        }
+    fn process_message(&mut self, _msg: MPCMessage) {
+        todo!()
     }
 
     /// Run the function independent pre-processing phase of the protocol.

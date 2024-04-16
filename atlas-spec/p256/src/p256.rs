@@ -352,7 +352,7 @@ pub fn point_add(p: P256Point, q: P256Point) -> Result<P256Point, Error> {
         P256Point::AtInfinity => Ok(q),
         P256Point::NonInf(p) => match q {
             P256Point::AtInfinity => Ok(P256Point::AtInfinity),
-            P256Point::NonInf(q) => point_add_noninf(p, q).map(|res| P256Point::NonInf(res)),
+            P256Point::NonInf(q) => point_add_noninf(p, q).map(P256Point::NonInf),
         },
     }
 }
@@ -413,6 +413,5 @@ pub fn p256_calculate_w(x: P256FieldElement) -> P256FieldElement {
     // w = (x^3 + a*x + b)^((p+1)/4) (mod p). [RFC6090, Appendix C]
     let z = x * x * x - P256FieldElement::from_u128(3) * x + b;
     // z to power of pow
-    let w = z.pow_felem(&pow);
-    w
+    z.pow_felem(&pow)
 }

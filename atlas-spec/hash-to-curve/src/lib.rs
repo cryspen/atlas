@@ -3,12 +3,11 @@
 #![warn(rustdoc::missing_crate_level_docs)]
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Hash-to-Curve Errors
 pub enum Error {
+    /// The length requested of the expand_message function leads to an invalid parameter.
     InvalidEll,
-    InvalidAddition,
-    PointAtInfinity,
-    UnsupportedCiphersuite,
-
+    /// Catch-all error for errors in the underlying curver implementation.
     CurveError,
 }
 

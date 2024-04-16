@@ -146,9 +146,7 @@ pub fn hash(msg: &[u8]) -> Sha256Digest {
     let mut last_block_len = 0;
     for block in msg.chunks(BLOCK_SIZE) {
         if block.len() < BLOCK_SIZE {
-            for i in 0..block.len() {
-                last_block[i] = block[i];
-            }
+            last_block[..block.len()].copy_from_slice(block);
             last_block_len = block.len();
         } else {
             h = compress(block.try_into().unwrap(), h);

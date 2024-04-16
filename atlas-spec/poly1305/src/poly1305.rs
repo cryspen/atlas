@@ -42,7 +42,7 @@ pub type PolyState = (FieldElement, FieldElement, PolyKey); //(accumulator,r,key
 
 pub fn poly1305_encode_r(b: &PolyBlock) -> FieldElement {
     let mut n = u128::from_le_bytes(*b);
-    n = n & 0x0fff_fffc_0fff_fffc_0fff_fffc_0fff_ffffu128;
+    n &= 0x0fff_fffc_0fff_fffc_0fff_fffc_0fff_ffffu128;
     FieldElement::from_u128(n)
 }
 
@@ -82,7 +82,7 @@ pub fn poly1305_update_blocks(m: &[u8], st: PolyState) -> PolyState {
 
 pub fn poly1305_update_last(pad_len: usize, b: &SubBlock, st: PolyState) -> PolyState {
     let mut st = st;
-    if b.len() != 0 {
+    if !b.is_empty() {
         let (acc, r, k) = st;
         st = ((poly1305_encode_last(pad_len, b) + acc) * r, r, k);
     }
