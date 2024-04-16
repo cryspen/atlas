@@ -5,7 +5,6 @@ use crate::party::ChannelConfig;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 pub mod ideal_fpre;
-pub mod rand;
 pub mod ideal_ot;
 
 /// Set up channel configurations for parties. Returns a vector of Channel Configurations.

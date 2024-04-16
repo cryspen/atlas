@@ -16,6 +16,14 @@ pub enum Error {
     OtherError,
 }
 
+impl From<hacspec_lib::Error> for Error {
+    fn from(value: hacspec_lib::Error) -> Self {
+        match value {
+            hacspec_lib::Error::InsufficientRandomness => Self::InsufficientRandomness,
+        }
+    }
+}
+
 impl From<p256::Error> for Error {
     fn from(value: p256::Error) -> Self {
         match value {
@@ -23,6 +31,14 @@ impl From<p256::Error> for Error {
             | p256::Error::DeserializeError
             | p256::Error::PointAtInfinity => Self::OtherError,
             p256::Error::SamplingError => Self::InsufficientRandomness,
+        }
+    }
+}
+
+impl From<hacspec_chacha20poly1305::Error> for Error {
+    fn from(value: hacspec_chacha20poly1305::Error) -> Self {
+        match value {
+            hacspec_chacha20poly1305::Error::InvalidTag => Self::OtherError,
         }
     }
 }
