@@ -1,5 +1,5 @@
-use p256::*;
 use hacspec_lib::hacspec_helper::*;
+use p256::*;
 
 #[test]
 fn test_p256_base() {
