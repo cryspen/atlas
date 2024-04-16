@@ -1,5 +1,6 @@
 use std::thread;
 
+use hacspec_lib::Randomness;
 use mpc_engine::circuit::{Circuit, WiredGate};
 
 use rand::RngCore;
@@ -30,7 +31,7 @@ fn main() {
         let mut rng = rand::thread_rng();
         let mut bytes = [0u8; 64];
         rng.fill_bytes(&mut bytes);
-        let rng = mpc_engine::utils::rand::Randomness::new(bytes.to_vec());
+        let rng = Randomness::new(bytes.to_vec());
         let mut fpre = mpc_engine::utils::ideal_fpre::FPre::new(fpre_channel_config, rng);
         let _ = fpre.run();
     });
@@ -43,7 +44,7 @@ fn main() {
         let c = circuit.clone();
         let party_join_handle = thread::spawn(move || {
             let bytes = vec![0, 1, 2, 3];
-            let rng = mpc_engine::utils::rand::Randomness::new(bytes);
+            let rng = Randomness::new(bytes);
             let mut p = mpc_engine::party::Party::new(channel_config, &c, rng);
 
             let _ = p.run();

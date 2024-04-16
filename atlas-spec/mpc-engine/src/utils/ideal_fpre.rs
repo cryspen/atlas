@@ -1,5 +1,6 @@
 //! This module implements the preprocessing phase as an ideal functionality.
-use super::rand::Randomness;
+use hacspec_lib::Randomness;
+
 use super::IdealFPreChannelConfig;
 use crate::party::ProtocolPhase;
 use crate::primitives::mac::MacKey;

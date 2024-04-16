@@ -1,8 +1,10 @@
 //! This module defines the behaviour of protocol parties in the different
 //! phases of the protocol.
 
+use hacspec_lib::Randomness;
+
 use crate::{
-    circuit::Circuit, messages::MPCMessage, primitives::mac::MacKey, utils::rand::Randomness, Error,
+    circuit::Circuit, messages::MPCMessage, primitives::mac::MacKey, Error,
 };
 use std::sync::mpsc::{Receiver, Sender};
 
