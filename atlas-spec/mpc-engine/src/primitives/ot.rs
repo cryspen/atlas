@@ -39,6 +39,7 @@ pub struct OTSender {
     y: p256::P256Scalar,
     s: p256::P256Point,
     t: p256::P256Point,
+    dst: Vec<u8>,
 }
 
 /// The state of the receiver
@@ -46,6 +47,7 @@ pub struct OTReceiver {
     x: p256::P256Scalar,
     r: p256::P256Point,
     s: P256Point,
+    dst: Vec<u8>,
 }
 
 /// The OT sender's first message.
@@ -74,7 +76,15 @@ impl OTSender {
         let s = p256::p256_point_mul_base(y)?;
         let t = p256_point_mul(y, s)?;
 
-        Ok((OTSender { y, s, t }, OTSenderInit(s)))
+        Ok((
+            OTSender {
+                y,
+                s,
+                t,
+                dst: dst.to_vec(),
+            },
+            OTSenderInit(s),
+        ))
     }
 
     /// Generate the second sender message based on the receiver's selection.
@@ -121,10 +131,10 @@ impl OTSender {
         let prk_left = hmac::hkdf_extract(&salt, &ikm_left);
         let prk_right = hmac::hkdf_extract(&salt, &ikm_right);
         Ok((
-            hmac::hkdf_expand(&prk_left, b"info", 32)
+            hmac::hkdf_expand(&prk_left, &self.dst, 32)
                 .try_into()
                 .unwrap(),
-            hmac::hkdf_expand(&prk_right, b"info", 32)
+            hmac::hkdf_expand(&prk_right, &self.dst, 32)
                 .try_into()
                 .unwrap(),
         ))
@@ -137,7 +147,7 @@ fn derive_prk(
 ) -> (Vec<u8>, Vec<u8>) {
     let serialized_s = p256::serialize_point(sender_commitment);
     let serialized_r = p256::serialize_point(receiver_selection);
-    let salt = b"123";
+    let salt = b"no-salt";
     let mut ikm = Vec::from(serialized_s);
     ikm.extend_from_slice(&serialized_r);
     (salt.to_vec(), ikm)
@@ -195,7 +205,15 @@ impl OTReceiver {
             res
         };
 
-        Ok((OTReceiver { x, r, s }, OTReceiverSelect(r)))
+        Ok((
+            OTReceiver {
+                x,
+                r,
+                s,
+                dst: dst.to_vec(),
+            },
+            OTReceiverSelect(r),
+        ))
     }
 
     /// Receive the selected input from the sender.
@@ -232,7 +250,7 @@ impl OTReceiver {
 
         let prk = hmac::hkdf_extract(&salt, &ikm);
 
-        Ok(hmac::hkdf_expand(&prk, b"info", 32).try_into().unwrap())
+        Ok(hmac::hkdf_expand(&prk, &self.dst, 32).try_into().unwrap())
     }
 }
 
@@ -244,7 +262,7 @@ fn simple() {
     rng.fill_bytes(&mut entropy);
     let mut entropy = Randomness::new(entropy.to_vec());
 
-    let dst = b"test";
+    let dst = b"test-context";
     let left_input = b"lefto";
     let right_input = b"right";
     let (sender, commitment) = OTSender::init(&mut entropy, dst).unwrap();
