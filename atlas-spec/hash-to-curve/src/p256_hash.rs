@@ -1,6 +1,6 @@
 use crate::Error;
-use hacspec_lib::{i2osp, FunctionalVec};
-use p256::{is_square, sgn0, sqrt, NatMod, P256FieldElement, P256Point, P256Scalar};
+use hacspec_lib::{i2osp, FunctionalVec, hacspec_helper::NatMod};
+use p256::{is_square, sgn0, sqrt, P256FieldElement, P256Point, P256Scalar};
 use sha256::hash;
 
 /// # 8.2 Suites for NIST P-256

@@ -10,7 +10,7 @@ pub trait NatMod<const LEN: usize> {
     fn new(value: [u8; LEN]) -> Self;
     fn value(&self) -> &[u8];
 
-    fn fsub(self, rhs: Self) -> Self
+    fn fsub(self, _rhs: Self) -> Self
     where
         Self: Sized,
     {

@@ -1,4 +1,5 @@
 use p256::*;
+use hacspec_lib::hacspec_helper::*;
 
 #[test]
 fn test_p256_base() {
@@ -56,7 +57,7 @@ fn test_p256_base() {
 }
 
 use serde_json::Value;
-create_test_vectors!(
+hacspec_lib::create_test_vectors!(
     P256TestVector,
     algorithm: String,
     generatorVersion: String,
@@ -67,7 +68,7 @@ create_test_vectors!(
     testGroups: Vec<TestGroup>
 );
 
-create_test_vectors!(
+hacspec_lib::create_test_vectors!(
     TestGroup,
     curve: String,
     encoding: String,
@@ -75,7 +76,7 @@ create_test_vectors!(
     tests: Vec<Test>
 );
 
-create_test_vectors!(
+hacspec_lib::create_test_vectors!(
     Test,
     tcId: usize,
     comment: String,

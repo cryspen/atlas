@@ -3,6 +3,7 @@ pub use bytes::*;
 
 mod rng;
 pub use rng::*;
+pub mod hacspec_helper;
 
 /// From [RFC8017]:
 ///

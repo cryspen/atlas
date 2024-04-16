@@ -1,8 +1,5 @@
-use hacspec_lib::{i2osp, Randomness};
+use hacspec_lib::{hacspec_helper::*, i2osp, Randomness};
 use hmac::{hkdf_expand, hkdf_extract};
-
-mod hacspec_helper;
-pub use hacspec_helper::*;
 
 #[derive(Debug)]
 pub enum Error {
@@ -102,7 +99,7 @@ impl std::ops::Neg for P256FieldElement {
     type Output = P256FieldElement;
 
     fn neg(self) -> Self::Output {
-        hacspec_helper::NatMod::neg(self)
+        NatMod::neg(self)
     }
 }
 
@@ -126,7 +123,7 @@ impl std::ops::Neg for P256Point {
     fn neg(self) -> Self::Output {
         match self {
             P256Point::AtInfinity => self,
-            P256Point::NonInf((x, y)) => (x, hacspec_helper::NatMod::neg(y)).into(),
+            P256Point::NonInf((x, y)) => (x, NatMod::neg(y)).into(),
         }
     }
 }
