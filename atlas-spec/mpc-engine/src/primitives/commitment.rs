@@ -60,12 +60,12 @@ fn simple() {
     use rand::{thread_rng, RngCore};
 
     let mut rng = thread_rng();
-    let mut entropy = [0u8; 1024];
+    let mut entropy = [0u8; 16];
     rng.fill_bytes(&mut entropy);
     let mut entropy = Randomness::new(entropy.to_vec());
     let value = b"Hello";
     let dst = b"Test";
     let (commitment, opening) = Commitment::new(value, dst, &mut entropy).unwrap();
     assert!(commitment.open(value, &opening).is_ok());
-    assert!(commitment.open(b"Wrong Value", &opening).is_err())
+    assert!(commitment.open(b"Wrong Value", &opening).is_err());
 }
