@@ -43,8 +43,10 @@ fn main() {
             .expect("every party should have a channel configuration");
         let c = circuit.clone();
         let party_join_handle = thread::spawn(move || {
-            let bytes = vec![0, 1, 2, 3];
-            let rng = Randomness::new(bytes);
+            let mut rng = rand::thread_rng();
+            let mut bytes = [0u8; 500];
+            rng.fill_bytes(&mut bytes);
+            let rng = Randomness::new(bytes.to_vec());
             let mut p = mpc_engine::party::Party::new(channel_config, &c, rng);
 
             let _ = p.run();
