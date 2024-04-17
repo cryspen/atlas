@@ -3,3 +3,4 @@
 pub mod auth_share;
 pub mod mac;
 pub mod ot;
+pub mod commitment;
