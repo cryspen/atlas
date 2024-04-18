@@ -4,6 +4,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::{
     circuit::WireIndex,
     primitives::{
+        commitment::{Commitment, Opening},
         mac::Mac,
         ot::{OTReceiverSelect, OTSenderInit, OTSenderSend},
     },
@@ -51,10 +52,16 @@ pub enum MessagePayload {
 #[derive(Debug)]
 /// Message communicated on an subprotocol channel
 pub enum SubMessage {
-    /// An OT sender commitment.
+    /// An OT sender commitment
     OTCommit(OTSenderInit),
-    /// An OT receiver selection.
+    /// An OT receiver selection
     OTSelect(OTReceiverSelect),
-    /// An OT sender final message.
+    /// An OT sender final message
     OTSend(OTSenderSend),
+    /// An EQ initiator commitment
+    EQCommit(Commitment),
+    /// An EQ responder message
+    EQResponse(Vec<u8>),
+    /// An EQ initiator opening
+    EQOpening(Vec<u8>, Opening),
 }

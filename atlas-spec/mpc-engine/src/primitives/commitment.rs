@@ -12,12 +12,14 @@ use hmac::hkdf_extract;
 use crate::{Error, STATISTICAL_SECURITY};
 
 /// A Commitment to some value.
+#[derive(Debug)]
 pub struct Commitment {
     com: Vec<u8>,
     dst: Vec<u8>,
 }
 
 /// The opening information for a commitment.
+#[derive(Debug)]
 pub struct Opening([u8; STATISTICAL_SECURITY]);
 
 impl Commitment {
