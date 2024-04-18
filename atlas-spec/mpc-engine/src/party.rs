@@ -6,7 +6,7 @@ use hacspec_lib::Randomness;
 use crate::{
     circuit::Circuit,
     messages::{Message, MessagePayload, SubMessage},
-    primitives::mac::MacKey,
+    primitives::{commitment::Commitment, mac::MacKey},
     Error,
 };
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -104,6 +104,37 @@ impl Party {
         }
 
         Ok(ot_results)
+    }
+
+    fn eq_round(&mut self) -> Result<Vec<bool>, Error> {
+        let num_parties = self.channels.parties.len();
+
+        let mut eq_results = Vec::new();
+        // Expect earlier parties' messages.
+        for _i in 0..self.id {
+            let my_value = [(self.id % 2) as u8];
+            eq_results.push(self.eq_respond(&my_value)?);
+        }
+
+        // All earlier messages have been received, so it is the parties' turn
+        // to send messages to everyone, except itself.
+        for i in 0..num_parties {
+            if i == self.id {
+                continue;
+            }
+
+            let my_value = [(self.id % 2) as u8];
+
+            self.eq_initiate(i, &my_value)?;
+        }
+
+        // Wait for the messages sent by later parties.
+        for _i in self.id + 1..num_parties {
+            let my_value = [(self.id % 2) as u8];
+            eq_results.push(self.eq_respond(&my_value)?);
+        }
+
+        Ok(eq_results)
     }
 
     fn ot_send(&mut self, i: usize, left_input: &[u8], right_input: &[u8]) -> Result<(), Error> {
@@ -260,7 +291,10 @@ impl Party {
     pub fn run(&mut self) -> Result<Option<Vec<bool>>, Error> {
         self.log("Running OTs with every other party.");
 
-        self.ot_round()?;
+        ///self.ot_round()?;
+        let v = self.eq_round()?;
+        self.log(&format!("Got EQ results: {v:?}"));
+
         Ok(None)
     }
 
