@@ -111,6 +111,11 @@ impl Party {
         Ok(ot_results)
     }
 
+    /// Example round of equality check.
+    ///
+    /// The round output for each party is a vector of `bool`, containing the
+    /// result of comparing the party ID mod 2 with every other party, except
+    /// itself.
     fn eq_round(&mut self) -> Result<Vec<bool>, Error> {
         let num_parties = self.channels.parties.len();
 
@@ -212,6 +217,10 @@ impl Party {
         }
     }
 
+    /// Initiate an equality check with another party.
+    ///
+    /// The initiator has to provide its own input value to the check and will
+    /// learn whether that value is the same as the responders.
     fn eq_initiate(&mut self, i: usize, my_value: &[u8]) -> Result<bool, Error> {
         let (own_sender, own_receiver) = mpsc::channel::<SubMessage>();
         let (their_sender, their_receiver) = mpsc::channel::<SubMessage>();
@@ -239,6 +248,10 @@ impl Party {
         }
     }
 
+    /// Listen for an equality check initiation.
+    ///
+    /// The responder has to provide its own input value to the check and will
+    /// learn whether that value is the same as the initators.
     fn eq_respond(&mut self, my_value: &[u8]) -> Result<bool, Error> {
         let channel_msg = self.channels.listen.recv().unwrap();
 
