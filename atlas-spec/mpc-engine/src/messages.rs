@@ -1,103 +1,14 @@
 //! This module defines message types for the MPC protocol and its sub-protocols.
+use std::sync::mpsc::{Receiver, Sender};
+
 use crate::{
     circuit::WireIndex,
     primitives::{
-        auth_share::AuthShare,
-        mac::{Mac, MacKey},
+        mac::Mac,
+        ot::{OTReceiverSelect, OTSenderInit, OTSenderSend},
     },
     COMPUTATIONAL_SECURITY,
 };
-
-/// Messages that must be handled by the 1-out-of-2 Oblivious Transfer
-/// subprotocol, or ideal functionality.
-pub enum FOT {
-    /// The sender inputs to an OT session.
-    Sender {
-        /// The sender of the OT.
-        from: usize,
-        /// The receiver of the OT.
-        to: usize,
-        /// The left input to the OT.
-        left: u8,
-        /// The right input to the OT.
-        right: u8,
-    },
-    /// The receiver input to an OT session.
-    Receiver {
-        /// The sender of the OT.
-        from: usize,
-        /// The receiver of the OT.
-        to: usize,
-        /// Whether the receiver chose the left output or not.
-        choose_left: bool,
-    },
-
-    /// The sender's output in the OT, specifiying that the session is over.
-    SenderResponse {
-        /// The sender of the OT.
-        from: usize,
-        /// The receiver of the OT.
-        to: usize,
-    },
-
-    /// The receiver's output in the OT.
-    ReceiverResponse {
-        /// The receiver of the OT.
-        from: usize,
-        /// The receiver of the OT.
-        to: usize,
-        /// The receiver's output in the OT.
-        output: u8,
-    },
-}
-
-/// Messages that must be handled by the preprocessing subprotocol, or ideal functionality.
-pub enum FPreRequest {
-    /// A party initialization request. from the indicated party.
-    Init {
-        /// The requesting party.
-        from: usize,
-    },
-    /// A request for a random authenticated share.
-    Random {
-        /// The requesting party.
-        from: usize,
-    },
-    /// A request for the AND of two shares.
-    And {
-        /// The requesting party.
-        from: usize,
-        /// The first AND input share.
-        lhs: AuthShare,
-        /// The second AND input share.
-        rhs: AuthShare,
-    },
-}
-
-/// Messages that are the outcome of the FPre subprotocol.
-pub enum FPreResponse {
-    /// The response to an `Init` request.
-    Init {
-        /// The receiver of the message.
-        to: usize,
-        /// A fresh global MAC key.
-        global_mac_key: MacKey,
-    },
-    /// The response to a `Random` request.
-    Random {
-        /// The receiver of the message.
-        to: usize,
-        /// A fresh random authenticated bit share.
-        share: AuthShare,
-    },
-    /// The response to an `And` request.
-    And {
-        /// The receiver of the message.
-        to: usize,
-        /// A fresh random authenticated bit share of the AND of the requested shares.
-        and_share: AuthShare,
-    },
-}
 
 /// An overall message type for all messages between parties.
 ///
@@ -107,7 +18,19 @@ pub enum FPreResponse {
 ///   - messages for the FPre subprotocol
 ///   - (not currently) messages for the remaining sub-protocols which implement
 ///     FPre
-pub enum MPCMessage {
+#[derive(Debug)]
+pub struct Message {
+    pub(crate) from: usize,
+    pub(crate) to: usize,
+    pub(crate) payload: MessagePayload,
+}
+
+/// Messages that are actually sent between parties in the top-level MPC
+/// protocol.
+#[derive(Debug)]
+pub enum MessagePayload {
+    /// A subchannel for running an 2-party subprotocol.
+    SubChannel(Sender<SubMessage>, Receiver<SubMessage>),
     /// A garbled AND gate, to be sent to the evaluator
     GarbledAnd(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>),
     /// A MAC on a wire mask share
@@ -123,8 +46,15 @@ pub enum MPCMessage {
         /// The wire label
         label: [u8; COMPUTATIONAL_SECURITY],
     },
-    /// A message to the FPre subprotocol
-    FPreRequest(FPreRequest),
-    /// The FPre subprotocol response
-    FPreResponse(FPreResponse),
+}
+
+#[derive(Debug)]
+/// Message communicated on an subprotocol channel
+pub enum SubMessage {
+    /// An OT sender commitment.
+    OTCommit(OTSenderInit),
+    /// An OT receiver selection.
+    OTSelect(OTReceiverSelect),
+    /// An OT sender final message.
+    OTSend(OTSenderSend),
 }

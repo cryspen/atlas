@@ -3,8 +3,13 @@
 
 use hacspec_lib::Randomness;
 
-use crate::{circuit::Circuit, messages::MPCMessage, primitives::mac::MacKey, Error};
-use std::sync::mpsc::{Receiver, Sender};
+use crate::{
+    circuit::Circuit,
+    messages::{Message, MessagePayload, SubMessage},
+    primitives::mac::MacKey,
+    Error,
+};
+use std::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug)]
 /// A type for tracking the current protocol phase.
@@ -20,15 +25,13 @@ pub enum ProtocolPhase {
 /// It includes
 /// - `listen`: The parties on message receiver handle
 /// - `evaluator`: The sender handle for the designated evaluator party
-/// - `subprotocol`: The sender handle for the parties' subprotocol functionality
 /// - `parties`: All other parties' sender handles, ordered by their `id`s
 /// - `id`: The owning parties `id`
 #[allow(dead_code)] // TODO: Remove this later.
 pub struct ChannelConfig {
-    pub(crate) listen: Receiver<MPCMessage>,
-    pub(crate) evaluator: Sender<MPCMessage>,
-    pub(crate) subprotocol: Sender<MPCMessage>,
-    pub(crate) parties: Vec<Sender<MPCMessage>>,
+    pub(crate) listen: Receiver<Message>,
+    pub(crate) evaluator: Sender<Message>,
+    pub(crate) parties: Vec<Sender<Message>>,
     pub(crate) id: usize,
 }
 
@@ -68,29 +71,19 @@ impl Party {
         self.id == 0
     }
 
-    /// Send a message to the subprotocol channel.
-    fn subprotocol(&mut self, message: MPCMessage) {
-        self.channels.subprotocol.send(message).unwrap();
-        let msg = self.channels.listen.recv().unwrap();
-        self.process_message(msg);
-    }
-
     /// Send a message to the evaluator.
-    fn send_to_evaluator(&mut self, message: MPCMessage) {
+    fn send_to_evaluator(&mut self, message: Message) {
         self.channels.evaluator.send(message).unwrap();
     }
 
-    /// Participate in a full communication round between all parties.
-    ///
-    /// Communication turn-order is determined by the parties `id`, i.e. earlier
-    /// `id`s send before later `id`s.
-    fn full_round(&mut self, round_function: fn(usize, usize) -> MPCMessage) {
+    fn ot_round(&mut self) -> Result<Vec<Vec<u8>>, Error> {
         let num_parties = self.channels.parties.len();
 
+        let mut ot_results = Vec::new();
         // Expect earlier parties' messages.
         for _i in 0..self.id {
-            let msg = self.channels.listen.recv().unwrap();
-            self.process_message(msg);
+            let choose_left = self.entropy.bit()?;
+            ot_results.push(self.ot_receive(choose_left)?);
         }
 
         // All earlier messages have been received, so it is the parties' turn
@@ -99,22 +92,87 @@ impl Party {
             if i == self.id {
                 continue;
             }
-
-            self.channels.parties[i]
-                .send(round_function(self.id, i))
-                .unwrap();
+            let left_input = [1u8, 1u8, 1u8];
+            let right_input = [9u8, 9u8, 9u8];
+            self.ot_send(i, &left_input, &right_input)?;
         }
 
         // Wait for the messages sent by later parties.
         for _i in self.id + 1..num_parties {
-            let msg = self.channels.listen.recv().unwrap();
-            self.process_message(msg);
+            let choose_left = self.entropy.bit()?;
+            ot_results.push(self.ot_receive(choose_left)?);
         }
+
+        Ok(ot_results)
     }
 
-    /// Process an incoming message.
-    fn process_message(&mut self, _msg: MPCMessage) {
-        todo!()
+    fn ot_send(&mut self, i: usize, left_input: &[u8], right_input: &[u8]) -> Result<(), Error> {
+        let (own_sender, own_receiver) = mpsc::channel::<SubMessage>();
+        let (their_sender, their_receiver) = mpsc::channel::<SubMessage>();
+
+        let channel_msg = Message {
+            from: self.id,
+            to: i,
+            payload: MessagePayload::SubChannel(own_sender, their_receiver),
+        };
+        self.channels.parties[i].send(channel_msg).unwrap();
+
+        let dst = format!("OT-{}-{}", self.id, i);
+        let (ot_sender, ot_commit) =
+            crate::primitives::ot::OTSender::init(&mut self.entropy, dst.as_bytes())?;
+        their_sender.send(SubMessage::OTCommit(ot_commit)).unwrap();
+        let receiver_msg = own_receiver.recv().unwrap();
+        match receiver_msg {
+            SubMessage::OTSelect(selection) => {
+                let send =
+                    ot_sender.send(left_input, right_input, &selection, &mut self.entropy)?;
+                their_sender.send(SubMessage::OTSend(send)).unwrap();
+            }
+            _ => panic!(
+                "Party {} - Unexpected receiver message in OT:\n{receiver_msg:#?}",
+                self.id
+            ),
+        };
+        Ok(())
+    }
+
+    fn ot_receive(&mut self, choose_left: bool) -> Result<Vec<u8>, Error> {
+        let channel_msg = self.channels.listen.recv().unwrap();
+
+        Ok(match channel_msg {
+            Message {
+                to,
+                from,
+                payload: MessagePayload::SubChannel(their_channel, my_channel),
+            } => {
+                let first_msg = my_channel.recv().unwrap();
+                match first_msg {
+                    SubMessage::OTCommit(commitment) => {
+                        let dst = format!("OT-{}-{}", from, to);
+                        self.log(&format!("Choose left input: {choose_left}"));
+                        let (receiver, resp) = crate::primitives::ot::OTReceiver::select(
+                            &mut self.entropy,
+                            dst.as_bytes(),
+                            commitment,
+                            choose_left,
+                        )?;
+                        their_channel.send(SubMessage::OTSelect(resp)).unwrap();
+                        let second_msg = my_channel.recv().unwrap();
+                        match second_msg {
+                            SubMessage::OTSend(payload) => {
+                                assert_eq!(self.id, to);
+                                let result = receiver.receive(payload)?;
+                                self.log(&format!("Got message {result:?}"));
+                                result
+                            }
+                            _ => panic!("Unexpected second sender message in OT"),
+                        }
+                    }
+                    _ => panic!("Unexpected first sender message in OT"),
+                }
+            }
+            _ => panic!("Unexpected channel message in OT"),
+        })
     }
 
     /// Run the function independent pre-processing phase of the protocol.
@@ -144,7 +202,9 @@ impl Party {
 
     /// Run the MPC protocol, returning the parties output, if any.
     pub fn run(&mut self) -> Result<Option<Vec<bool>>, Error> {
-        self.log("Nothing to do, yet!");
+        self.log("Running OTs with every other party.");
+
+        self.ot_round()?;
         Ok(None)
     }
 
