@@ -76,6 +76,11 @@ impl Party {
         self.channels.evaluator.send(message).unwrap();
     }
 
+    /// Example round of oblivious transfers.
+    ///
+    /// The round output for each party is a vector of (n-1) OT receiver outputs
+    /// based on the random choice of left or right output when acting as the
+    /// receiver. When acting as the sender, there is no output.
     fn ot_round(&mut self) -> Result<Vec<Vec<u8>>, Error> {
         let num_parties = self.channels.parties.len();
 
@@ -137,6 +142,10 @@ impl Party {
         Ok(eq_results)
     }
 
+    /// Initiate an OT session as the Sender.
+    ///
+    /// The sender needs to provide two inputs to the OT protocol and receives
+    /// no output.
     fn ot_send(&mut self, i: usize, left_input: &[u8], right_input: &[u8]) -> Result<(), Error> {
         let (own_sender, own_receiver) = mpsc::channel::<SubMessage>();
         let (their_sender, their_receiver) = mpsc::channel::<SubMessage>();
@@ -162,6 +171,10 @@ impl Party {
         }
     }
 
+    /// Listen for an OT initiation as the receiver.
+    ///
+    /// The receiver needs to provide a choice of left or right output to the
+    /// protocol and receives the chosen sender input.
     fn ot_receive(&mut self, choose_left: bool) -> Result<Vec<u8>, Error> {
         let channel_msg = self.channels.listen.recv().unwrap();
 
