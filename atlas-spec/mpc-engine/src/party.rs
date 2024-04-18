@@ -153,57 +153,50 @@ impl Party {
             crate::primitives::ot::OTSender::init(&mut self.entropy, dst.as_bytes())?;
         their_sender.send(SubMessage::OTCommit(ot_commit)).unwrap();
         let receiver_msg = own_receiver.recv().unwrap();
-        match receiver_msg {
-            SubMessage::OTSelect(selection) => {
-                let send =
-                    ot_sender.send(left_input, right_input, &selection, &mut self.entropy)?;
-                their_sender.send(SubMessage::OTSend(send)).unwrap();
-            }
-            _ => panic!(
-                "Party {} - Unexpected receiver message in OT:\n{receiver_msg:#?}",
-                self.id
-            ),
-        };
-        Ok(())
+        if let SubMessage::OTSelect(selection) = receiver_msg {
+            let send = ot_sender.send(left_input, right_input, &selection, &mut self.entropy)?;
+            their_sender.send(SubMessage::OTSend(send)).unwrap();
+            Ok(())
+        } else {
+            Err(Error::UnexpectedSubprotocolMessage(receiver_msg))
+        }
     }
 
     fn ot_receive(&mut self, choose_left: bool) -> Result<Vec<u8>, Error> {
         let channel_msg = self.channels.listen.recv().unwrap();
 
-        Ok(match channel_msg {
-            Message {
-                to,
-                from,
-                payload: MessagePayload::SubChannel(their_channel, my_channel),
-            } => {
-                let first_msg = my_channel.recv().unwrap();
-                match first_msg {
-                    SubMessage::OTCommit(commitment) => {
-                        let dst = format!("OT-{}-{}", from, to);
-                        self.log(&format!("Choose left input: {choose_left}"));
-                        let (receiver, resp) = crate::primitives::ot::OTReceiver::select(
-                            &mut self.entropy,
-                            dst.as_bytes(),
-                            commitment,
-                            choose_left,
-                        )?;
-                        their_channel.send(SubMessage::OTSelect(resp)).unwrap();
-                        let second_msg = my_channel.recv().unwrap();
-                        match second_msg {
-                            SubMessage::OTSend(payload) => {
-                                assert_eq!(self.id, to);
-                                let result = receiver.receive(payload)?;
-                                self.log(&format!("Got message {result:?}"));
-                                result
-                            }
-                            _ => panic!("Unexpected second sender message in OT"),
-                        }
-                    }
-                    _ => panic!("Unexpected first sender message in OT"),
+        if let Message {
+            to,
+            from,
+            payload: MessagePayload::SubChannel(their_channel, my_channel),
+        } = channel_msg
+        {
+            let first_msg = my_channel.recv().unwrap();
+            if let SubMessage::OTCommit(commitment) = first_msg {
+                let dst = format!("OT-{}-{}", from, to);
+                self.log(&format!("Choose left input: {choose_left}"));
+                let (receiver, resp) = crate::primitives::ot::OTReceiver::select(
+                    &mut self.entropy,
+                    dst.as_bytes(),
+                    commitment,
+                    choose_left,
+                )?;
+                their_channel.send(SubMessage::OTSelect(resp)).unwrap();
+                let second_msg = my_channel.recv().unwrap();
+                if let SubMessage::OTSend(payload) = second_msg {
+                    assert_eq!(self.id, to);
+                    let result = receiver.receive(payload)?;
+                    self.log(&format!("Got message {result:?}"));
+                    Ok(result)
+                } else {
+                    Err(Error::UnexpectedSubprotocolMessage(second_msg))
                 }
+            } else {
+                Err(Error::UnexpectedSubprotocolMessage(first_msg))
             }
-            _ => panic!("Unexpected channel message in OT"),
-        })
+        } else {
+            Err(Error::UnexpectedMessage(channel_msg))
+        }
     }
 
     fn eq_initiate(&mut self, i: usize, my_value: &[u8]) -> Result<bool, Error> {
@@ -291,7 +284,7 @@ impl Party {
     pub fn run(&mut self) -> Result<Option<Vec<bool>>, Error> {
         self.log("Running OTs with every other party.");
 
-        ///self.ot_round()?;
+        self.ot_round()?;
         let v = self.eq_round()?;
         self.log(&format!("Got EQ results: {v:?}"));
 
