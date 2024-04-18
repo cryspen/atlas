@@ -51,18 +51,22 @@ pub struct OTReceiver {
 }
 
 /// The OT sender's first message.
+#[derive(Debug)]
 pub struct OTSenderInit(p256::P256Point);
 
 /// The OT receiver's first message.
+#[derive(Debug)]
 pub struct OTReceiverSelect(p256::P256Point);
 
 /// The encryption of an OT input.
+#[derive(Debug)]
 pub struct OTCiphertext {
     iv: ChaChaPolyIV,
     ciphertext: Vec<u8>,
     tag: [u8; 16],
 }
 /// The OT sender's second message.
+#[derive(Debug)]
 pub struct OTSenderSend {
     left: OTCiphertext,
     right: OTCiphertext,
