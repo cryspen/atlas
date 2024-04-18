@@ -175,6 +175,62 @@ impl Party {
         })
     }
 
+    fn eq_initiate(&mut self, i: usize, my_value: &[u8]) -> Result<bool, Error> {
+        let (own_sender, own_receiver) = mpsc::channel::<SubMessage>();
+        let (their_sender, their_receiver) = mpsc::channel::<SubMessage>();
+
+        let channel_msg = Message {
+            from: self.id,
+            to: i,
+            payload: MessagePayload::SubChannel(own_sender, their_receiver),
+        };
+        self.channels.parties[i].send(channel_msg).unwrap();
+
+        let dst = format!("EQ-{}-{}", self.id, i);
+        let (commitment, opening) = Commitment::new(my_value, dst.as_bytes(), &mut self.entropy)?;
+        their_sender.send(SubMessage::EQCommit(commitment)).unwrap();
+
+        let responder_message = own_receiver.recv().unwrap();
+        if let SubMessage::EQResponse(their_value) = responder_message {
+            let res = their_value == my_value;
+            their_sender
+                .send(SubMessage::EQOpening(my_value.to_vec(), opening))
+                .unwrap();
+            Ok(res)
+        } else {
+            Err(Error::UnexpectedSubprotocolMessage(responder_message))
+        }
+    }
+
+    fn eq_respond(&mut self, my_value: &[u8]) -> Result<bool, Error> {
+        let channel_msg = self.channels.listen.recv().unwrap();
+
+        if let Message {
+            to,
+            from: _from,
+            payload: MessagePayload::SubChannel(their_channel, my_channel),
+        } = channel_msg
+        {
+            assert_eq!(to, self.id);
+            let commit_message = my_channel.recv().unwrap();
+            if let SubMessage::EQCommit(commitment) = commit_message {
+                their_channel
+                    .send(SubMessage::EQResponse(my_value.to_vec()))
+                    .unwrap();
+                let opening_message = my_channel.recv().unwrap();
+                if let SubMessage::EQOpening(their_value, opening) = opening_message {
+                    Ok(commitment.open(&their_value, &opening).is_ok() && my_value == their_value)
+                } else {
+                    Err(Error::UnexpectedSubprotocolMessage(opening_message))
+                }
+            } else {
+                Err(Error::UnexpectedSubprotocolMessage(commit_message))
+            }
+        } else {
+            Err(Error::UnexpectedMessage(channel_msg))
+        }
+    }
+
     /// Run the function independent pre-processing phase of the protocol.
     pub fn function_independent(&mut self) {
         todo!("the function-independent pre-processing phase is not yet implemented (cf. GitHub issue #51")

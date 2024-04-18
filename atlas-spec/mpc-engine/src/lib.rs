@@ -4,6 +4,7 @@
 //! WRK17 protocol.
 
 use circuit::CircuitError;
+use messages::{Message, SubMessage};
 
 #[derive(Debug)]
 /// An error type.
@@ -12,6 +13,12 @@ pub enum Error {
     InsufficientRandomness,
     /// An error during circuit processing
     Circuit(CircuitError),
+    /// A specific subprotocol message was expected but a different one was
+    /// received.
+    UnexpectedSubprotocolMessage(SubMessage),
+    /// A specific top-level message was expected but a different one was
+    /// received
+    UnexpectedMessage(Message),
     /// Miscellaneous error.
     OtherError,
 }
