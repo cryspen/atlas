@@ -239,9 +239,7 @@ impl Party {
         let responder_message = own_receiver.recv().unwrap();
         if let SubMessage::EQResponse(their_value) = responder_message {
             let res = their_value == my_value;
-            their_sender
-                .send(SubMessage::EQOpening(my_value.to_vec(), opening))
-                .unwrap();
+            their_sender.send(SubMessage::EQOpening(opening)).unwrap();
             Ok(res)
         } else {
             Err(Error::UnexpectedSubprotocolMessage(responder_message))
@@ -268,8 +266,9 @@ impl Party {
                     .send(SubMessage::EQResponse(my_value.to_vec()))
                     .unwrap();
                 let opening_message = my_channel.recv().unwrap();
-                if let SubMessage::EQOpening(their_value, opening) = opening_message {
-                    Ok(commitment.open(&their_value, &opening).is_ok() && my_value == their_value)
+                if let SubMessage::EQOpening(opening) = opening_message {
+                    let their_value = commitment.open(&opening)?;
+                    Ok(my_value == their_value)
                 } else {
                     Err(Error::UnexpectedSubprotocolMessage(opening_message))
                 }

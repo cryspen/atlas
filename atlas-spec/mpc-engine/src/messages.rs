@@ -63,5 +63,5 @@ pub enum SubMessage {
     /// An EQ responder message
     EQResponse(Vec<u8>),
     /// An EQ initiator opening
-    EQOpening(Vec<u8>, Opening),
+    EQOpening(Opening),
 }
