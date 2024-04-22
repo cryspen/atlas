@@ -2,7 +2,7 @@
 //!
 //! Assume `H` is a hash function modeled as a random oracle. To commit to value
 //! `v`, sample a random string `r` from `{0,1}^\rho` and compute the
-//! commmitment as `c <- H(v || r)`, the opening being `r`. To verify the
+//! commitment as `c <- H(v || r)`, the opening being `r`. To verify the
 //! commitment given `(v', c, r')` compute `c' <- H(v' || r')` and check that `c
 //! == c'`.
 
