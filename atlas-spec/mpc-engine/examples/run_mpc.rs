@@ -34,9 +34,9 @@ fn main() {
         let c = circuit.clone();
         let party_join_handle = thread::spawn(move || {
             let mut rng = rand::thread_rng();
-            let mut bytes = [0u8; 500];
+            let mut bytes = vec![0u8; 500];
             rng.fill_bytes(&mut bytes);
-            let rng = Randomness::new(bytes.to_vec());
+            let rng = Randomness::new(bytes);
             let mut p = mpc_engine::party::Party::new(channel_config, &c, rng);
 
             let _ = p.run();
