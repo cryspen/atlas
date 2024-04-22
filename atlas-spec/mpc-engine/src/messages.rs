@@ -30,6 +30,10 @@ pub struct Message {
 /// protocol.
 #[derive(Debug)]
 pub enum MessagePayload {
+    /// A commitment on a random value for the coin-flipping subprotocol.
+    RandCommitment(Commitment),
+    /// The opening in the coin flipping subprotocol.
+    RandOpening(Opening),
     /// A subchannel for running an 2-party subprotocol.
     SubChannel(Sender<SubMessage>, Receiver<SubMessage>),
     /// A garbled AND gate, to be sent to the evaluator

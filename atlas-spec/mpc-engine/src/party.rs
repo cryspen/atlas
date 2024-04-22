@@ -6,7 +6,10 @@ use hacspec_lib::Randomness;
 use crate::{
     circuit::Circuit,
     messages::{Message, MessagePayload, SubMessage},
-    primitives::{commitment::Commitment, mac::MacKey},
+    primitives::{
+        commitment::{Commitment, Opening},
+        mac::{Mac, MacKey},
+    },
     Error,
 };
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -147,6 +150,133 @@ impl Party {
         Ok(eq_results)
     }
 
+    fn rand_commit_round(
+        &mut self,
+        len: usize,
+    ) -> Result<(Vec<u8>, Opening, Vec<(usize, Commitment)>), Error> {
+        let num_parties = self.channels.parties.len();
+        let my_contribution = self.entropy.bytes(len)?.to_owned();
+        let dst = b"Coin-Flip-Commitment";
+        let (my_commitment, my_opening) =
+            Commitment::new(&my_contribution, dst, &mut self.entropy)?;
+
+        let mut commitments = Vec::new();
+        // Expect earlier parties' messages.
+        for i in 0..self.id {
+            let commitment = self.channels.listen.recv().unwrap();
+            if let MessagePayload::RandCommitment(c) = commitment.payload {
+                assert_eq!(commitment.to, self.id);
+                commitments.push((i, c));
+            } else {
+                return Err(Error::UnexpectedMessage(commitment));
+            }
+        }
+
+        // All earlier messages have been received, so it is the parties' turn
+        // to send messages to everyone, except itself.
+        for i in 0..num_parties {
+            if i == self.id {
+                continue;
+            }
+
+            self.channels.parties[i]
+                .send(Message {
+                    from: self.id,
+                    to: i,
+                    payload: MessagePayload::RandCommitment(my_commitment.clone()),
+                })
+                .unwrap();
+        }
+
+        // Wait for the messages sent by later parties.
+        for i in self.id + 1..num_parties {
+            let commitment = self.channels.listen.recv().unwrap();
+            if let MessagePayload::RandCommitment(c) = commitment.payload {
+                assert_eq!(commitment.to, self.id);
+                commitments.push((i, c));
+            } else {
+                return Err(Error::UnexpectedMessage(commitment));
+            }
+        }
+
+        Ok((my_contribution, my_opening, commitments))
+    }
+
+    fn rand_open_round(
+        &mut self,
+        my_contribution: &[u8],
+        my_opening: Opening,
+        commitments: &[(usize, Commitment)],
+    ) -> Result<Vec<u8>, Error> {
+        let num_parties = self.channels.parties.len();
+
+        let mut openings = Vec::new();
+        // Expect earlier parties' messages.
+        for i in 0..self.id {
+            let opening_msg = self.channels.listen.recv().unwrap();
+            if let MessagePayload::RandOpening(opening) = opening_msg.payload {
+                assert_eq!(opening_msg.to, self.id);
+
+                let commitment = commitments
+                    .iter()
+                    .find(|(j, _)| i == *j)
+                    .map(|(_, c)| c)
+                    .expect("should have received a commitment from every other party");
+                openings.push((commitment, opening));
+            } else {
+                return Err(Error::UnexpectedMessage(opening_msg));
+            }
+        }
+
+        // All earlier messages have been received, so it is the parties' turn
+        // to send messages to everyone, except itself.
+        for i in 0..num_parties {
+            if i == self.id {
+                continue;
+            }
+
+            self.channels.parties[i]
+                .send(Message {
+                    from: self.id,
+                    to: i,
+                    payload: MessagePayload::RandOpening(my_opening.clone()),
+                })
+                .unwrap();
+        }
+
+        // Wait for the messages sent by later parties.
+        for i in self.id + 1..num_parties {
+            let opening_msg = self.channels.listen.recv().unwrap();
+            if let MessagePayload::RandOpening(opening) = opening_msg.payload {
+                assert_eq!(opening_msg.to, self.id);
+
+                let commitment = commitments
+                    .iter()
+                    .find(|(j, _)| i == *j)
+                    .map(|(_, c)| c)
+                    .expect("should have received a commitment from every other party");
+                openings.push((commitment, opening));
+            } else {
+                return Err(Error::UnexpectedMessage(opening_msg));
+            }
+        }
+
+        let mut result = Vec::from(my_contribution);
+        for (c, o) in openings {
+            let v = c.open(&o)?;
+            assert_eq!(
+                v.len(),
+                result.len(),
+                "all randomness contributions must be of the same length"
+            );
+            for i in 0..result.len() {
+                result[i] ^= v[i]
+            }
+        }
+
+        Ok(result)
+    }
+
     /// Initiate an OT session as the Sender.
     ///
     /// The sender needs to provide two inputs to the OT protocol and receives
@@ -280,6 +410,16 @@ impl Party {
         }
     }
 
+    /// Initiate a bit authentication session.
+    fn abit_2pc_initiator(&self, _i: usize, _bits: &[u8]) -> Result<Vec<Mac>, Error> {
+        todo!()
+    }
+
+    /// Listen for a bit authentication initiation.
+    fn abit_2pc_responder() -> Result<Vec<MacKey>, Error> {
+        todo!()
+    }
+
     /// Run the function independent pre-processing phase of the protocol.
     pub fn function_independent(&mut self) {
         todo!("the function-independent pre-processing phase is not yet implemented (cf. GitHub issue #51")
@@ -313,6 +453,10 @@ impl Party {
         let v = self.eq_round()?;
         self.log(&format!("Got EQ results: {v:?}"));
 
+        let (my_contribution, my_opening, commitments) = self.rand_commit_round(8)?;
+        let rand = self.rand_open_round(&my_contribution, my_opening, &commitments)?;
+
+        self.log(&format!("Got Rand results: {rand:?}"));
         Ok(None)
     }
 
