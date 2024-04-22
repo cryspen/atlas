@@ -325,7 +325,7 @@ impl OTReceiver {
 fn simple() {
     use rand::RngCore;
     let mut rng = rand::thread_rng();
-    let mut entropy = [0u8; 1024];
+    let mut entropy = [0u8; 88];
     rng.fill_bytes(&mut entropy);
     let mut entropy = Randomness::new(entropy.to_vec());
 
