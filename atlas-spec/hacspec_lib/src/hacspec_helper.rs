@@ -217,7 +217,7 @@ pub trait NatMod<const LEN: usize> {
         let mut value = [0u8; LEN];
         let upper = value.len();
         let lower = upper - bytes.len();
-        value[lower..upper].copy_from_slice(&bytes);
+        value[lower..upper].copy_from_slice(bytes);
         value
     }
 

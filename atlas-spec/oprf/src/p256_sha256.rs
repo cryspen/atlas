@@ -31,7 +31,7 @@ pub fn identity() -> P256Point {
 }
 
 pub fn scalar_inverse(s: P256Scalar) -> P256Scalar {
-    use p256::NatMod;
+    use hacspec_lib::hacspec_helper::NatMod;
     s.inv()
 }
 

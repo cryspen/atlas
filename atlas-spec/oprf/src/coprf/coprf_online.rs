@@ -17,11 +17,11 @@
 //! ```
 
 use elgamal::Ciphertext;
-use hacspec_lib::Randomness;
+use hacspec_lib::{hacspec_helper::NatMod, Randomness};
 
 use super::coprf_setup::{BlindingPublicKey, CoPRFKey};
 use crate::{coprf::coprf_setup::CoPRFReceiverContext, p256_sha256, Error};
-use p256::{NatMod, P256Point};
+use p256::P256Point;
 
 /// CoPRF Inputs can be arbitrary byte strings.
 pub type Input<'a> = &'a [u8];

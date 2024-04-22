@@ -74,7 +74,7 @@ fn encrypt_data_value(
     ek: &StoreEncryptionKey,
     randomness: &mut Randomness,
 ) -> Result<EncryptedDataValue, Error> {
-    let encrypted_data_value = double_hpke::hpke_seal_level_1(&data, &ek.0, randomness)?;
+    let encrypted_data_value = double_hpke::hpke_seal_level_1(data, &ek.0, randomness)?;
     Ok(encrypted_data_value)
 }
 
@@ -137,7 +137,7 @@ pub fn pseudonymize_blinded_datum(
     randomness: &mut Randomness,
 ) -> Result<BlindedPseudonymizedData, Error> {
     let key = derive_key(
-        &coprf_context,
+        coprf_context,
         datum.encrypted_data_value.attribute_name.as_bytes(),
     )?;
 
@@ -172,7 +172,7 @@ fn rerandomize_encryption(
     ek: &StoreEncryptionKey,
     randomness: &mut Randomness,
 ) -> Result<EncryptedDataValue, Error> {
-    Ok(double_hpke::hpke_seal_level_2(&data, &ek.0, randomness)?)
+    double_hpke::hpke_seal_level_2(data, &ek.0, randomness)
 }
 
 /// Obliviously convert a blinded pseudonymous datum to a given target pseudonym key.
@@ -198,12 +198,12 @@ pub fn convert_blinded_datum(
 ) -> Result<BlindedPseudonymizedData, Error> {
     // Re-derive original pseudonymization key.
     let key_from = derive_key(
-        &coprf_context,
+        coprf_context,
         datum.encrypted_data_value.attribute_name.as_bytes(),
     )?;
 
     // Derive target key.
-    let key_to = derive_key(&coprf_context, conversion_target)?;
+    let key_to = derive_key(coprf_context, conversion_target)?;
 
     // Obliviously convert pseudonym.
     let blinded_handle = BlindedPseudonymizedHandle(blind_convert(
@@ -261,5 +261,5 @@ fn decrypt_data_value(
     data: &EncryptedDataValue,
     store_context: &StoreContext,
 ) -> Result<DataValue, Error> {
-    Ok(double_hpke::hpke_open_level_2(&data, &store_context.dk.0)?)
+    double_hpke::hpke_open_level_2(data, &store_context.dk.0)
 }

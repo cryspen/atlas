@@ -42,8 +42,8 @@ pub type CoPRFKey = P256Scalar;
 /// The coPRF requester requires the blinding public key of the intended
 /// receiver of the PRF output.
 pub struct CoPRFRequesterContext {
-    pub(crate) string: Vec<u8>,
-    pub(crate) bpk: BlindingPublicKey,
+    pub(crate) _string: Vec<u8>,
+    pub(crate) _bpk: BlindingPublicKey,
 }
 
 /// The coPRF evaluator holds the coPRF master secret.
@@ -72,8 +72,8 @@ impl CoPRFRequesterContext {
     /// party on whose behalf PRF evaluation queries should be carried out.
     pub fn new(identifier: &[u8], bpk: BlindingPublicKey) -> Self {
         CoPRFRequesterContext {
-            string: create_context_string(ModeID::modecoPRF, identifier),
-            bpk,
+            _string: create_context_string(ModeID::modecoPRF, identifier),
+            _bpk: bpk,
         }
     }
 }

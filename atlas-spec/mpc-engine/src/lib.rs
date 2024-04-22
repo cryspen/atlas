@@ -4,6 +4,7 @@
 //! WRK17 protocol.
 
 use circuit::CircuitError;
+use messages::{Message, SubMessage};
 
 #[derive(Debug)]
 /// An error type.
@@ -12,8 +13,41 @@ pub enum Error {
     InsufficientRandomness,
     /// An error during circuit processing
     Circuit(CircuitError),
+    /// A specific subprotocol message was expected but a different one was
+    /// received.
+    UnexpectedSubprotocolMessage(SubMessage),
+    /// A specific top-level message was expected but a different one was
+    /// received
+    UnexpectedMessage(Message),
     /// Miscellaneous error.
     OtherError,
+}
+
+impl From<hacspec_lib::Error> for Error {
+    fn from(value: hacspec_lib::Error) -> Self {
+        match value {
+            hacspec_lib::Error::InsufficientRandomness => Self::InsufficientRandomness,
+        }
+    }
+}
+
+impl From<p256::Error> for Error {
+    fn from(value: p256::Error) -> Self {
+        match value {
+            p256::Error::InvalidAddition
+            | p256::Error::DeserializeError
+            | p256::Error::PointAtInfinity => Self::OtherError,
+            p256::Error::SamplingError => Self::InsufficientRandomness,
+        }
+    }
+}
+
+impl From<hacspec_chacha20poly1305::Error> for Error {
+    fn from(value: hacspec_chacha20poly1305::Error) -> Self {
+        match value {
+            hacspec_chacha20poly1305::Error::InvalidTag => Self::OtherError,
+        }
+    }
 }
 
 /// The computational security parameter, in bytes.

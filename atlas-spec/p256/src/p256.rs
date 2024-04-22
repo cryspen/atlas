@@ -1,8 +1,5 @@
-use hacspec_lib::{i2osp, Randomness};
+use hacspec_lib::{hacspec_helper::*, i2osp, Randomness};
 use hmac::{hkdf_expand, hkdf_extract};
-
-mod hacspec_helper;
-pub use hacspec_helper::*;
 
 #[derive(Debug)]
 pub enum Error {
@@ -102,7 +99,7 @@ impl std::ops::Neg for P256FieldElement {
     type Output = P256FieldElement;
 
     fn neg(self) -> Self::Output {
-        hacspec_helper::NatMod::neg(self)
+        NatMod::neg(self)
     }
 }
 
@@ -126,7 +123,7 @@ impl std::ops::Neg for P256Point {
     fn neg(self) -> Self::Output {
         match self {
             P256Point::AtInfinity => self,
-            P256Point::NonInf((x, y)) => (x, hacspec_helper::NatMod::neg(y)).into(),
+            P256Point::NonInf((x, y)) => (x, NatMod::neg(y)).into(),
         }
     }
 }
@@ -355,7 +352,7 @@ pub fn point_add(p: P256Point, q: P256Point) -> Result<P256Point, Error> {
         P256Point::AtInfinity => Ok(q),
         P256Point::NonInf(p) => match q {
             P256Point::AtInfinity => Ok(P256Point::AtInfinity),
-            P256Point::NonInf(q) => point_add_noninf(p, q).map(|res| P256Point::NonInf(res)),
+            P256Point::NonInf(q) => point_add_noninf(p, q).map(P256Point::NonInf),
         },
     }
 }
@@ -416,6 +413,5 @@ pub fn p256_calculate_w(x: P256FieldElement) -> P256FieldElement {
     // w = (x^3 + a*x + b)^((p+1)/4) (mod p). [RFC6090, Appendix C]
     let z = x * x * x - P256FieldElement::from_u128(3) * x + b;
     // z to power of pow
-    let w = z.pow_felem(&pow);
-    w
+    z.pow_felem(&pow)
 }

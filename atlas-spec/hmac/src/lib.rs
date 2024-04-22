@@ -24,9 +24,7 @@ fn k_block(k: &[u8]) -> Vec<u8> {
         k.to_vec()
     };
     let mut block = vec![0u8; BLOCK_LEN];
-    for i in 0..k.len() {
-        block[i] = k[i];
-    }
+    block[..k.len()].copy_from_slice(&k[..]);
     block
 }
 

@@ -3,6 +3,7 @@ pub use bytes::*;
 
 mod rng;
 pub use rng::*;
+pub mod hacspec_helper;
 
 /// From [RFC8017]:
 ///
@@ -44,7 +45,7 @@ pub fn xor_slice(mut this: Vec<u8>, other: &[u8]) -> Vec<u8> {
     //     *x = *x ^ *o;
     // }
     for i in 0..this.len() {
-        this[i] = this[i] ^ other[i];
+        this[i] ^= other[i];
     }
     this
 }
@@ -78,7 +79,7 @@ pub fn u32s_to_le_bytes(state: &[u32; 16]) -> [u8; 64] {
 
 pub fn xor_state(mut state: [u32; 16], other: [u32; 16]) -> [u32; 16] {
     for i in 0..16 {
-        state[i] = state[i] ^ other[i];
+        state[i] ^= other[i];
     }
     state
 }
@@ -92,8 +93,6 @@ pub fn add_state(mut state: [u32; 16], other: [u32; 16]) -> [u32; 16] {
 
 pub fn update_array(mut array: [u8; 64], val: &[u8]) -> [u8; 64] {
     assert!(64 >= val.len());
-    for i in 0..val.len() {
-        array[i] = val[i];
-    }
+    array[..val.len()].copy_from_slice(val);
     array
 }
