@@ -23,17 +23,8 @@ pub type SubBlock = Vec<u8>;
 pub type BlockIndex = usize;
 
 // This defines the field for modulo 2^130-5.
-// In particular `FieldElement` and `FieldCanvas` are defined.
-// The `FieldCanvas` is an integer type with 131-bit (to hold 2*(2^130-5)).
+// In particular `FieldElement` is defined.
 // The `FieldElement` is a natural integer modulo 2^130-5.
-
-// public_nat_mod!(
-//     type_name: FieldElement,
-//     type_of_canvas: FieldCanvas,
-//     bit_size_of_field: 131, // This amounts to 17 bytes
-//     modulo_value: "03fffffffffffffffffffffffffffffffb"
-// );
-
 #[nat_mod("03fffffffffffffffffffffffffffffffb", 17)]
 pub struct FieldElement {}
 
