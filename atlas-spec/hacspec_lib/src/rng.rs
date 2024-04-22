@@ -40,9 +40,4 @@ impl Randomness {
         self.pointer += 1;
         Ok(out & 0x1 == 0x1)
     }
-
-    /// Utility to report how much of the random buffer was consumed so far.
-    pub fn rng_consumed(&self) -> usize {
-        self.pointer
-    }
 }
