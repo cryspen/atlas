@@ -7,7 +7,7 @@
 pub enum Error {
     /// The length requested of the expand_message function leads to an invalid parameter.
     InvalidEll,
-    /// Catch-all error for errors in the underlying curver implementation.
+    /// Catch-all error for errors in the underlying curve implementation.
     CurveError,
 }
 
