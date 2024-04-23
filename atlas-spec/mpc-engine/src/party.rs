@@ -11,6 +11,7 @@ use crate::{
         commitment::{Commitment, Opening},
         mac::{generate_mac_key, mac, Mac, MacKey},
     },
+    utils::ith_bit,
     Error, STATISTICAL_SECURITY,
 };
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -36,6 +37,7 @@ pub struct ChannelConfig {
     pub(crate) listen: Receiver<Message>,
     pub(crate) evaluator: Sender<Message>,
     pub(crate) parties: Vec<Sender<Message>>,
+    pub(crate) broadcast: Sender<Message>,
     pub(crate) id: usize,
 }
 
@@ -45,6 +47,8 @@ pub struct Party {
     bit_counter: usize,
     /// The parties numeric identifier
     id: usize,
+    /// For ease of reference: number of parties in the session
+    num_parties: usize,
     /// The channel configuration for communicating to other protocol parties
     channels: ChannelConfig,
     /// The global MAC key for authenticating bit shares
@@ -64,12 +68,89 @@ impl Party {
         Self {
             bit_counter: 0,
             id: channels.id,
+            num_parties: channels.parties.len(),
             channels,
             global_mac_key: generate_mac_key(&mut entropy).unwrap(),
             circuit: circuit.clone(),
             entropy,
             current_phase: ProtocolPhase::PreInit,
         }
+    }
+
+    /// Broadcast a `value` and receive other parties' broadcasted values in
+    /// turn.
+    fn broadcast(&mut self, value: &[u8]) -> Result<Vec<(usize, Vec<u8>)>, Error> {
+        // send/receive commitment to/from all parties
+        let dst = b"Broadcast";
+        let (my_commitment, my_opening) = Commitment::new(&value, dst, &mut self.entropy)?;
+
+        let mut commitments = Vec::new();
+        // Expect earlier parties' commitments.
+        for i in 0..self.id {
+            let commitment = self.channels.listen.recv().unwrap();
+            if let MessagePayload::BroadcastCommitment(c) = commitment.payload {
+                assert_eq!(commitment.to, self.id);
+                commitments.push((i, c));
+            } else {
+                return Err(Error::UnexpectedMessage(commitment));
+            }
+        }
+
+        // All earlier messages have been received, so it is the parties' turn
+        // to send messages to everyone, except itself.
+        for i in 0..self.num_parties {
+            if i == self.id {
+                continue;
+            }
+
+            self.channels.parties[i]
+                .send(Message {
+                    from: self.id,
+                    to: i,
+                    payload: MessagePayload::BroadcastCommitment(my_commitment.clone()),
+                })
+                .unwrap();
+        }
+
+        // Wait for the messages sent by later parties.
+        for i in self.id + 1..self.num_parties {
+            let commitment = self.channels.listen.recv().unwrap();
+            if let MessagePayload::BroadcastCommitment(c) = commitment.payload {
+                assert_eq!(commitment.to, self.id);
+                commitments.push((i, c));
+            } else {
+                return Err(Error::UnexpectedMessage(commitment));
+            }
+        }
+
+        // Send the opening to the broadcast utility
+        let log_opening = Message {
+            from: self.id,
+            to: self.id,
+            payload: MessagePayload::BroadcastOpening(my_opening),
+        };
+        self.channels.broadcast.send(log_opening).unwrap();
+
+        // receive n-1 broadcast openings
+        let mut results = Vec::new();
+        for _i in 0..self.num_parties - 1 {
+            let opening_msg = self.channels.listen.recv().unwrap();
+            if let MessagePayload::BroadcastOpening(ref o) = opening_msg.payload {
+                let c = &commitments
+                    .iter()
+                    .find(|(i, _c)| *i == opening_msg.from)
+                    .expect("should get opening from all parties")
+                    .1;
+                let their_value = c.open(&o)?;
+                results.push((opening_msg.from, their_value));
+            } else {
+                return Err(Error::UnexpectedMessage(opening_msg));
+            }
+        }
+        // send opening to broadcast log
+        // send open_ack to all parties
+        // retrieve opening from broadcast log
+        Ok(results)
     }
 
     /// Return `true`, if the party is the designated circuit evaluator.
@@ -84,18 +165,14 @@ impl Party {
 
     /// Jointly compute `len` bit authentications.
     fn bit_auth(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
-        let num_parties = self.channels.parties.len();
         let ell_prime = len + 2 * STATISTICAL_SECURITY;
         let raw_bits = self.entropy.bytes(ell_prime / 8 + 1)?.to_owned();
         let mut bits = Vec::new();
 
         for i in 0..ell_prime {
-            let byte_index = i / 8;
-            let bit_index = i % 8;
-            let bit_value = ((raw_bits[byte_index] >> bit_index) & 1u8) == 1u8;
             bits.push(Bit {
                 id: self.fresh_bit_id(),
-                value: bit_value,
+                value: ith_bit(i, &raw_bits),
             })
         }
 
@@ -111,7 +188,7 @@ impl Party {
                 authenticators.push(key_i)
             }
 
-            for i in 0..num_parties {
+            for i in 0..self.num_parties {
                 if i == self.id {
                     continue;
                 }
@@ -131,6 +208,7 @@ impl Party {
                 authenticators,
             })
         }
+
         // Randomly check validity of authenticated bits
         self.bit_auth_check(&auth_bits)
             .expect("cheating detected during bit authentication");
@@ -140,12 +218,41 @@ impl Party {
 
     /// Perform the active_security check for bit authentication
     fn bit_auth_check(&mut self, auth_bits: &[AuthBit]) -> Result<(), Error> {
-        for j in 0..2 * STATISTICAL_SECURITY {
-            let r = self.coin_flip(auth_bits.len());
+        for _j in 0..2 * STATISTICAL_SECURITY {
+            let r = self.coin_flip(auth_bits.len())?;
 
             // locally compute XOR, MAC XORs, Key XOR
 
-            // broadcast XOR
+            // x_j = XOR_{m in [ell_prime]} r_m & x_m
+            let mut x_j = false;
+            for (m, xm) in auth_bits.iter().enumerate() {
+                x_j ^= ith_bit(m, &r) & xm.bit.value;
+            }
+
+            // TODO: broadcast x_j
+
+            let mut xored_tags = Vec::new();
+            for k in 0..self.num_parties {
+                if k == self.id {
+                    continue;
+                }
+                let mut xored_tag_k = [0u8; 16];
+                for (m, xm) in auth_bits.iter().enumerate() {
+                    if ith_bit(m, &r) {
+                        let tag_k_xm = xm
+                            .macs
+                            .iter()
+                            .find(|(party, _mac)| *party == k)
+                            .expect("should have tags for all bits from all parties")
+                            .1;
+                        for b in 0..16 {
+                            xored_tag_k[b] ^= tag_k_xm[b];
+                        }
+                    }
+                }
+                xored_tags.push(xored_tag_k)
+            }
+
             // receive MACs
             // send MAC
             // receive MACs
@@ -158,10 +265,22 @@ impl Party {
     /// Jointly sample a random byte string of length `len / 8 + 1`, i.e. enough
     /// to contain `len` random bits.
     fn coin_flip(&mut self, len: usize) -> Result<Vec<u8>, Error> {
-        let (my_contribution, my_opening, commitments) = self.rand_commit_round(len / 8 + 1)?;
-        let rand = self.rand_open_round(&my_contribution, my_opening, &commitments)?;
+        let my_contribution = self.entropy.bytes(len)?.to_owned();
+        let other_contributions = self.broadcast(&my_contribution)?;
 
-        Ok(rand)
+        let mut result = Vec::from(my_contribution);
+        for (_party, their_contribution) in other_contributions {
+            assert_eq!(
+                their_contribution.len(),
+                result.len(),
+                "all randomness contributions must be of the same length"
+            );
+            for i in 0..result.len() {
+                result[i] ^= their_contribution[i]
+            }
+        }
+
+        Ok(result)
     }
 
     /// Example round of oblivious transfers.
@@ -233,133 +352,6 @@ impl Party {
         }
 
         Ok(eq_results)
-    }
-
-    fn rand_commit_round(
-        &mut self,
-        len: usize,
-    ) -> Result<(Vec<u8>, Opening, Vec<(usize, Commitment)>), Error> {
-        let num_parties = self.channels.parties.len();
-        let my_contribution = self.entropy.bytes(len)?.to_owned();
-        let dst = b"Coin-Flip-Commitment";
-        let (my_commitment, my_opening) =
-            Commitment::new(&my_contribution, dst, &mut self.entropy)?;
-
-        let mut commitments = Vec::new();
-        // Expect earlier parties' messages.
-        for i in 0..self.id {
-            let commitment = self.channels.listen.recv().unwrap();
-            if let MessagePayload::RandCommitment(c) = commitment.payload {
-                assert_eq!(commitment.to, self.id);
-                commitments.push((i, c));
-            } else {
-                return Err(Error::UnexpectedMessage(commitment));
-            }
-        }
-
-        // All earlier messages have been received, so it is the parties' turn
-        // to send messages to everyone, except itself.
-        for i in 0..num_parties {
-            if i == self.id {
-                continue;
-            }
-
-            self.channels.parties[i]
-                .send(Message {
-                    from: self.id,
-                    to: i,
-                    payload: MessagePayload::RandCommitment(my_commitment.clone()),
-                })
-                .unwrap();
-        }
-
-        // Wait for the messages sent by later parties.
-        for i in self.id + 1..num_parties {
-            let commitment = self.channels.listen.recv().unwrap();
-            if let MessagePayload::RandCommitment(c) = commitment.payload {
-                assert_eq!(commitment.to, self.id);
-                commitments.push((i, c));
-            } else {
-                return Err(Error::UnexpectedMessage(commitment));
-            }
-        }
-
-        Ok((my_contribution, my_opening, commitments))
-    }
-
-    fn rand_open_round(
-        &mut self,
-        my_contribution: &[u8],
-        my_opening: Opening,
-        commitments: &[(usize, Commitment)],
-    ) -> Result<Vec<u8>, Error> {
-        let num_parties = self.channels.parties.len();
-
-        let mut openings = Vec::new();
-        // Expect earlier parties' messages.
-        for i in 0..self.id {
-            let opening_msg = self.channels.listen.recv().unwrap();
-            if let MessagePayload::RandOpening(opening) = opening_msg.payload {
-                assert_eq!(opening_msg.to, self.id);
-
-                let commitment = commitments
-                    .iter()
-                    .find(|(j, _)| i == *j)
-                    .map(|(_, c)| c)
-                    .expect("should have received a commitment from every other party");
-                openings.push((commitment, opening));
-            } else {
-                return Err(Error::UnexpectedMessage(opening_msg));
-            }
-        }
-
-        // All earlier messages have been received, so it is the parties' turn
-        // to send messages to everyone, except itself.
-        for i in 0..num_parties {
-            if i == self.id {
-                continue;
-            }
-
-            self.channels.parties[i]
-                .send(Message {
-                    from: self.id,
-                    to: i,
-                    payload: MessagePayload::RandOpening(my_opening.clone()),
-                })
-                .unwrap();
-        }
-
-        // Wait for the messages sent by later parties.
-        for i in self.id + 1..num_parties {
-            let opening_msg = self.channels.listen.recv().unwrap();
-            if let MessagePayload::RandOpening(opening) = opening_msg.payload {
-                assert_eq!(opening_msg.to, self.id);
-
-                let commitment = commitments
-                    .iter()
-                    .find(|(j, _)| i == *j)
-                    .map(|(_, c)| c)
-                    .expect("should have received a commitment from every other party");
-                openings.push((commitment, opening));
-            } else {
-                return Err(Error::UnexpectedMessage(opening_msg));
-            }
-        }
-
-        let mut result = Vec::from(my_contribution);
-        for (c, o) in openings {
-            let v = c.open(&o)?;
-            assert_eq!(
-                v.len(),
-                result.len(),
-                "all randomness contributions must be of the same length"
-            );
-            for i in 0..result.len() {
-                result[i] ^= v[i]
-            }
-        }
-
-        Ok(result)
     }
 
     /// Initiate an OT session as the Sender.
@@ -573,8 +565,7 @@ impl Party {
         let v = self.eq_round()?;
         self.log(&format!("Got EQ results: {v:?}"));
 
-        let (my_contribution, my_opening, commitments) = self.rand_commit_round(8)?;
-        let rand = self.rand_open_round(&my_contribution, my_opening, &commitments)?;
+        let rand = self.coin_flip(8)?;
 
         self.log(&format!("Got Rand results: {rand:?}"));
         Ok(None)

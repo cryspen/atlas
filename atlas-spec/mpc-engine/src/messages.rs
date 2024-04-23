@@ -35,10 +35,10 @@ pub enum MessagePayload {
     RequestBitAuth(BitID),
     /// A response to a bit authentication request.
     BitAuth(BitID, Mac),
-    /// A commitment on a random value for the coin-flipping subprotocol.
-    RandCommitment(Commitment),
-    /// The opening in the coin flipping subprotocol.
-    RandOpening(Opening),
+    /// A commitment on a broadcast value.
+    BroadcastCommitment(Commitment),
+    /// The opening to a broadcast value.
+    BroadcastOpening(Opening),
     /// A subchannel for running an 2-party subprotocol.
     SubChannel(Sender<SubMessage>, Receiver<SubMessage>),
     /// A garbled AND gate, to be sent to the evaluator

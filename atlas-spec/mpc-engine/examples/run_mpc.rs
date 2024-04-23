@@ -1,4 +1,4 @@
-use std::thread;
+use std::{sync::BarrierWaitResult, thread};
 
 use hacspec_lib::Randomness;
 use mpc_engine::circuit::{Circuit, WiredGate};
@@ -24,7 +24,9 @@ fn main() {
     let num_parties = circuit.number_of_parties();
 
     // Set up channels
-    let mut party_channels = mpc_engine::utils::set_up_channels(num_parties);
+    let (broadcast_relay, mut party_channels) = mpc_engine::utils::set_up_channels(num_parties);
+
+    let _ = thread::spawn(move || broadcast_relay.run());
 
     let mut party_join_handles = Vec::new();
     for _i in 0..num_parties {

@@ -56,6 +56,7 @@ pub const COMPUTATIONAL_SECURITY: usize = 128 / 8;
 /// The statistical security parameter, in bytes.
 pub const STATISTICAL_SECURITY: usize = 128 / 8;
 
+pub mod broadcast;
 pub mod circuit;
 pub mod messages;
 pub mod party;
