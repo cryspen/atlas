@@ -7,11 +7,11 @@ use crate::{
     circuit::Circuit,
     messages::{Message, MessagePayload, SubMessage},
     primitives::{
-        auth_share::{Bit, BitID, BitKey},
+        auth_share::{AuthBit, Bit, BitID, BitKey},
         commitment::{Commitment, Opening},
         mac::{generate_mac_key, mac, Mac, MacKey},
     },
-    Error,
+    Error, STATISTICAL_SECURITY,
 };
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -42,12 +42,13 @@ pub struct ChannelConfig {
 /// A struct defining protocol party state during a protocol execution.
 #[allow(dead_code)] // TODO: Remove this later.
 pub struct Party {
+    bit_counter: usize,
     /// The parties numeric identifier
     id: usize,
     /// The channel configuration for communicating to other protocol parties
     channels: ChannelConfig,
     /// The global MAC key for authenticating bit shares
-    global_mac_key: Option<MacKey>,
+    global_mac_key: MacKey,
     /// The circuit to be evaluated during the multi-party computation
     circuit: Circuit,
     /// A source of random bytes and bits local to the party
@@ -59,11 +60,12 @@ pub struct Party {
 #[allow(dead_code)] // TODO: Remove this later.
 impl Party {
     /// Initialize an MPC party.
-    pub fn new(channels: ChannelConfig, circuit: &Circuit, entropy: Randomness) -> Self {
+    pub fn new(channels: ChannelConfig, circuit: &Circuit, mut entropy: Randomness) -> Self {
         Self {
+            bit_counter: 0,
             id: channels.id,
             channels,
-            global_mac_key: None,
+            global_mac_key: generate_mac_key(&mut entropy).unwrap(),
             circuit: circuit.clone(),
             entropy,
             current_phase: ProtocolPhase::PreInit,
@@ -78,6 +80,88 @@ impl Party {
     /// Send a message to the evaluator.
     fn send_to_evaluator(&mut self, message: Message) {
         self.channels.evaluator.send(message).unwrap();
+    }
+
+    /// Jointly compute `len` bit authentications.
+    fn bit_auth(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
+        let num_parties = self.channels.parties.len();
+        let ell_prime = len + 2 * STATISTICAL_SECURITY;
+        let raw_bits = self.entropy.bytes(ell_prime / 8 + 1)?.to_owned();
+        let mut bits = Vec::new();
+
+        for i in 0..ell_prime {
+            let byte_index = i / 8;
+            let bit_index = i % 8;
+            let bit_value = ((raw_bits[byte_index] >> bit_index) & 1u8) == 1u8;
+            bits.push(Bit {
+                id: self.fresh_bit_id(),
+                value: bit_value,
+            })
+        }
+
+        let mut auth_bits = Vec::new();
+
+        // authenticate the bits
+        for bit in bits {
+            let mut authenticators: Vec<BitKey> = Vec::new();
+            let mut macs = Vec::new();
+
+            for i in 0..self.id {
+                let key_i = self.abit_2pc_responder(i)?;
+                authenticators.push(key_i)
+            }
+
+            for i in 0..num_parties {
+                if i == self.id {
+                    continue;
+                }
+
+                let mac: Mac = self.abit_2pc_initiator(i, &bit)?;
+                macs.push((i, mac));
+            }
+
+            for i in 0..self.id {
+                let key_i = self.abit_2pc_responder(i)?;
+                authenticators.push(key_i)
+            }
+
+            auth_bits.push(AuthBit {
+                bit,
+                macs,
+                authenticators,
+            })
+        }
+        // Randomly check validity of authenticated bits
+        self.bit_auth_check(&auth_bits)
+            .expect("cheating detected during bit authentication");
+
+        Ok(auth_bits[0..len].to_vec())
+    }
+
+    /// Perform the active_security check for bit authentication
+    fn bit_auth_check(&mut self, auth_bits: &[AuthBit]) -> Result<(), Error> {
+        for j in 0..2 * STATISTICAL_SECURITY {
+            let r = self.coin_flip(auth_bits.len());
+
+            // locally compute XOR, MAC XORs, Key XOR
+
+            // broadcast XOR
+            // receive MACs
+            // send MAC
+            // receive MACs
+
+            // verify MACs
+        }
+        todo!()
+    }
+
+    /// Jointly sample a random byte string of length `len / 8 + 1`, i.e. enough
+    /// to contain `len` random bits.
+    fn coin_flip(&mut self, len: usize) -> Result<Vec<u8>, Error> {
+        let (my_contribution, my_opening, commitments) = self.rand_commit_round(len / 8 + 1)?;
+        let rand = self.rand_open_round(&my_contribution, my_opening, &commitments)?;
+
+        Ok(rand)
     }
 
     /// Example round of oblivious transfers.
@@ -409,6 +493,13 @@ impl Party {
         } else {
             Err(Error::UnexpectedMessage(channel_msg))
         }
+    }
+
+    /// Generate a fresh bit id.
+    fn fresh_bit_id(&mut self) -> BitID {
+        let res = self.bit_counter;
+        self.bit_counter += 1;
+        BitID(res)
     }
 
     /// Initiate a bit authentication session.
