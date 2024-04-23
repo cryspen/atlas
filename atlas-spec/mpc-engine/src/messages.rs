@@ -4,6 +4,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::{
     circuit::WireIndex,
     primitives::{
+        auth_share::{AuthBit, BitID},
         commitment::{Commitment, Opening},
         mac::Mac,
         ot::{OTReceiverSelect, OTSenderInit, OTSenderSend},
@@ -30,6 +31,10 @@ pub struct Message {
 /// protocol.
 #[derive(Debug)]
 pub enum MessagePayload {
+    /// Request a number of bit authentications from another party.
+    RequestBitAuth(BitID),
+    /// A response to a bit authentication request.
+    BitAuth(BitID, Mac),
     /// A commitment on a random value for the coin-flipping subprotocol.
     RandCommitment(Commitment),
     /// The opening in the coin flipping subprotocol.

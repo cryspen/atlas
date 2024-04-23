@@ -7,8 +7,9 @@ use crate::{
     circuit::Circuit,
     messages::{Message, MessagePayload, SubMessage},
     primitives::{
+        auth_share::{Bit, BitID, BitKey},
         commitment::{Commitment, Opening},
-        mac::{Mac, MacKey},
+        mac::{generate_mac_key, mac, Mac, MacKey},
     },
     Error,
 };
@@ -411,13 +412,41 @@ impl Party {
     }
 
     /// Initiate a bit authentication session.
-    fn abit_2pc_initiator(&self, _i: usize, _bits: &[u8]) -> Result<Vec<Mac>, Error> {
-        todo!()
+    fn abit_2pc_initiator(&mut self, i: usize, bit: &Bit) -> Result<Mac, Error> {
+        let req_msg = Message {
+            from: self.id,
+            to: i,
+            payload: MessagePayload::RequestBitAuth(bit.id.clone()),
+        };
+        self.channels.parties[i].send(req_msg).unwrap();
+        let mac: Mac = self
+            .ot_receive(bit.value)?
+            .try_into()
+            .expect("should receive a MAC of the right length");
+        Ok(mac)
     }
 
     /// Listen for a bit authentication initiation.
-    fn abit_2pc_responder() -> Result<Vec<MacKey>, Error> {
-        todo!()
+    fn abit_2pc_responder(&mut self, bit_holder: usize) -> Result<BitKey, Error> {
+        let req_msg = self.channels.listen.recv().unwrap();
+
+        if let Message {
+            to,
+            from: _from,
+            payload: MessagePayload::RequestBitAuth(id),
+        } = req_msg
+        {
+            let (mac_key_and_global, mac_key) =
+                mac(&true, &self.global_mac_key, &mut self.entropy)?;
+            self.ot_send(to, &mac_key_and_global, &mac_key)?;
+            Ok(BitKey {
+                id,
+                bit_holder,
+                mac_key,
+            })
+        } else {
+            Err(Error::UnexpectedMessage(req_msg))
+        }
     }
 
     /// Run the function independent pre-processing phase of the protocol.
