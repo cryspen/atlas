@@ -4,10 +4,13 @@ use hacspec_lib::Randomness;
 
 use crate::{Error, COMPUTATIONAL_SECURITY};
 
+/// The length in bytes of an information theoretic MAC, and of the MAC key.
+pub const MAC_LENGTH: usize = COMPUTATIONAL_SECURITY;
+
 /// A MAC on a bit.
-pub type Mac = [u8; COMPUTATIONAL_SECURITY];
+pub type Mac = [u8; MAC_LENGTH];
 /// A MAC key for authenticating a bit to another party.
-pub type MacKey = [u8; COMPUTATIONAL_SECURITY];
+pub type MacKey = [u8; MAC_LENGTH];
 
 /// Generate a fresh MAC key.
 pub fn generate_mac_key(entropy: &mut Randomness) -> Result<MacKey, Error> {
