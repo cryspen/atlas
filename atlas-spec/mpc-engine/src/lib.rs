@@ -19,6 +19,12 @@ pub enum Error {
     /// A specific top-level message was expected but a different one was
     /// received
     UnexpectedMessage(Message),
+    /// Failed to open a commitment
+    BadCommitment(Vec<u8>, Vec<u8>),
+    /// Error from the curve implementation
+    CurveError,
+    /// Error from the AEAD
+    AEADError,
     /// Miscellaneous error.
     OtherError,
 }
@@ -36,7 +42,7 @@ impl From<p256::Error> for Error {
         match value {
             p256::Error::InvalidAddition
             | p256::Error::DeserializeError
-            | p256::Error::PointAtInfinity => Self::OtherError,
+            | p256::Error::PointAtInfinity => Self::CurveError,
             p256::Error::SamplingError => Self::InsufficientRandomness,
         }
     }
@@ -45,7 +51,7 @@ impl From<p256::Error> for Error {
 impl From<hacspec_chacha20poly1305::Error> for Error {
     fn from(value: hacspec_chacha20poly1305::Error) -> Self {
         match value {
-            hacspec_chacha20poly1305::Error::InvalidTag => Self::OtherError,
+            hacspec_chacha20poly1305::Error::InvalidTag => Self::AEADError,
         }
     }
 }

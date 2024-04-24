@@ -62,7 +62,7 @@ impl Commitment {
         ikm.extend_from_slice(&opening.open);
         let com = hkdf_extract(&self.dst, &ikm);
         if self.com != com {
-            return Err(Error::OtherError);
+            return Err(Error::BadCommitment(self.com.clone(), com));
         }
         Ok(opening.value.to_vec())
     }
