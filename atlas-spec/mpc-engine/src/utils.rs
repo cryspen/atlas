@@ -37,36 +37,6 @@ pub fn set_up_channels(n: usize) -> (BroadcastRelay, Vec<ChannelConfig>) {
 
 pub(crate) fn ith_bit(i: usize, bytes: &[u8]) -> bool {
     let byte_index = i / 8;
-    let bit_index = i % 8;
-    let bit_value = ((bytes[byte_index] >> bit_index) & 1u8) == 1u8;
-    bit_value
-}
-
-/// Compute the XOR of the componentwise product of two bit vectors
-pub fn prod_component_xor(left: &[u8], right: &[u8]) -> bool {
-    assert_eq!(left.len(), right.len());
-    let mut xor_chunk = 0u8;
-    for i in 0..left.len() {
-        let and_chunk = left[i] & right[i];
-        xor_chunk ^= and_chunk;
-    }
-    let mut result = false;
-    for i in 0..8 {
-        result ^= (xor_chunk >> i & 1u8) == 1u8;
-    }
-    result
-}
-
-#[test]
-fn cross_product() {
-    let a = [0xffu8, 0xffu8];
-    let b = [0x0, 0xffu8];
-    let c = [0x01, 0x0];
-    let d = [0xff, 0x1];
-    assert_eq!(false, prod_component_xor(&a, &a));
-    assert_eq!(false, prod_component_xor(&a, &b));
-    assert_eq!(true, prod_component_xor(&c, &a));
-    assert_eq!(false, prod_component_xor(&c, &b));
-    assert_eq!(true, prod_component_xor(&d, &b));
-    assert_eq!(true, prod_component_xor(&d, &c));
+    let bit_index = 7 - i % 8;
+    ((bytes[byte_index] >> bit_index) & 1u8) == 1u8
 }
