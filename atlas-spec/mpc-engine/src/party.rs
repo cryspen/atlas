@@ -38,7 +38,8 @@ pub struct ChannelConfig {
     pub(crate) evaluator: Sender<Message>,
     pub(crate) parties: Vec<Sender<Message>>,
     pub(crate) broadcast: Sender<Message>,
-    pub(crate) id: usize,
+    /// The channel config is for the party of this ID.
+    pub id: usize,
 }
 
 /// A struct defining protocol party state during a protocol execution.
@@ -59,12 +60,21 @@ pub struct Party {
     entropy: Randomness,
     /// Tracks the current phase of protocol execution
     current_phase: ProtocolPhase,
+    /// Whether to log events
+    enable_logging: bool,
+    /// Incremental counter for ordering logs
+    log_counter: u128,
 }
 
 #[allow(dead_code)] // TODO: Remove this later.
 impl Party {
     /// Initialize an MPC party.
-    pub fn new(channels: ChannelConfig, circuit: &Circuit, mut entropy: Randomness) -> Self {
+    pub fn new(
+        channels: ChannelConfig,
+        circuit: &Circuit,
+        logging: bool,
+        mut entropy: Randomness,
+    ) -> Self {
         Self {
             bit_counter: 0,
             id: channels.id,
@@ -74,6 +84,8 @@ impl Party {
             circuit: circuit.clone(),
             entropy,
             current_phase: ProtocolPhase::PreInit,
+            log_counter: 0,
+            enable_logging: logging,
         }
     }
 
@@ -572,10 +584,10 @@ impl Party {
     }
 
     /// Utility function to provide debug output during the protocol run.
-    fn log(&self, message: &str) {
-        eprintln!(
-            "Party {} in phase {:?}: {}",
-            self.id, self.current_phase, message
-        );
+    fn log(&mut self, message: &str) {
+        if self.enable_logging {
+            eprintln!("[Party {} @ {}]: {}", self.id, self.log_counter, message);
+            self.log_counter += 1;
+        }
     }
 }

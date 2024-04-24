@@ -1,4 +1,4 @@
-use std::{sync::BarrierWaitResult, thread};
+use std::thread;
 
 use hacspec_lib::Randomness;
 use mpc_engine::circuit::{Circuit, WiredGate};
@@ -36,10 +36,11 @@ fn main() {
         let c = circuit.clone();
         let party_join_handle = thread::spawn(move || {
             let mut rng = rand::thread_rng();
-            let mut bytes = vec![0u8; 500];
+            let mut bytes = vec![0u8; u16::MAX.try_into().unwrap()];
             rng.fill_bytes(&mut bytes);
             let rng = Randomness::new(bytes);
-            let mut p = mpc_engine::party::Party::new(channel_config, &c, rng);
+            let log_enabled = channel_config.id == 1;
+            let mut p = mpc_engine::party::Party::new(channel_config, &c, log_enabled, rng);
 
             let _ = p.run();
         });
