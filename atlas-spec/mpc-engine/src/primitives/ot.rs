@@ -125,7 +125,8 @@ impl OTSender {
 
         let (left_key, right_key) = self.derive_keys(r)?;
 
-        let (left, right) = encrypt_inputs(entropy, left_key, left_input, right_key, right_input)?;
+        let (left, right) =
+            encrypt_inputs(entropy, left_key, left_input, right_key, right_input).unwrap();
 
         Ok(OTSenderSend { left, right })
     }
