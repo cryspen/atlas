@@ -14,8 +14,8 @@ pub type MacKey = [u8; MAC_LENGTH];
 
 /// Generate a fresh MAC key.
 pub fn generate_mac_key(entropy: &mut Randomness) -> Result<MacKey, Error> {
-    let k: [u8; 16] = entropy
-        .bytes(COMPUTATIONAL_SECURITY)?
+    let k: [u8; MAC_LENGTH] = entropy
+        .bytes(MAC_LENGTH)?
         .try_into()
         .map_err(|_| Error::OtherError)?;
     Ok(k)
@@ -27,20 +27,20 @@ pub fn mac(
     global_key: &MacKey,
     entropy: &mut Randomness,
 ) -> Result<(Mac, MacKey), Error> {
-    let k: [u8; 16] = generate_mac_key(entropy)?;
+    let key: [u8; MAC_LENGTH] = generate_mac_key(entropy)?;
 
-    let mut mac = [0u8; COMPUTATIONAL_SECURITY];
+    let mut mac = [0u8; MAC_LENGTH];
     for idx in 0..mac.len() {
-        mac[idx] = k[idx] ^ (if *bit { global_key[idx] } else { 0xff });
+        mac[idx] = key[idx] ^ (if *bit { global_key[idx] } else { 0x00 });
     }
 
-    Ok((mac, k))
+    Ok((mac, key))
 }
 
 /// Verify a MAC on a given bit.
 pub fn verify_mac(bit: &bool, mac: &Mac, key: &MacKey, global_key: &MacKey) -> bool {
     for idx in 0..mac.len() {
-        let recomputed = key[idx] ^ (if *bit { global_key[idx] } else { 0xff });
+        let recomputed = key[idx] ^ (if *bit { global_key[idx] } else { 0x00 });
         if mac[idx] != recomputed {
             return false;
         }
