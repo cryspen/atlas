@@ -1,12 +1,15 @@
-//! This module implements a stateless broadcast relay.
+//! This module implements a trusted broadcast relay.
+//!
+//! It must be stressed that this acts as a trusted third party in the protocol
+//! and does not implement secure point-to-point broadcast among the parties.
 
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::messages::{Message, MessagePayload};
 
-/// A stateless broadcast relay functionality.
+/// A broadcast relay functionality.
 ///
-/// Accepts openings to broadcasted committed values and relays them to all
+/// Accepts openings to broadcasted committed values and faithfully relays them to all
 /// parties.
 pub struct BroadcastRelay {
     num_parties: usize,
@@ -25,6 +28,16 @@ impl BroadcastRelay {
     }
 
     /// Continuously await broadcast communication rounds.
+    ///
+    /// A broadcast round starts with all parties sending commitment opening
+    /// information to the broadcast relay. Once openings have been received by
+    /// all parties, the relay starts distributing openings to all parties,
+    /// sending every opening to every party, except the party where the opening
+    /// came from.
+    ///
+    /// If the receiving channel errors this must mean that all parties have
+    /// shut down and dropped their copies of the sender. In this case the
+    /// broadcast relay also shuts down.
     pub fn run(&self) {
         'outer: loop {
             let mut openings = Vec::new();

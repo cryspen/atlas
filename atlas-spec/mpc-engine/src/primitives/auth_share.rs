@@ -19,14 +19,14 @@ pub struct BitID(pub(crate) usize);
 pub struct AuthBit {
     pub(crate) bit: Bit,
     pub(crate) macs: Vec<(usize, Mac)>,
-    pub(crate) authenticators: Vec<BitKey>,
+    pub(crate) mac_keys: Vec<BitKey>,
 }
 
 /// The key to authenticate a two-party authenticated bit.
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // TODO: remove this later
 pub struct BitKey {
-    pub(crate) id: BitID,
+    pub(crate) holder_bit_id: BitID,
     pub(crate) bit_holder: usize,
     pub(crate) mac_key: MacKey,
 }

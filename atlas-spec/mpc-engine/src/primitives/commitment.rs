@@ -14,15 +14,15 @@ use crate::{Error, STATISTICAL_SECURITY};
 /// A Commitment to some value.
 #[derive(Debug, Clone)]
 pub struct Commitment {
-    com: Vec<u8>,
-    dst: Vec<u8>,
+    commitment: Vec<u8>,
+    domain_separator: Vec<u8>,
 }
 
 /// The opening information for a commitment.
 #[derive(Debug, Clone)]
 pub struct Opening {
     value: Vec<u8>,
-    open: [u8; STATISTICAL_SECURITY],
+    opening: [u8; STATISTICAL_SECURITY],
 }
 
 impl Commitment {
@@ -33,24 +33,24 @@ impl Commitment {
     /// `H(value||r)` as well as the corresponding opening.
     pub fn new(
         value: &[u8],
-        dst: &[u8],
+        domain_separator: &[u8],
         entropy: &mut Randomness,
     ) -> Result<(Self, Opening), Error> {
-        let mut r = [0u8; STATISTICAL_SECURITY];
-        r.copy_from_slice(entropy.bytes(STATISTICAL_SECURITY)?);
+        let mut opening = [0u8; STATISTICAL_SECURITY];
+        opening.copy_from_slice(entropy.bytes(STATISTICAL_SECURITY)?);
 
         let mut ikm = Vec::from(value);
-        ikm.extend_from_slice(&r);
+        ikm.extend_from_slice(&opening);
 
-        let com = hkdf_extract(dst, &ikm);
+        let commitment = hkdf_extract(domain_separator, &ikm);
         Ok((
             Commitment {
-                com,
-                dst: dst.to_vec(),
+                commitment,
+                domain_separator: domain_separator.to_vec(),
             },
             Opening {
                 value: value.to_vec(),
-                open: r,
+                opening,
             },
         ))
     }
@@ -59,10 +59,13 @@ impl Commitment {
     pub fn open(&self, opening: &Opening) -> Result<Vec<u8>, Error> {
         let mut ikm = vec![0u8; opening.value.len()];
         ikm.copy_from_slice(&opening.value);
-        ikm.extend_from_slice(&opening.open);
-        let com = hkdf_extract(&self.dst, &ikm);
-        if self.com != com {
-            return Err(Error::BadCommitment(self.com.clone(), com));
+        ikm.extend_from_slice(&opening.opening);
+        let reconstructed_commitment = hkdf_extract(&self.domain_separator, &ikm);
+        if self.commitment != reconstructed_commitment {
+            return Err(Error::BadCommitment(
+                self.commitment.clone(),
+                reconstructed_commitment,
+            ));
         }
         Ok(opening.value.to_vec())
     }

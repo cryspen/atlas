@@ -28,11 +28,11 @@ pub enum ProtocolPhase {
 /// Collects all party communication channels.
 ///
 /// It includes
-/// - `listen`: The parties on message receiver handle
+/// - `listen`: The party's own message receiver handle
 /// - `evaluator`: The sender handle for the designated evaluator party
 /// - `parties`: All other parties' sender handles, ordered by their `id`s
+/// - `broadcast`: The sender handle of the broadcast utility
 /// - `id`: The owning parties `id`
-#[allow(dead_code)] // TODO: Remove this later.
 pub struct ChannelConfig {
     pub(crate) listen: Receiver<Message>,
     pub(crate) evaluator: Sender<Message>,
@@ -46,17 +46,17 @@ pub struct ChannelConfig {
 #[allow(dead_code)] // TODO: Remove this later.
 pub struct Party {
     bit_counter: usize,
-    /// The parties numeric identifier
+    /// The party's numeric identifier
     id: usize,
-    /// For ease of reference: number of parties in the session
+    /// The number of parties in the MPC session
     num_parties: usize,
     /// The channel configuration for communicating to other protocol parties
     channels: ChannelConfig,
-    /// The global MAC key for authenticating bit shares
+    /// The global MAC key for authenticating wire value shares
     global_mac_key: MacKey,
-    /// The circuit to be evaluated during the multi-party computation
+    /// The circuit to be evaluated
     circuit: Circuit,
-    /// A source of random bytes and bits local to the party
+    /// A local source of random bits and bytes
     entropy: Randomness,
     /// Tracks the current phase of protocol execution
     current_phase: ProtocolPhase,
@@ -69,6 +69,9 @@ pub struct Party {
 #[allow(dead_code)] // TODO: Remove this later.
 impl Party {
     /// Initialize an MPC party.
+    ///
+    /// This generates the party's global MAC key and sets the protocol phase to
+    /// `PreInit`.
     pub fn new(
         channels: ChannelConfig,
         circuit: &Circuit,
@@ -91,24 +94,49 @@ impl Party {
 
     /// Broadcast a `value` and receive other parties' broadcasted values in
     /// turn.
+    ///
+    /// Broadcast works using the broadcast relay utility:
+    /// - In a first step, compute a cryptographic commitment on `value` and
+    /// send that individually to all other parties.
+    /// - Then send the commitment opening to the broadcast relay.
+    /// - Finally, receive the other parties commitment openings from the
+    ///   broadcast relay and use them to open their commitments to their
+    ///   values.
+    ///
+    /// Since every party can only send one opening value to the broadcast
+    /// relay, which is assumed to be trusted in distributing the received
+    /// openings faithfully, it is ensured that every commitment is opened with
+    /// the opening information. Therefore, because the commitments are binding,
+    /// if a malicious party sends differing commitments to different parties at
+    /// least one opening must fail.
+    ///
+    /// In a non-blackbox way we can also see that parties cannot chose their
+    /// broadcast values dependent on other parties' values: Beside being
+    /// hiding, the Random Oracle commitment we use also does not allow any
+    /// homomorphic operations on commitment values, so even given many
+    /// commitments from other parties a malicious party should not be able to
+    /// chose their commitment in a way that the committed value is dependent on
+    /// other parties' committed values.
     fn broadcast(&mut self, value: &[u8]) -> Result<Vec<(usize, Vec<u8>)>, Error> {
         // send/receive commitment to/from all parties
-        let dst = b"Broadcast";
-        let (my_commitment, my_opening) = Commitment::new(value, dst, &mut self.entropy)?;
+        let domain_separator = format!("Broadcast-{}", self.id);
+        let (commitment, opening) =
+            Commitment::new(value, domain_separator.as_bytes(), &mut self.entropy)?;
 
-        let mut commitments = Vec::new();
+        let mut received_commitments = Vec::new();
         // Expect earlier parties' commitments.
         for _i in 0..self.id {
-            let commitment = self.channels.listen.recv().unwrap();
-            if let MessagePayload::BroadcastCommitment(c) = commitment.payload {
-                assert_eq!(commitment.to, self.id);
-                commitments.push((commitment.from, c));
+            let commitment_msg = self.channels.listen.recv().unwrap();
+            if let MessagePayload::BroadcastCommitment(received_commitment) = commitment_msg.payload
+            {
+                assert_eq!(commitment_msg.to, self.id);
+                received_commitments.push((commitment_msg.from, received_commitment));
             } else {
-                return Err(Error::UnexpectedMessage(commitment));
+                return Err(Error::UnexpectedMessage(commitment_msg));
             }
         }
 
-        // All earlier messages have been received, so it is the parties' turn
+        // All earlier commitments have been received, so it is the party's turn
         // to send messages to everyone, except itself.
         for i in 0..self.num_parties {
             if i == self.id {
@@ -119,53 +147,54 @@ impl Party {
                 .send(Message {
                     from: self.id,
                     to: i,
-                    payload: MessagePayload::BroadcastCommitment(my_commitment.clone()),
+                    payload: MessagePayload::BroadcastCommitment(commitment.clone()),
                 })
                 .unwrap();
         }
 
-        // Wait for the messages sent by later parties.
+        // Wait for the commitments sent by later parties.
         for _i in self.id + 1..self.num_parties {
-            let commitment = self.channels.listen.recv().unwrap();
-            if let MessagePayload::BroadcastCommitment(c) = commitment.payload {
-                assert_eq!(commitment.to, self.id);
-                commitments.push((commitment.from, c));
+            let commitment_msg = self.channels.listen.recv().unwrap();
+            if let MessagePayload::BroadcastCommitment(received_commitment) = commitment_msg.payload
+            {
+                assert_eq!(commitment_msg.to, self.id);
+                received_commitments.push((commitment_msg.from, received_commitment));
             } else {
-                return Err(Error::UnexpectedMessage(commitment));
+                return Err(Error::UnexpectedMessage(commitment_msg));
             }
         }
 
         self.sync().unwrap();
 
-        // Send the opening to the broadcast utility
-        let log_opening = Message {
-            from: self.id,
-            to: self.id,
-            payload: MessagePayload::BroadcastOpening(my_opening),
-        };
-        self.channels.broadcast.send(log_opening).unwrap();
+        // Send the opening to the broadcast relay.
+        self.channels
+            .broadcast
+            .send(Message {
+                from: self.id,
+                to: self.id,
+                payload: MessagePayload::BroadcastOpening(opening),
+            })
+            .unwrap();
 
-        // receive n-1 broadcast openings
-        let mut results = Vec::new();
+        // Receive n-1 openings from the broadcast relay.
+        let mut received_values = Vec::new();
         for _i in 0..self.num_parties - 1 {
             let opening_msg = self.channels.listen.recv().unwrap();
-            if let MessagePayload::BroadcastOpening(ref o) = opening_msg.payload {
-                let c = &commitments
+            if let MessagePayload::BroadcastOpening(ref received_opening) = opening_msg.payload {
+                let received_commitment = &received_commitments
                     .iter()
-                    .find(|(i, _c)| *i == opening_msg.from)
+                    .find(|(received_from, _)| *received_from == opening_msg.from)
                     .expect("should get opening from all parties")
                     .1;
-                let their_value = c.open(o)?;
-                results.push((opening_msg.from, their_value));
+                let received_value = received_commitment.open(received_opening)?;
+                received_values.push((opening_msg.from, received_value));
             } else {
                 return Err(Error::UnexpectedMessage(opening_msg));
             }
         }
-        // send opening to broadcast log
-        // send open_ack to all parties
-        // retrieve opening from broadcast log
+
         self.sync().unwrap();
-        Ok(results)
+        Ok(received_values)
     }
 
     /// Return `true`, if the party is the designated circuit evaluator.
@@ -179,44 +208,54 @@ impl Party {
     }
 
     /// Jointly compute `len` bit authentications.
-    fn bit_auth(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
-        // 1. Set `ell' := len + 2*rho` and sample `ell'` random bits.
-        let ell_prime = len + 2 * STATISTICAL_SECURITY * 8;
+    ///
+    /// Internally generates `len + 2 * STATISTICAL_SECURITY * 8` bit
+    /// authentications for each other party, of which all but `len` are
+    /// discarded after performing statistical checks for malicious security.
+    /// After this point the guarantee is that a pair-wise consistent
+    /// `global_mac_key` was used in all bit-authentications between two
+    /// parties.
+    fn mutliparty_authenticate(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
+        let len_unchecked = len + 2 * STATISTICAL_SECURITY * 8;
 
-        let raw_bits = self.entropy.bytes(ell_prime / 8 + 1)?.to_owned();
+        // 1. Generate `len_unchecked` random local bits for authenticating.
+        let random_bytes = self.entropy.bytes(len_unchecked / 8 + 1)?.to_owned();
         let mut bits = Vec::new();
 
-        for i in 0..ell_prime {
+        for i in 0..len_unchecked {
             bits.push(Bit {
                 id: self.fresh_bit_id(),
-                value: ith_bit(i, &raw_bits),
+                value: ith_bit(i, &random_bytes),
             })
         }
 
-        // 2. Get MACs on all bits from every other party and provide MACs on
-        //    their bits.
-        let mut auth_bits = Vec::new();
+        // 2. Obliviously get MACs on all local bits from every other party and obliviously provide MACs on
+        //    their local bits.
+        let mut authenticated_bits = Vec::new();
         for (bit_index, bit) in bits.into_iter().enumerate() {
-            let mut authenticators: Vec<BitKey> = Vec::new();
-            let mut macs = Vec::new();
+            let mut computed_keys: Vec<BitKey> = Vec::new();
+            let mut received_macs = Vec::new();
 
-            for i in 0..self.id {
-                let key_i = self.abit_2pc_responder(i)?;
-                authenticators.push(key_i)
+            // Obliviously authenticate local bits of earlier parties.
+            for bit_holder in 0..self.id {
+                let computed_key = self.provide_bit_authentication(bit_holder)?;
+                computed_keys.push(computed_key)
             }
 
-            for i in 0..self.num_parties {
-                if i == self.id {
+            // Obliviously obtain MACs on the current bit from all other parties.
+            for authenticator in 0..self.num_parties {
+                if authenticator == self.id {
                     continue;
                 }
 
-                let mac: Mac = self.abit_2pc_initiator(i, &bit)?;
-                macs.push((i, mac));
+                let received_mac: Mac = self.obtain_bit_authentication(authenticator, &bit)?;
+                received_macs.push((authenticator, received_mac));
             }
 
-            for i in self.id + 1..self.num_parties {
-                let key_i = self.abit_2pc_responder(i)?;
-                authenticators.push(key_i)
+            // Obliviously authenticate local bits of later parties.
+            for bit_holder in self.id + 1..self.num_parties {
+                let computed_key = self.provide_bit_authentication(bit_holder)?;
+                computed_keys.push(computed_key)
             }
 
             self.sync().unwrap();
@@ -224,24 +263,26 @@ impl Party {
             self.log(&format!(
                 "Completed a bit authentication [{}/{}]",
                 bit_index + 1,
-                ell_prime
+                len_unchecked
             ));
 
-            auth_bits.push(AuthBit {
+            authenticated_bits.push(AuthBit {
                 bit,
-                macs,
-                authenticators,
+                macs: received_macs,
+                mac_keys: computed_keys,
             })
         }
 
         self.sync().unwrap();
 
-        // 3. Check validity of authenticated bits
-        self.bit_auth_check(&auth_bits)
-            .expect("cheating detected during bit authentication");
+        // 3. Perform the statistical check for malicious security of the
+        //    generated authenticated bits. Failure indicates buggy bit
+        //    authentication or cheating.
+        self.bit_auth_check(&authenticated_bits)
+            .expect("bit authentication check must not fail");
 
-        // 4. Return the first `len` bit authentications
-        Ok(auth_bits[0..len].to_vec())
+        // 4. Return the first `len` authenticated bits.
+        Ok(authenticated_bits[0..len].to_vec())
     }
 
     /// Perform the active_security check for bit authentication
@@ -272,7 +313,7 @@ impl Party {
             let mut xored_tags = vec![[0u8; MAC_LENGTH]; self.num_parties];
             for (m, xm) in auth_bits.iter().enumerate() {
                 if ith_bit(m, &r) {
-                    for mac_keys in xm.authenticators.iter() {
+                    for mac_keys in xm.mac_keys.iter() {
                         for byte in 0..mac_keys.mac_key.len() {
                             xored_keys[mac_keys.bit_holder][byte] ^= mac_keys.mac_key[byte];
                         }
@@ -387,104 +428,64 @@ impl Party {
     /// no output.
     fn ot_send(
         &mut self,
-        their_sender: Sender<SubMessage>,
-        own_receiver: Receiver<SubMessage>,
-        their_id: usize,
+        receiver_address: Sender<SubMessage>,
+        my_inbox: Receiver<SubMessage>,
+        receiver_id: usize,
         left_input: &[u8],
         right_input: &[u8],
     ) -> Result<(), Error> {
-        // let (own_sender, own_receiver) = mpsc::channel::<SubMessage>();
-        // let (their_sender, their_receiver) = mpsc::channel::<SubMessage>();
+        let domain_separator = format!("OT-{}-{}", self.id, receiver_id);
+        let (sender_state, sender_commitment) =
+            crate::primitives::ot::OTSender::init(&mut self.entropy, domain_separator.as_bytes())?;
+        receiver_address
+            .send(SubMessage::OTCommit(sender_commitment))
+            .unwrap();
 
-        // let channel_msg = Message {
-        //     from: self.id,
-        //     to: their_id,
-        //     payload: MessagePayload::SubChannel(own_sender, their_receiver),
-        // };
-        // self.channels.parties[their_id].send(channel_msg).unwrap();
+        let selection_msg = my_inbox.recv().unwrap();
+        if let SubMessage::OTSelect(selection) = selection_msg {
+            let payload =
+                sender_state.send(left_input, right_input, &selection, &mut self.entropy)?;
 
-        let dst = format!("OT-{}-{}", self.id, their_id);
-        let (ot_sender, ot_commit) =
-            crate::primitives::ot::OTSender::init(&mut self.entropy, dst.as_bytes())?;
-        their_sender.send(SubMessage::OTCommit(ot_commit)).unwrap();
-        let receiver_msg = own_receiver.recv().unwrap();
-
-        if let SubMessage::OTSelect(selection) = receiver_msg {
-            let send = ot_sender.send(left_input, right_input, &selection, &mut self.entropy)?;
-
-            their_sender.send(SubMessage::OTSend(send)).unwrap();
+            receiver_address.send(SubMessage::OTSend(payload)).unwrap();
             Ok(())
         } else {
-            Err(Error::UnexpectedSubprotocolMessage(receiver_msg))
+            Err(Error::UnexpectedSubprotocolMessage(selection_msg))
         }
     }
 
     /// Listen for an OT initiation as the receiver.
     ///
-    /// The receiver needs to provide a choice of left or right output to the
-    /// protocol and receives the chosen sender input.
+    /// The receiver needs to provide a choice of left or right sender input to
+    /// the protocol and receives the chosen sender input.
     fn ot_receive(
         &mut self,
-        choose_left: bool,
-        their_channel: Sender<SubMessage>,
-        my_channel: Receiver<SubMessage>,
-        their_id: usize,
+        choose_left_input: bool,
+        sender_address: Sender<SubMessage>,
+        my_inbox: Receiver<SubMessage>,
+        sender_id: usize,
     ) -> Result<Vec<u8>, Error> {
-        let first_msg = my_channel.recv().unwrap();
-        if let SubMessage::OTCommit(commitment) = first_msg {
-            let dst = format!("OT-{}-{}", their_id, self.id);
-            let (receiver, resp) = crate::primitives::ot::OTReceiver::select(
+        let ot_commit_msg = my_inbox.recv().unwrap();
+        if let SubMessage::OTCommit(commitment) = ot_commit_msg {
+            let domain_separator = format!("OT-{}-{}", sender_id, self.id);
+            let (receiver_state, receiver_selection) = crate::primitives::ot::OTReceiver::select(
                 &mut self.entropy,
-                dst.as_bytes(),
+                domain_separator.as_bytes(),
                 commitment,
-                choose_left,
+                choose_left_input,
             )?;
-            their_channel.send(SubMessage::OTSelect(resp)).unwrap();
-            let second_msg = my_channel.recv().unwrap();
-            if let SubMessage::OTSend(payload) = second_msg {
-                let result = receiver.receive(payload)?;
+            sender_address
+                .send(SubMessage::OTSelect(receiver_selection))
+                .unwrap();
+            let payload_msg = my_inbox.recv().unwrap();
+            if let SubMessage::OTSend(payload) = payload_msg {
+                let result = receiver_state.receive(payload)?;
                 Ok(result)
             } else {
-                Err(Error::UnexpectedSubprotocolMessage(second_msg))
+                Err(Error::UnexpectedSubprotocolMessage(payload_msg))
             }
         } else {
-            Err(Error::UnexpectedSubprotocolMessage(first_msg))
+            Err(Error::UnexpectedSubprotocolMessage(ot_commit_msg))
         }
-
-        // let channel_msg = self.channels.listen.recv().unwrap();
-
-        // if let Message {
-        //     to,
-        //     from,
-        //     payload: MessagePayload::SubChannel(their_channel, my_channel),
-        // } = channel_msg
-        // {
-        //     let first_msg = my_channel.recv().unwrap();
-        //     if let SubMessage::OTCommit(commitment) = first_msg {
-        //         let dst = format!("OT-{}-{}", from, to);
-        //         self.log(&format!("Choose left input: {choose_left}"));
-        //         let (receiver, resp) = crate::primitives::ot::OTReceiver::select(
-        //             &mut self.entropy,
-        //             dst.as_bytes(),
-        //             commitment,
-        //             choose_left,
-        //         )?;
-        //         their_channel.send(SubMessage::OTSelect(resp)).unwrap();
-        //         let second_msg = my_channel.recv().unwrap();
-        //         if let SubMessage::OTSend(payload) = second_msg {
-        //             assert_eq!(self.id, to);
-        //             let result = receiver.receive(payload)?;
-        //             self.log(&format!("Got message {result:?}"));
-        //             Ok(result)
-        //         } else {
-        //             Err(Error::UnexpectedSubprotocolMessage(second_msg))
-        //         }
-        //     } else {
-        //         Err(Error::UnexpectedSubprotocolMessage(first_msg))
-        //     }
-        // } else {
-        //     Err(Error::UnexpectedMessage(channel_msg))
-        // }
     }
 
     /// Initiate an equality check with another party.
@@ -550,65 +551,92 @@ impl Party {
         }
     }
 
-    /// Generate a fresh bit id.
+    /// Generate a fresh bit id, increasing the internal bit counter.
     fn fresh_bit_id(&mut self) -> BitID {
         let res = self.bit_counter;
         self.bit_counter += 1;
         BitID(res)
     }
 
-    /// Initiate a bit authentication session.
-    fn abit_2pc_initiator(&mut self, i: usize, bit: &Bit) -> Result<Mac, Error> {
-        let (own_sender, own_receiver) = mpsc::channel::<SubMessage>();
-        let (their_sender, their_receiver) = mpsc::channel::<SubMessage>();
+    /// Initiate a two-party bit authentication session to oblivious obtain a
+    /// MAC from the authenticator on a locally held bit.
+    ///
+    /// The authenticator computes `left_value = K + Delta` and `right_value =
+    /// K` where `K` is a fresh mac key and `Delta` is the authenticator's
+    /// global MAC key. If `b` is the bit holders local bit, the bit holder can
+    /// thus obliviously obtain a MAC `M = K + b * Delta` by setting `b` as
+    /// their choice bit as an OT receiver with the authenticator acting as OT
+    /// sender with inputs `left_value` and `right value`.
+    fn obtain_bit_authentication(
+        &mut self,
+        authenticator: usize,
+        local_bit: &Bit,
+    ) -> Result<Mac, Error> {
+        // Set up channels for an OT subprotocol session with the authenticator.
+        let (my_address, my_inbox) = mpsc::channel::<SubMessage>();
+        let (their_address, their_inbox) = mpsc::channel::<SubMessage>();
 
-        let req_msg = Message {
-            from: self.id,
-            to: i,
-            payload: MessagePayload::RequestBitAuth(bit.id.clone(), own_sender, their_receiver),
-        };
+        // The authenticator has to initiate an OT session, so request a bit
+        // authentication session using the generated channels.
+        self.channels.parties[authenticator]
+            .send(Message {
+                from: self.id,
+                to: authenticator,
+                payload: MessagePayload::RequestBitAuth(
+                    local_bit.id.clone(),
+                    my_address,
+                    their_inbox,
+                ),
+            })
+            .unwrap();
 
-        self.channels.parties[i].send(req_msg).unwrap();
-
-        let mac: Mac = self
-            .ot_receive(bit.value, their_sender, own_receiver, i)?
+        // Join the authenticator's OT session with the local bit value as the
+        // receiver choice input.
+        let received_mac: Mac = self
+            .ot_receive(local_bit.value, their_address, my_inbox, authenticator)?
             .try_into()
             .expect("should receive a MAC of the right length");
 
-        Ok(mac)
+        Ok(received_mac)
     }
 
-    /// Listen for a bit authentication initiation.
-    fn abit_2pc_responder(&mut self, bit_holder: usize) -> Result<BitKey, Error> {
-        let req_msg = self.channels.listen.recv().unwrap();
+    /// Listen for a two-party bit authentication request to oblivious
+    /// authenticate a bit holders local bit and obtain the corresponding MAC
+    /// key.
+    ///
+    /// The authenticator computes `left_value = K + Delta` and `right_value =
+    /// K` where `K` is a fresh mac key and `Delta` is the authenticator's
+    /// global MAC key. If `b` is the bit holders local bit, the bit holder can
+    /// thus obliviously obtain a MAC `M = K + b * Delta` by setting `b` as
+    /// their choice bit as an OT receiver with the authenticator acting as OT
+    /// sender with inputs `left_value` and `right value`.
+    fn provide_bit_authentication(&mut self, bit_holder: usize) -> Result<BitKey, Error> {
+        let request_msg = self.channels.listen.recv().unwrap();
 
         if let Message {
             to,
             from,
-            payload: MessagePayload::RequestBitAuth(id, their_sender, own_receiver),
-        } = req_msg
+            payload: MessagePayload::RequestBitAuth(holder_bit_id, their_address, my_inbox),
+        } = request_msg
         {
             assert_eq!(to, self.id, "Got a wrongly addressed message");
 
-            let (mac_key_and_global, mac_key) =
-                mac(&true, &self.global_mac_key, &mut self.entropy)?;
+            // Compute the MACs for both possible values of the bit holder's
+            // bit. Note that `mac_on_false` is simply the fresh local mac_key.
+            let (mac_on_true, mac_on_false) = mac(&true, &self.global_mac_key, &mut self.entropy)?;
 
-            self.ot_send(
-                their_sender,
-                own_receiver,
-                from,
-                &mac_key_and_global,
-                &mac_key,
-            )?;
+            // Initiate an OT session with the bit holder giving the two MACs as
+            // sender inputs.
+            self.ot_send(their_address, my_inbox, from, &mac_on_true, &mac_on_false)?;
 
             Ok(BitKey {
-                id,
+                holder_bit_id,
                 bit_holder,
-                mac_key,
+                mac_key: mac_on_false,
             })
         } else {
-            self.log(&format!("Bit Auth: Unexpected message {req_msg:?}"));
-            Err(Error::UnexpectedMessage(req_msg))
+            self.log(&format!("Bit Auth: Unexpected message {request_msg:?}"));
+            Err(Error::UnexpectedMessage(request_msg))
         }
     }
 
@@ -639,12 +667,23 @@ impl Party {
 
     /// Run the MPC protocol, returning the parties output, if any.
     pub fn run(&mut self) -> Result<Option<Vec<bool>>, Error> {
-        let _auth_bits = self.bit_auth(1)?;
+        let _auth_bits = self.mutliparty_authenticate(1)?;
 
         Ok(None)
     }
 
     /// Synchronise parties.
+    ///
+    /// In all other communication rounds, parties send in increasing order of
+    /// their numeric identifiers. In order to prevent early parties from
+    /// advancing to the next phase of the procotol before later parties have
+    /// caught up, this synchronization mechanism reverses the turn order,
+    /// making numerically smaller ID parties first wait for the synchronisation
+    /// signal from numerically larger ID parties.
+    ///
+    /// For this to work as a synchronisation mechanism it is crucial that
+    /// synchronisation is the only communication round with decreasing turn
+    /// order.
     fn sync(&self) -> Result<(), Error> {
         for _i in (self.id + 1..self.num_parties).rev() {
             let sync_msg = self.channels.listen.recv().unwrap();
