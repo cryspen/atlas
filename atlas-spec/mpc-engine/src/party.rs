@@ -215,7 +215,7 @@ impl Party {
     /// After this point the guarantee is that a pair-wise consistent
     /// `global_mac_key` was used in all bit-authentications between two
     /// parties.
-    fn mutliparty_authenticate(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
+    fn multiparty_authenticate(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
         let len_unchecked = len + 2 * STATISTICAL_SECURITY * 8;
 
         // 1. Generate `len_unchecked` random local bits for authenticating.
@@ -667,7 +667,7 @@ impl Party {
 
     /// Run the MPC protocol, returning the parties output, if any.
     pub fn run(&mut self) -> Result<Option<Vec<bool>>, Error> {
-        let _auth_bits = self.mutliparty_authenticate(1)?;
+        let _auth_bits = self.multiparty_authenticate(1)?;
 
         Ok(None)
     }
