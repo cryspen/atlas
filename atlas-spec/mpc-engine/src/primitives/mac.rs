@@ -28,7 +28,7 @@ pub fn mac(bit: &bool, global_key: &MacKey, entropy: &mut Randomness) -> (Mac, M
 
     let mut mac = [0u8; MAC_LENGTH];
     for idx in 0..mac.len() {
-        mac[idx] = key[idx] ^ (*bit as u8) * global_key[idx];
+        mac[idx] = key[idx] ^ ((*bit as u8) * global_key[idx]);
     }
 
     (mac, key)
@@ -37,7 +37,7 @@ pub fn mac(bit: &bool, global_key: &MacKey, entropy: &mut Randomness) -> (Mac, M
 /// Verify a MAC on a given bit.
 pub fn verify_mac(bit: &bool, mac: &Mac, key: &MacKey, global_key: &MacKey) -> bool {
     for idx in 0..mac.len() {
-        let recomputed = key[idx] ^ (*bit as u8) * global_key[idx];
+        let recomputed = key[idx] ^ ((*bit as u8) * global_key[idx]);
         if mac[idx] != recomputed {
             return false;
         }
