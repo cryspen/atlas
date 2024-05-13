@@ -39,7 +39,7 @@ impl BroadcastRelay {
     /// shut down and dropped their copies of the sender. In this case the
     /// broadcast relay also shuts down.
     pub fn run(&self) {
-        'outer: loop {
+        loop {
             let mut openings = Vec::new();
             for _i in 0..self.num_parties {
                 let opening_msg = self.listen.recv();
@@ -55,7 +55,7 @@ impl BroadcastRelay {
                     openings.push(opening_msg.expect("already confirmed it's ok"))
                 } else {
                     // One of the parties was dropped, time to shut down.
-                    break 'outer;
+                    return;
                 }
             }
 
