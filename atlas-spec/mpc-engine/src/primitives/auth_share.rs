@@ -24,7 +24,6 @@ pub struct AuthBit {
 
 /// The key to authenticate a two-party authenticated bit.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // TODO: remove this later
 pub struct BitKey {
     pub(crate) holder_bit_id: BitID,
     pub(crate) bit_holder: usize,
