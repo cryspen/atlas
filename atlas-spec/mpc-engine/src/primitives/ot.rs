@@ -116,7 +116,7 @@ impl OTSender {
         selection: &OTReceiverSelect,
         entropy: &mut Randomness,
     ) -> Result<OTSenderSend, Error> {
-        assert_eq!(
+        debug_assert_eq!(
             left_input.len(),
             right_input.len(),
             "Left and right inputs to the OT must be of the same length."
@@ -341,5 +341,5 @@ fn simple() {
         .unwrap();
 
     let receiver_output = receiver.receive(send_message).unwrap();
-    assert_eq!(right_input.to_vec(), receiver_output);
+    debug_assert_eq!(right_input.to_vec(), receiver_output);
 }

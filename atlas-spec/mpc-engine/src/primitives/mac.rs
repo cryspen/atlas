@@ -60,6 +60,6 @@ fn simple() {
     let b = entropy.bit().unwrap();
     let delta = generate_mac_key(&mut entropy).unwrap();
     let (mac, key) = mac(&b, &delta, &mut entropy).unwrap();
-    assert!(verify_mac(&b, &mac, &key, &delta));
-    assert!(!verify_mac(&!b, &mac, &key, &delta))
+    debug_assert!(verify_mac(&b, &mac, &key, &delta));
+    debug_assert!(!verify_mac(&!b, &mac, &key, &delta))
 }

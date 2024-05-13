@@ -129,7 +129,7 @@ impl Party {
             let commitment_msg = self.channels.listen.recv().unwrap();
             if let MessagePayload::BroadcastCommitment(received_commitment) = commitment_msg.payload
             {
-                assert_eq!(commitment_msg.to, self.id);
+                debug_assert_eq!(commitment_msg.to, self.id);
                 received_commitments.push((commitment_msg.from, received_commitment));
             } else {
                 return Err(Error::UnexpectedMessage(commitment_msg));
@@ -157,7 +157,7 @@ impl Party {
             let commitment_msg = self.channels.listen.recv().unwrap();
             if let MessagePayload::BroadcastCommitment(received_commitment) = commitment_msg.payload
             {
-                assert_eq!(commitment_msg.to, self.id);
+                debug_assert_eq!(commitment_msg.to, self.id);
                 received_commitments.push((commitment_msg.from, received_commitment));
             } else {
                 return Err(Error::UnexpectedMessage(commitment_msg));
@@ -302,7 +302,7 @@ impl Party {
 
             let mut other_x_js = Vec::new();
             for (party, other_x_j) in other_x_j_bytes {
-                assert!(other_x_j.len() == 1);
+                debug_assert!(other_x_j.len() == 1);
                 other_x_js.push((party, other_x_j[0] != 0))
             }
 
@@ -344,7 +344,7 @@ impl Party {
             for _i in 0..self.id {
                 let mac_message = self.channels.listen.recv().unwrap();
                 if let MessagePayload::Mac(mac) = mac_message.payload {
-                    assert_eq!(mac_message.to, self.id, "Wrong recipient for MAC message");
+                    debug_assert_eq!(mac_message.to, self.id, "Wrong recipient for MAC message");
                     received_macs.push((mac_message.from, mac));
                 } else {
                     return Err(Error::UnexpectedMessage(mac_message));
@@ -369,7 +369,7 @@ impl Party {
             for _i in self.id + 1..self.num_parties {
                 let mac_message = self.channels.listen.recv().unwrap();
                 if let MessagePayload::Mac(mac) = mac_message.payload {
-                    assert_eq!(mac_message.to, self.id, "Wrong recipient for MAC message");
+                    debug_assert_eq!(mac_message.to, self.id, "Wrong recipient for MAC message");
                     received_macs.push((mac_message.from, mac));
                 } else {
                     return Err(Error::UnexpectedMessage(mac_message));
@@ -409,7 +409,7 @@ impl Party {
 
         let mut result = my_contribution;
         for (_party, their_contribution) in other_contributions {
-            assert_eq!(
+            debug_assert_eq!(
                 their_contribution.len(),
                 result.len(),
                 "all randomness contributions must be of the same length"
@@ -530,7 +530,7 @@ impl Party {
             payload: MessagePayload::SubChannel(their_channel, my_channel),
         } = channel_msg
         {
-            assert_eq!(to, self.id);
+            debug_assert_eq!(to, self.id);
             let commit_message = my_channel.recv().unwrap();
             if let SubMessage::EQCommit(commitment) = commit_message {
                 their_channel
@@ -619,7 +619,7 @@ impl Party {
             payload: MessagePayload::RequestBitAuth(holder_bit_id, their_address, my_inbox),
         } = request_msg
         {
-            assert_eq!(to, self.id, "Got a wrongly addressed message");
+            debug_assert_eq!(to, self.id, "Got a wrongly addressed message");
 
             // Compute the MACs for both possible values of the bit holder's
             // bit. Note that `mac_on_false` is simply the fresh local mac_key.

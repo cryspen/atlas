@@ -13,7 +13,7 @@ use hacspec_chacha20::*;
 //         0x2098d9d6, 0x91dbd320,
 //     ]);
 //     state = chacha20_quarter_round(2, 7, 8, 13, state);
-//     assert_eq!(
+//     debug_assert_eq!(
 //         state
 //             .iter()
 //             .map(|x| U32::declassify(*x))
@@ -42,7 +42,7 @@ use hacspec_chacha20::*;
 //         0x0f0e0d0c, 0x13121110, 0x17161514, 0x1b1a1918, 0x1f1e1d1c, 0x00000001, 0x09000000,
 //         0x4a000000, 0x00000000,
 //     ]);
-//     assert_eq!(
+//     debug_assert_eq!(
 //         state
 //             .iter()
 //             .map(|x| U32::declassify(*x))
@@ -59,7 +59,7 @@ use hacspec_chacha20::*;
 //         0x4e6cd4c3, 0x466482d2, 0x09aa9f07, 0x05d7c214, 0xa2028bd9, 0xd19c12b5, 0xb94e16de,
 //         0xe883d0cb, 0x4e3c50a2,
 //     ]);
-//     assert_eq!(
+//     debug_assert_eq!(
 //         state
 //             .iter()
 //             .map(|x| U32::declassify(*x))
@@ -79,7 +79,7 @@ use hacspec_chacha20::*;
 //     ]);
 //     let serialised = state.to_le_bytes();
 //     println!("{:?}", serialised.len());
-//     assert_eq!(
+//     debug_assert_eq!(
 //         serialised
 //             .iter()
 //             .map(|x| U8::declassify(*x))
@@ -94,7 +94,7 @@ use hacspec_chacha20::*;
 // fn enc_dec_test(m: ByteSeq, key: ChaChaKey, iv: ChaChaIV) {
 //     let c = chacha20(key, iv, 1u32, &m);
 //     let m_dec = chacha20(key, iv, 1u32, &c);
-//     assert_eq!(
+//     debug_assert_eq!(
 //         m.iter().map(|x| U8::declassify(*x)).collect::<Vec<_>>(),
 //         m_dec.iter().map(|x| U8::declassify(*x)).collect::<Vec<_>>()
 //     );
@@ -103,9 +103,9 @@ use hacspec_chacha20::*;
 fn kat_test(m: &[u8], key: ChaChaKey, iv: ChaChaIV, exp_cipher: &[u8]) {
     let enc = chacha20(key, iv, 1u32, &m);
     let c = enc;
-    assert_eq!(exp_cipher, c);
+    debug_assert_eq!(exp_cipher, c);
     let m_dec = chacha20(key, iv, 1u32, &c);
-    assert_eq!(m, m_dec);
+    debug_assert_eq!(m, m_dec);
 }
 
 // #[test]

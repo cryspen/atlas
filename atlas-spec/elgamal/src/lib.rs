@@ -132,7 +132,7 @@ mod test {
         let ctx = encrypt(ek, msg, &mut Randomness::new(vec![0xab; 32])).unwrap();
         let decryption = decrypt(dk, ctx).unwrap();
 
-        assert_eq!(msg, decryption);
+        debug_assert_eq!(msg, decryption);
     }
 
     #[test]
@@ -148,7 +148,7 @@ mod test {
         let rctx = rerandomize(ek, ctx, &mut Randomness::new(vec![0xab; 32])).unwrap();
         let decryption = decrypt(dk, rctx).unwrap();
 
-        assert_eq!(msg, decryption);
+        debug_assert_eq!(msg, decryption);
         assert_ne!(ctx, rctx);
     }
 

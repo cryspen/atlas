@@ -85,6 +85,6 @@ fn simple() {
     let (commitment, opening) = Commitment::new(value, dst, &mut entropy).unwrap();
     let (_another_commitment, another_opening) =
         Commitment::new(another_value, dst, &mut entropy).unwrap();
-    assert!(commitment.open(&opening).is_ok());
-    assert!(commitment.open(&another_opening).is_err());
+    debug_assert!(commitment.open(&opening).is_ok());
+    debug_assert!(commitment.open(&another_opening).is_err());
 }

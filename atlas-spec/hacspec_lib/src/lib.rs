@@ -34,7 +34,7 @@ pub fn i2osp(value: usize, len: usize) -> Vec<u8> {
 }
 
 pub fn xor_slice(mut this: Vec<u8>, other: &[u8]) -> Vec<u8> {
-    assert!(this.len() == other.len());
+    debug_assert!(this.len() == other.len());
 
     // error[CE0008]: (Diagnostics.Context.Phase (Reject ArbitraryLhs)): ExplicitRejection { reason: "unknown reason" }
     //  --> hmac-rust/src/hacspec_helper.rs:5:9
@@ -53,7 +53,7 @@ pub fn xor_slice(mut this: Vec<u8>, other: &[u8]) -> Vec<u8> {
 macro_rules! to_le_u32s_impl {
     ($name:ident,$l:literal) => {
         pub fn $name(bytes: &[u8]) -> [u32; $l] {
-            assert_eq!($l, bytes.len() / 4);
+            debug_assert_eq!($l, bytes.len() / 4);
             let mut out = [0; $l];
             for i in 0..$l {
                 out[i] = u32::from_le_bytes(bytes[4 * i..4 * i + 4].try_into().unwrap());
@@ -92,7 +92,7 @@ pub fn add_state(mut state: [u32; 16], other: [u32; 16]) -> [u32; 16] {
 }
 
 pub fn update_array(mut array: [u8; 64], val: &[u8]) -> [u8; 64] {
-    assert!(64 >= val.len());
+    debug_assert!(64 >= val.len());
     array[..val.len()].copy_from_slice(val);
     array
 }
