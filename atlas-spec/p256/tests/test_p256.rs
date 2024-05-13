@@ -17,8 +17,8 @@ fn test_p256_base() {
         Ok(p) => p,
         Err(_) => panic!("Error p256_point_mul_base"),
     };
-    assert_eq!(point_computed.x().unwrap(), point_expected.0);
-    assert_eq!(point_computed.y().unwrap(), point_expected.1);
+    debug_assert_eq!(point_computed.x().unwrap(), point_expected.0);
+    debug_assert_eq!(point_computed.y().unwrap(), point_expected.1);
 
     let sk = P256Scalar::from_hex("018ebbb95eed0e13");
     let point_expected = (
@@ -34,8 +34,8 @@ fn test_p256_base() {
         Ok(p) => p,
         Err(_) => panic!("Error p256_point_mul_base"),
     };
-    assert_eq!(point_computed.x().unwrap(), point_expected.0);
-    assert_eq!(point_computed.y().unwrap(), point_expected.1);
+    debug_assert_eq!(point_computed.x().unwrap(), point_expected.0);
+    debug_assert_eq!(point_computed.y().unwrap(), point_expected.1);
 
     let sk =
         P256Scalar::from_hex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550");
@@ -52,8 +52,8 @@ fn test_p256_base() {
         Ok(p) => p,
         Err(_) => panic!("Error p256_point_mul_base"),
     };
-    assert_eq!(point_computed.x().unwrap(), point_expected.0);
-    assert_eq!(point_computed.y().unwrap(), point_expected.1);
+    debug_assert_eq!(point_computed.x().unwrap(), point_expected.0);
+    debug_assert_eq!(point_computed.y().unwrap(), point_expected.1);
 }
 
 use serde_json::Value;
@@ -100,9 +100,9 @@ fn test_wycheproof_plain() {
         _ => panic!("This is not an ECDH test vector."),
     };
     for testGroup in tests.testGroups.iter() {
-        assert_eq!(testGroup.r#type, "EcdhEcpointTest");
-        assert_eq!(testGroup.curve, "secp256r1");
-        assert_eq!(testGroup.encoding, "ecpoint");
+        debug_assert_eq!(testGroup.r#type, "EcdhEcpointTest");
+        debug_assert_eq!(testGroup.curve, "secp256r1");
+        debug_assert_eq!(testGroup.encoding, "ecpoint");
         for test in testGroup.tests.iter() {
             println!("Test {:?}: {:?}", test.tcId, test.comment);
             if !test.result.eq("valid")
@@ -120,7 +120,7 @@ fn test_wycheproof_plain() {
                 skipped_tests += 1;
                 continue;
             }
-            assert_eq!(&test.public[0..2], "04");
+            debug_assert_eq!(&test.public[0..2], "04");
             let k = P256Scalar::from_hex(&test.private);
             let p = (
                 P256FieldElement::from_hex(&test.public[2..66]),
@@ -128,17 +128,17 @@ fn test_wycheproof_plain() {
             )
                 .into();
             if not_on_curve {
-                assert!(!p256_validate_public_key(p));
+                debug_assert!(!p256_validate_public_key(p));
                 tests_run += 1;
                 continue;
             }
-            assert!(p256_validate_public_key(p));
+            debug_assert!(p256_validate_public_key(p));
             let expected = P256FieldElement::from_hex(&test.shared);
             let shared = match p256_point_mul(k, p) {
                 Ok(s) => s,
                 Err(_) => panic!("Unexpected error in point_mul"),
             };
-            assert_eq!(shared.x().unwrap(), expected);
+            debug_assert_eq!(shared.x().unwrap(), expected);
 
             // Check w
             let my_p = (p.x().unwrap(), p256_calculate_w(p.x().unwrap())).into();
@@ -146,7 +146,7 @@ fn test_wycheproof_plain() {
                 Ok(s) => s,
                 Err(_) => panic!("Unexpected error in point_mul"),
             };
-            assert_eq!(
+            debug_assert_eq!(
                 shared.x().unwrap(),
                 expected,
                 "Error in ECDH using calculate w"
@@ -154,7 +154,7 @@ fn test_wycheproof_plain() {
             // // The Y coordinate of the computed point (my_p) is either
             // // equal to y, or -y % p.
             // let other_y = my_p.1.neg();
-            // assert!(
+            // debug_assert!(
             //     p.1 == my_p.1 || p.1 == other_y,
             //     "The computed w is wrong.\nGot {:x}\n or {:x} but expected\n    {}",
             //     my_p.1,
@@ -170,21 +170,21 @@ fn test_wycheproof_plain() {
         "Ran {} out of {} tests and skipped {}.",
         tests_run, num_tests, skipped_tests
     );
-    assert_eq!(num_tests - skipped_tests, tests_run);
+    debug_assert_eq!(num_tests - skipped_tests, tests_run);
 }
 
 #[test]
 fn invalid_scalars() {
     let zero = hex::decode("00").unwrap();
-    assert!(!p256_validate_private_key(&zero));
+    debug_assert!(!p256_validate_private_key(&zero));
 
     let too_large =
         hex::decode("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551").unwrap();
-    assert!(!p256_validate_private_key(&too_large));
+    debug_assert!(!p256_validate_private_key(&too_large));
 
     let largest_valid =
         hex::decode("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550").unwrap();
-    assert!(p256_validate_private_key(&largest_valid));
+    debug_assert!(p256_validate_private_key(&largest_valid));
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn point_validation() {
             "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
         ),
     );
-    assert!(!p256_validate_public_key(not_on_curve.into()));
+    debug_assert!(!p256_validate_public_key(not_on_curve.into()));
 
     let valid_point = (
         P256FieldElement::from_hex(
@@ -207,7 +207,7 @@ fn point_validation() {
             "43a1930189363bbde2ac4cbd1649cdc6f451add71dd2f16a8a867f2b17caa16b",
         ),
     );
-    assert!(p256_validate_public_key(valid_point.into()));
+    debug_assert!(p256_validate_public_key(valid_point.into()));
 
     let not_on_curve = (
         P256FieldElement::from_hex(
@@ -217,7 +217,7 @@ fn point_validation() {
             "0000000000000000000000000000000000000000000000000000000000000000",
         ),
     );
-    assert!(!p256_validate_public_key(not_on_curve.into()));
+    debug_assert!(!p256_validate_public_key(not_on_curve.into()));
 
     let not_on_curve = (
         P256FieldElement::from_hex(
@@ -227,7 +227,7 @@ fn point_validation() {
             "0000000000000000000000000000000000000000000000000000000000000001",
         ),
     );
-    assert!(!p256_validate_public_key(not_on_curve.into()));
+    debug_assert!(!p256_validate_public_key(not_on_curve.into()));
 }
 
 #[test]
@@ -241,7 +241,7 @@ fn test_p256_calculate_w() {
 
         // // Check the Y coordinate.
         // let other_y = public.1.neg();
-        // assert!(gy_y == format!("{:x}", public.1) || gy_y == format!("{:x}", other_y));
+        // debug_assert!(gy_y == format!("{:x}", public.1) || gy_y == format!("{:x}", other_y));
 
         // calculate the ECDH secret
         let my_secret_x = match p256_point_mul(private, public) {
@@ -249,7 +249,7 @@ fn test_p256_calculate_w() {
             Err(_) => panic!("Error test_ecdh"),
         };
 
-        assert_eq!(expected_secret_x, my_secret_x);
+        debug_assert_eq!(expected_secret_x, my_secret_x);
     }
 
     // taken from ecdh_secp256r1_ecpoint_test.json tcId=2

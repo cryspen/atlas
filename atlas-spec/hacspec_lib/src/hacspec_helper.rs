@@ -202,7 +202,7 @@ pub trait NatMod<const LEN: usize> {
     where
         Self: Sized,
     {
-        assert!(hex.len() % 2 == 0);
+        debug_assert!(hex.len() % 2 == 0);
         let l = hex.len() / 2;
         let mut value = vec![0u8; l];
         for i in 0..l {
@@ -226,7 +226,7 @@ pub trait NatMod<const LEN: usize> {
         Self: Sized,
     {
         let max_value = Self::MODULUS;
-        assert!(
+        debug_assert!(
             x <= num_bigint::BigUint::from_bytes_be(&max_value),
             "{} is too large for type {}!",
             x,

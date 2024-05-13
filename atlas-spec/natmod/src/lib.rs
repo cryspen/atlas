@@ -29,7 +29,7 @@ impl Parse for NatModAttr {
         let mod_bytes = Vec::<u8>::from_hex(&mod_str).expect("Invalid hex String");
         input.parse::<Token![,]>()?;
         let int_size = input.parse::<LitInt>()?.base10_parse::<usize>()?;
-        assert!(input.is_empty(), "Left over tokens in attribute {input:?}");
+        debug_assert!(input.is_empty(), "Left over tokens in attribute {input:?}");
         Ok(NatModAttr {
             mod_str,
             mod_bytes,

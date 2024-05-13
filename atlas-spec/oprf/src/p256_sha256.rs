@@ -75,5 +75,5 @@ fn serialize_deserialize() {
     )
     .unwrap();
 
-    assert_eq!(p, deserialize_element(serialize_element(&p)).unwrap());
+    debug_assert_eq!(p, deserialize_element(serialize_element(&p)).unwrap());
 }

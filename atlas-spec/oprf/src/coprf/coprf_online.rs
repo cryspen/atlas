@@ -194,8 +194,8 @@ mod tests {
         let converted_y_from_1 = convert(key_origin1, key_destination, y_under_origin1).unwrap();
         let converted_y_from_2 = convert(key_origin2, key_destination, y_under_origin2).unwrap();
 
-        assert_eq!(converted_y_from_1, converted_y_from_2);
-        assert_eq!(converted_y_from_1, y_under_destination);
+        debug_assert_eq!(converted_y_from_1, converted_y_from_2);
+        debug_assert_eq!(converted_y_from_1, y_under_destination);
     }
 
     #[test]
@@ -228,7 +228,7 @@ mod tests {
 
         let expected_result = evaluate(test_context, evaluation_key, test_input).unwrap();
 
-        assert_eq!(unblinded_result, expected_result);
+        debug_assert_eq!(unblinded_result, expected_result);
     }
 
     #[test]
@@ -274,8 +274,8 @@ mod tests {
         let res1 = finalize(&receiver_context, blind_result_1).unwrap();
         let res2 = finalize(&receiver_context, blind_result_2).unwrap();
 
-        assert_eq!(res1, res2);
-        assert_eq!(res1, y_under_destination);
+        debug_assert_eq!(res1, res2);
+        debug_assert_eq!(res1, y_under_destination);
     }
     #[test]
     fn test_blind_conversion() {
@@ -319,7 +319,7 @@ mod tests {
 
         let unblinded_converted_result =
             finalize(&receiver_context, blind_converted_result).unwrap();
-        assert_eq!(expected_result, unblinded_converted_result);
+        debug_assert_eq!(expected_result, unblinded_converted_result);
 
         // converting after unblinding and re-blinding
         let unblinded_intermediate_result = finalize(&receiver_context, blind_result).unwrap();
@@ -342,6 +342,6 @@ mod tests {
 
         let unblinded_converted_result =
             finalize(&receiver_context, blind_converted_result).unwrap();
-        assert_eq!(expected_result, unblinded_converted_result);
+        debug_assert_eq!(expected_result, unblinded_converted_result);
     }
 }

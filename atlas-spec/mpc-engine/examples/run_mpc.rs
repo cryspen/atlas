@@ -24,7 +24,9 @@ fn main() {
     let num_parties = circuit.number_of_parties();
 
     // Set up channels
-    let mut party_channels = mpc_engine::utils::set_up_channels(num_parties);
+    let (broadcast_relay, mut party_channels) = mpc_engine::utils::set_up_channels(num_parties);
+
+    let _ = thread::spawn(move || broadcast_relay.run());
 
     let mut party_join_handles = Vec::new();
     for _i in 0..num_parties {
@@ -34,10 +36,11 @@ fn main() {
         let c = circuit.clone();
         let party_join_handle = thread::spawn(move || {
             let mut rng = rand::thread_rng();
-            let mut bytes = vec![0u8; 500];
+            let mut bytes = vec![0u8; u16::MAX.try_into().unwrap()];
             rng.fill_bytes(&mut bytes);
             let rng = Randomness::new(bytes);
-            let mut p = mpc_engine::party::Party::new(channel_config, &c, rng);
+            let log_enabled = channel_config.id == 1;
+            let mut p = mpc_engine::party::Party::new(channel_config, &c, log_enabled, rng);
 
             let _ = p.run();
         });

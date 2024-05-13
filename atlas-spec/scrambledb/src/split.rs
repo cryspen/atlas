@@ -134,7 +134,7 @@ mod tests {
         let mut pseudonym_set = HashSet::new();
         // test that data is preserved
         for pseudonymized_data in lake_tables.data() {
-            assert!(
+            debug_assert!(
                 // plain_values.iter().any(|set| { *set == table_values }),
                 plain_table
                     .data()
@@ -144,7 +144,7 @@ mod tests {
             );
 
             // test if all pseudonyms are unique
-            assert!(
+            debug_assert!(
                 pseudonym_set.insert(pseudonymized_data.handle.clone()),
                 "Generated pseudonyms are not unique."
             );

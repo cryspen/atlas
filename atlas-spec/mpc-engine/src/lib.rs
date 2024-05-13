@@ -8,9 +8,18 @@ use messages::{Message, SubMessage};
 
 #[derive(Debug)]
 /// An error type.
+///
+/// We generally expect to definitely panic in two cases:
+/// * Insufficient randomness was provided for a given operation
+/// * A channel handle was prematurely dropped (this indicates a bug in the
+///   specification)
+///
+/// In other cases, the errors might be the result of a buggy protocol
+/// participant, or a detected attempt at cheating. These cases should be
+/// handled by the surrounding application in order to gracefully shut down or,
+/// if possible remove the cheater in a secure way, so these errors should be
+/// handled there.
 pub enum Error {
-    /// More random bytes have been asked for than are available.
-    InsufficientRandomness,
     /// An error during circuit processing
     Circuit(CircuitError),
     /// A specific subprotocol message was expected but a different one was
@@ -19,33 +28,26 @@ pub enum Error {
     /// A specific top-level message was expected but a different one was
     /// received
     UnexpectedMessage(Message),
+    /// Failed to open a commitment
+    BadCommitment(Vec<u8>, Vec<u8>),
+    /// Error from the curve implementation
+    CurveError,
+    /// Error from the AEAD
+    AEADError,
     /// Miscellaneous error.
     OtherError,
 }
 
-impl From<hacspec_lib::Error> for Error {
-    fn from(value: hacspec_lib::Error) -> Self {
-        match value {
-            hacspec_lib::Error::InsufficientRandomness => Self::InsufficientRandomness,
-        }
-    }
-}
-
 impl From<p256::Error> for Error {
-    fn from(value: p256::Error) -> Self {
-        match value {
-            p256::Error::InvalidAddition
-            | p256::Error::DeserializeError
-            | p256::Error::PointAtInfinity => Self::OtherError,
-            p256::Error::SamplingError => Self::InsufficientRandomness,
-        }
+    fn from(_value: p256::Error) -> Self {
+        Self::CurveError
     }
 }
 
 impl From<hacspec_chacha20poly1305::Error> for Error {
     fn from(value: hacspec_chacha20poly1305::Error) -> Self {
         match value {
-            hacspec_chacha20poly1305::Error::InvalidTag => Self::OtherError,
+            hacspec_chacha20poly1305::Error::InvalidTag => Self::AEADError,
         }
     }
 }
@@ -56,6 +58,10 @@ pub const COMPUTATIONAL_SECURITY: usize = 128 / 8;
 /// The statistical security parameter, in bytes.
 pub const STATISTICAL_SECURITY: usize = 128 / 8;
 
+// NOTE: The `broadcast` module implements a broadcast utility via a trusted
+// third-party message relay, in lieu of a secure peer-to-peer broadcast
+// sub-protocol.
+pub mod broadcast;
 pub mod circuit;
 pub mod messages;
 pub mod party;

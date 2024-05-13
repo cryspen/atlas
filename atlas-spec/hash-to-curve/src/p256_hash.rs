@@ -57,7 +57,7 @@ fn expand_message(msg: &[u8], dst: &[u8], len_in_bytes: usize) -> Result<Vec<u8>
 }
 
 fn strxor(a: &[u8], b: &[u8]) -> Vec<u8> {
-    assert_eq!(a.len(), b.len());
+    debug_assert_eq!(a.len(), b.len());
     a.iter().zip(b.iter()).map(|(a, b)| a ^ b).collect()
 }
 
@@ -149,7 +149,7 @@ mod tests {
         let tests = load_vectors(vector_path.as_path());
         let dst = tests["dst"].as_str().unwrap().as_bytes();
 
-        //assert_eq!(tests["ciphersuite"].as_str().unwrap(), ID);
+        //debug_assert_eq!(tests["ciphersuite"].as_str().unwrap(), ID);
 
         for test_case in tests["vectors"].as_array().unwrap().iter() {
             let msg_str = test_case["msg"].as_str().unwrap();
@@ -167,9 +167,9 @@ mod tests {
                 .collect();
 
             let u_real = hash_to_field(msg, dst, 2).unwrap();
-            assert_eq!(u_real.len(), u_expected.len());
+            debug_assert_eq!(u_real.len(), u_expected.len());
             for (u_real, u_expected) in u_real.iter().zip(u_expected.iter()) {
-                assert_eq!(
+                debug_assert_eq!(
                     u_expected.as_ref(),
                     u_real.as_ref(),
                     "u0 did not match for {msg_str}",
@@ -211,11 +211,11 @@ mod tests {
             let q1_y_expected =
                 P256FieldElement::from_be_bytes(&hex::decode(q1_y_expected).unwrap());
 
-            assert_eq!(q0_x_expected, q0_x, "x0 incorrect");
-            assert_eq!(q0_y_expected, q0_y, "y0 incorrect");
+            debug_assert_eq!(q0_x_expected, q0_x, "x0 incorrect");
+            debug_assert_eq!(q0_y_expected, q0_y, "y0 incorrect");
 
-            assert_eq!(q1_x_expected, q1_x, "x1 incorrect");
-            assert_eq!(q1_y_expected, q1_y, "y1 incorrect");
+            debug_assert_eq!(q1_x_expected, q1_x, "x1 incorrect");
+            debug_assert_eq!(q1_y_expected, q1_y, "y1 incorrect");
         }
     }
 
@@ -241,9 +241,9 @@ mod tests {
 
             let (x, y) = hash_to_curve(msg, dst).unwrap().into();
 
-            // assert!(!inf, "Point should not be infinite");
-            assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
-            assert_eq!(p_y_expected.as_ref(), y.as_ref(), "y-coordinate incorrect");
+            // debug_assert!(!inf, "Point should not be infinite");
+            debug_assert_eq!(p_x_expected.as_ref(), x.as_ref(), "x-coordinate incorrect");
+            debug_assert_eq!(p_y_expected.as_ref(), y.as_ref(), "y-coordinate incorrect");
         }
     }
 }

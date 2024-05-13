@@ -140,6 +140,6 @@ mod tests {
 
         let block = [1u8; 64];
         assert_ne!(block, prp(block, &key));
-        assert_eq!(block, prp(prp(block, &key), &key));
+        debug_assert_eq!(block, prp(prp(block, &key), &key));
     }
 }

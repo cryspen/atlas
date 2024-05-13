@@ -4,6 +4,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::{
     circuit::WireIndex,
     primitives::{
+        auth_share::BitID,
         commitment::{Commitment, Opening},
         mac::Mac,
         ot::{OTReceiverSelect, OTSenderInit, OTSenderSend},
@@ -30,8 +31,20 @@ pub struct Message {
 /// protocol.
 #[derive(Debug)]
 pub enum MessagePayload {
+    /// A round synchronization message
+    Sync,
+    /// Request a number of bit authentications from another party.
+    RequestBitAuth(BitID, Sender<SubMessage>, Receiver<SubMessage>),
+    /// A response to a bit authentication request.
+    BitAuth(BitID, Mac),
+    /// A commitment on a broadcast value.
+    BroadcastCommitment(Commitment),
+    /// The opening to a broadcast value.
+    BroadcastOpening(Opening),
     /// A subchannel for running an 2-party subprotocol.
     SubChannel(Sender<SubMessage>, Receiver<SubMessage>),
+    /// A bit mac for validity checking
+    Mac(Mac),
     /// A garbled AND gate, to be sent to the evaluator
     GarbledAnd(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>),
     /// A MAC on a wire mask share
@@ -63,5 +76,5 @@ pub enum SubMessage {
     /// An EQ responder message
     EQResponse(Vec<u8>),
     /// An EQ initiator opening
-    EQOpening(Vec<u8>, Opening),
+    EQOpening(Opening),
 }

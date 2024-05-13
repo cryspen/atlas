@@ -200,12 +200,12 @@ mod tests {
 
             // test if all pseudonyms are fresh compared to lake_pseudonyms
 
-            assert!(
+            debug_assert!(
                 lake_pseudonyms.insert(entry.handle.clone()),
                 "Generated pseudonyms are not unique."
             );
 
-            assert!(
+            debug_assert!(
                 plain_table
                     .data()
                     .iter()

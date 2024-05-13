@@ -27,7 +27,7 @@ pub trait NatMod<const LEN: usize> {
         let modulus = num_bigint::BigUint::from_bytes_be(&Self::MODULUS);
         let res = (lhs + rhs) % modulus;
         let res = res.to_bytes_be();
-        assert!(res.len() <= LEN);
+        debug_assert!(res.len() <= LEN);
         let mut value = Self::ZERO;
         let offset = LEN - res.len();
         for i in 0..res.len() {
@@ -46,7 +46,7 @@ pub trait NatMod<const LEN: usize> {
         let modulus = num_bigint::BigUint::from_bytes_be(&Self::MODULUS);
         let res = (lhs * rhs) % modulus;
         let res = res.to_bytes_be();
-        assert!(res.len() <= LEN);
+        debug_assert!(res.len() <= LEN);
         let mut value = Self::ZERO;
         let offset = LEN - res.len();
         for i in 0..res.len() {
@@ -106,9 +106,9 @@ pub trait NatMod<const LEN: usize> {
     where
         Self: Sized,
     {
-        assert!(hex.len() % 2 == 0);
+        debug_assert!(hex.len() % 2 == 0);
         let l = hex.len() / 2;
-        assert!(l <= LEN);
+        debug_assert!(l <= LEN);
         let mut value = [0u8; LEN];
         let skip = LEN - l;
         for i in 0..l {
@@ -131,7 +131,7 @@ pub trait NatMod<const LEN: usize> {
         Self: Sized,
     {
         let max_value = Self::MODULUS;
-        assert!(
+        debug_assert!(
             x <= num_bigint::BigUint::from_bytes_be(&max_value),
             "{} is too large for type {}!",
             x,
@@ -154,12 +154,12 @@ fn add() {
     let x = FieldElement::from_hex("03fffffffffffffffffffffffffffffffa");
     let y = FieldElement::from_hex("01");
     let z = x + y;
-    assert_eq!(FieldElement::ZERO.as_ref(), z.as_ref());
+    debug_assert_eq!(FieldElement::ZERO.as_ref(), z.as_ref());
 
     let x = FieldElement::from_hex("03fffffffffffffffffffffffffffffffa");
     let y = FieldElement::from_hex("02");
     let z = x + y;
-    assert_eq!(FieldElement::from_hex("01").as_ref(), z.as_ref());
+    debug_assert_eq!(FieldElement::from_hex("01").as_ref(), z.as_ref());
 }
 
 #[test]
@@ -167,12 +167,12 @@ fn mul() {
     let x = FieldElement::from_hex("03fffffffffffffffffffffffffffffffa");
     let y = FieldElement::from_hex("01");
     let z = x * y;
-    assert_eq!(x.as_ref(), z.as_ref());
+    debug_assert_eq!(x.as_ref(), z.as_ref());
 
     let x = FieldElement::from_hex("03fffffffffffffffffffffffffffffffa");
     let y = FieldElement::from_hex("02");
     let z = x * y;
-    assert_eq!(
+    debug_assert_eq!(
         FieldElement::from_hex("03fffffffffffffffffffffffffffffff9").as_ref(),
         z.as_ref()
     );
