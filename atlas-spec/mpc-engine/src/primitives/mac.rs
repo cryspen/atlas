@@ -2,7 +2,7 @@
 
 use hacspec_lib::Randomness;
 
-use crate::{Error, COMPUTATIONAL_SECURITY};
+use crate::COMPUTATIONAL_SECURITY;
 
 /// The length in bytes of an information theoretic MAC, and of the MAC key.
 pub const MAC_LENGTH: usize = COMPUTATIONAL_SECURITY;
@@ -13,28 +13,25 @@ pub type Mac = [u8; MAC_LENGTH];
 pub type MacKey = [u8; MAC_LENGTH];
 
 /// Generate a fresh MAC key.
-pub fn generate_mac_key(entropy: &mut Randomness) -> Result<MacKey, Error> {
+pub fn generate_mac_key(entropy: &mut Randomness) -> MacKey {
     let k: [u8; MAC_LENGTH] = entropy
-        .bytes(MAC_LENGTH)?
+        .bytes(MAC_LENGTH)
+        .expect("sufficient randomness should have been provided externally")
         .try_into()
-        .map_err(|_| Error::OtherError)?;
-    Ok(k)
+        .expect("should have received the required number of bytes, because we requested them");
+    k
 }
 
 /// Authenticate a bit using the global MAC key.
-pub fn mac(
-    bit: &bool,
-    global_key: &MacKey,
-    entropy: &mut Randomness,
-) -> Result<(Mac, MacKey), Error> {
-    let key: [u8; MAC_LENGTH] = generate_mac_key(entropy)?;
+pub fn mac(bit: &bool, global_key: &MacKey, entropy: &mut Randomness) -> (Mac, MacKey) {
+    let key: [u8; MAC_LENGTH] = generate_mac_key(entropy);
 
     let mut mac = [0u8; MAC_LENGTH];
     for idx in 0..mac.len() {
         mac[idx] = key[idx] ^ (*bit as u8) * global_key[idx];
     }
 
-    Ok((mac, key))
+    (mac, key)
 }
 
 /// Verify a MAC on a given bit.
@@ -58,8 +55,8 @@ fn simple() {
     let mut entropy = Randomness::new(random);
 
     let b = entropy.bit().unwrap();
-    let delta = generate_mac_key(&mut entropy).unwrap();
-    let (mac, key) = mac(&b, &delta, &mut entropy).unwrap();
+    let delta = generate_mac_key(&mut entropy);
+    let (mac, key) = mac(&b, &delta, &mut entropy);
     debug_assert!(verify_mac(&b, &mac, &key, &delta));
     debug_assert!(!verify_mac(&!b, &mac, &key, &delta))
 }

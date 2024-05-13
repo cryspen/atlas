@@ -83,7 +83,7 @@ impl Party {
             id: channels.id,
             num_parties: channels.parties.len(),
             channels,
-            global_mac_key: generate_mac_key(&mut entropy).unwrap(),
+            global_mac_key: generate_mac_key(&mut entropy),
             circuit: circuit.clone(),
             entropy,
             current_phase: ProtocolPhase::PreInit,
@@ -121,12 +121,16 @@ impl Party {
         // send/receive commitment to/from all parties
         let domain_separator = format!("Broadcast-{}", self.id);
         let (commitment, opening) =
-            Commitment::new(value, domain_separator.as_bytes(), &mut self.entropy)?;
+            Commitment::new(value, domain_separator.as_bytes(), &mut self.entropy);
 
         let mut received_commitments = Vec::new();
         // Expect earlier parties' commitments.
         for _i in 0..self.id {
-            let commitment_msg = self.channels.listen.recv().unwrap();
+            let commitment_msg = self
+                .channels
+                .listen
+                .recv()
+                .expect("all parties should be online");
             if let MessagePayload::BroadcastCommitment(received_commitment) = commitment_msg.payload
             {
                 debug_assert_eq!(commitment_msg.to, self.id);
@@ -149,12 +153,16 @@ impl Party {
                     to: i,
                     payload: MessagePayload::BroadcastCommitment(commitment.clone()),
                 })
-                .unwrap();
+                .expect("all parties should be online");
         }
 
         // Wait for the commitments sent by later parties.
         for _i in self.id + 1..self.num_parties {
-            let commitment_msg = self.channels.listen.recv().unwrap();
+            let commitment_msg = self
+                .channels
+                .listen
+                .recv()
+                .expect("all parties should be online");
             if let MessagePayload::BroadcastCommitment(received_commitment) = commitment_msg.payload
             {
                 debug_assert_eq!(commitment_msg.to, self.id);
@@ -164,7 +172,7 @@ impl Party {
             }
         }
 
-        self.sync().unwrap();
+        self.sync().expect("synchronization should have succeeded");
 
         // Send the opening to the broadcast relay.
         self.channels
@@ -174,12 +182,16 @@ impl Party {
                 to: self.id,
                 payload: MessagePayload::BroadcastOpening(opening),
             })
-            .unwrap();
+            .expect("all parties should be online");
 
         // Receive n-1 openings from the broadcast relay.
         let mut received_values = Vec::new();
         for _i in 0..self.num_parties - 1 {
-            let opening_msg = self.channels.listen.recv().unwrap();
+            let opening_msg = self
+                .channels
+                .listen
+                .recv()
+                .expect("all parties should be online");
             if let MessagePayload::BroadcastOpening(ref received_opening) = opening_msg.payload {
                 let received_commitment = &received_commitments
                     .iter()
@@ -193,7 +205,7 @@ impl Party {
             }
         }
 
-        self.sync().unwrap();
+        self.sync().expect("synchronization should have succeeded");
         Ok(received_values)
     }
 
@@ -204,7 +216,10 @@ impl Party {
 
     /// Send a message to the evaluator.
     fn send_to_evaluator(&mut self, message: Message) {
-        self.channels.evaluator.send(message).unwrap();
+        self.channels
+            .evaluator
+            .send(message)
+            .expect("evaluator should be online");
     }
 
     /// Jointly compute `len` bit authentications.
@@ -219,7 +234,11 @@ impl Party {
         let len_unchecked = len + 2 * STATISTICAL_SECURITY * 8;
 
         // 1. Generate `len_unchecked` random local bits for authenticating.
-        let random_bytes = self.entropy.bytes(len_unchecked / 8 + 1)?.to_owned();
+        let random_bytes = self
+            .entropy
+            .bytes(len_unchecked / 8 + 1)
+            .expect("sufficient randomness should have been provided externally")
+            .to_owned();
         let mut bits = Vec::new();
 
         for i in 0..len_unchecked {
@@ -258,7 +277,7 @@ impl Party {
                 computed_keys.push(computed_key)
             }
 
-            self.sync().unwrap();
+            self.sync().expect("synchronization should have succeeded");
 
             self.log(&format!(
                 "Completed a bit authentication [{}/{}]",
@@ -273,7 +292,7 @@ impl Party {
             })
         }
 
-        self.sync().unwrap();
+        self.sync().expect("synchronization should have succeeded");
 
         // 3. Perform the statistical check for malicious security of the
         //    generated authenticated bits. Failure indicates buggy bit
@@ -306,7 +325,7 @@ impl Party {
                 other_x_js.push((party, other_x_j[0] != 0))
             }
 
-            self.sync().unwrap();
+            self.sync().expect("synchronization should have succeeded");
 
             // c) Compute xored keys for other parties
             let mut xored_keys = vec![[0u8; MAC_LENGTH]; self.num_parties];
@@ -342,7 +361,11 @@ impl Party {
             // d) Receive / Send xored MACs
             let mut received_macs = Vec::new();
             for _i in 0..self.id {
-                let mac_message = self.channels.listen.recv().unwrap();
+                let mac_message = self
+                    .channels
+                    .listen
+                    .recv()
+                    .expect("all parties should be online");
                 if let MessagePayload::Mac(mac) = mac_message.payload {
                     debug_assert_eq!(mac_message.to, self.id, "Wrong recipient for MAC message");
                     received_macs.push((mac_message.from, mac));
@@ -363,11 +386,17 @@ impl Party {
                     to: i,
                     payload: MessagePayload::Mac(tag),
                 };
-                self.channels.parties[i].send(mac_message).unwrap();
+                self.channels.parties[i]
+                    .send(mac_message)
+                    .expect("all parties should be online");
             }
 
             for _i in self.id + 1..self.num_parties {
-                let mac_message = self.channels.listen.recv().unwrap();
+                let mac_message = self
+                    .channels
+                    .listen
+                    .recv()
+                    .expect("all parties should be online");
                 if let MessagePayload::Mac(mac) = mac_message.payload {
                     debug_assert_eq!(mac_message.to, self.id, "Wrong recipient for MAC message");
                     received_macs.push((mac_message.from, mac));
@@ -376,7 +405,7 @@ impl Party {
                 }
             }
 
-            self.sync().unwrap();
+            self.sync().expect("synchronization should have succeeded");
 
             // verify MACs
             for (party, mac) in received_macs {
@@ -404,7 +433,11 @@ impl Party {
     /// Jointly sample a random byte string of length `len / 8 + 1`, i.e. enough
     /// to contain `len` random bits.
     fn coin_flip(&mut self, len: usize) -> Result<Vec<u8>, Error> {
-        let my_contribution = self.entropy.bytes(len / 8 + 1)?.to_owned();
+        let my_contribution = self
+            .entropy
+            .bytes(len / 8 + 1)
+            .expect("sufficient randomness should have been provided externally")
+            .to_owned();
         let other_contributions = self.broadcast(&my_contribution)?;
 
         let mut result = my_contribution;
@@ -439,14 +472,16 @@ impl Party {
             crate::primitives::ot::OTSender::init(&mut self.entropy, domain_separator.as_bytes())?;
         receiver_address
             .send(SubMessage::OTCommit(sender_commitment))
-            .unwrap();
+            .expect("all parties should be online");
 
-        let selection_msg = my_inbox.recv().unwrap();
+        let selection_msg = my_inbox.recv().expect("all parties should be online");
         if let SubMessage::OTSelect(selection) = selection_msg {
             let payload =
                 sender_state.send(left_input, right_input, &selection, &mut self.entropy)?;
 
-            receiver_address.send(SubMessage::OTSend(payload)).unwrap();
+            receiver_address
+                .send(SubMessage::OTSend(payload))
+                .expect("all parties should be online");
             Ok(())
         } else {
             Err(Error::UnexpectedSubprotocolMessage(selection_msg))
@@ -464,7 +499,7 @@ impl Party {
         my_inbox: Receiver<SubMessage>,
         sender_id: usize,
     ) -> Result<Vec<u8>, Error> {
-        let ot_commit_msg = my_inbox.recv().unwrap();
+        let ot_commit_msg = my_inbox.recv().expect("all parties should be online");
         if let SubMessage::OTCommit(commitment) = ot_commit_msg {
             let domain_separator = format!("OT-{}-{}", sender_id, self.id);
             let (receiver_state, receiver_selection) = crate::primitives::ot::OTReceiver::select(
@@ -475,8 +510,8 @@ impl Party {
             )?;
             sender_address
                 .send(SubMessage::OTSelect(receiver_selection))
-                .unwrap();
-            let payload_msg = my_inbox.recv().unwrap();
+                .expect("all parties should be online");
+            let payload_msg = my_inbox.recv().expect("all parties should be online");
             if let SubMessage::OTSend(payload) = payload_msg {
                 let result = receiver_state.receive(payload)?;
                 Ok(result)
@@ -501,16 +536,22 @@ impl Party {
             to: i,
             payload: MessagePayload::SubChannel(own_sender, their_receiver),
         };
-        self.channels.parties[i].send(channel_msg).unwrap();
+        self.channels.parties[i]
+            .send(channel_msg)
+            .expect("all parties should be online");
 
         let dst = format!("EQ-{}-{}", self.id, i);
-        let (commitment, opening) = Commitment::new(my_value, dst.as_bytes(), &mut self.entropy)?;
-        their_sender.send(SubMessage::EQCommit(commitment)).unwrap();
+        let (commitment, opening) = Commitment::new(my_value, dst.as_bytes(), &mut self.entropy);
+        their_sender
+            .send(SubMessage::EQCommit(commitment))
+            .expect("all parties should be online");
 
-        let responder_message = own_receiver.recv().unwrap();
+        let responder_message = own_receiver.recv().expect("all parties should be online");
         if let SubMessage::EQResponse(their_value) = responder_message {
             let res = their_value == my_value;
-            their_sender.send(SubMessage::EQOpening(opening)).unwrap();
+            their_sender
+                .send(SubMessage::EQOpening(opening))
+                .expect("all parties should be online");
             Ok(res)
         } else {
             Err(Error::UnexpectedSubprotocolMessage(responder_message))
@@ -522,7 +563,11 @@ impl Party {
     /// The responder has to provide its own input value to the check and will
     /// learn whether that value is the same as the initators.
     fn eq_respond(&mut self, my_value: &[u8]) -> Result<bool, Error> {
-        let channel_msg = self.channels.listen.recv().unwrap();
+        let channel_msg = self
+            .channels
+            .listen
+            .recv()
+            .expect("all parties should be online");
 
         if let Message {
             to,
@@ -531,12 +576,12 @@ impl Party {
         } = channel_msg
         {
             debug_assert_eq!(to, self.id);
-            let commit_message = my_channel.recv().unwrap();
+            let commit_message = my_channel.recv().expect("all parties should be online");
             if let SubMessage::EQCommit(commitment) = commit_message {
                 their_channel
                     .send(SubMessage::EQResponse(my_value.to_vec()))
-                    .unwrap();
-                let opening_message = my_channel.recv().unwrap();
+                    .expect("all parties should be online");
+                let opening_message = my_channel.recv().expect("all parties should be online");
                 if let SubMessage::EQOpening(opening) = opening_message {
                     let their_value = commitment.open(&opening)?;
                     Ok(my_value == their_value)
@@ -588,7 +633,7 @@ impl Party {
                     their_inbox,
                 ),
             })
-            .unwrap();
+            .expect("all parties should be online");
 
         // Join the authenticator's OT session with the local bit value as the
         // receiver choice input.
@@ -611,7 +656,11 @@ impl Party {
     /// their choice bit as an OT receiver with the authenticator acting as OT
     /// sender with inputs `left_value` and `right value`.
     fn provide_bit_authentication(&mut self, bit_holder: usize) -> Result<BitKey, Error> {
-        let request_msg = self.channels.listen.recv().unwrap();
+        let request_msg = self
+            .channels
+            .listen
+            .recv()
+            .expect("all parties should be online");
 
         if let Message {
             to,
@@ -623,7 +672,7 @@ impl Party {
 
             // Compute the MACs for both possible values of the bit holder's
             // bit. Note that `mac_on_false` is simply the fresh local mac_key.
-            let (mac_on_true, mac_on_false) = mac(&true, &self.global_mac_key, &mut self.entropy)?;
+            let (mac_on_true, mac_on_false) = mac(&true, &self.global_mac_key, &mut self.entropy);
 
             // Initiate an OT session with the bit holder giving the two MACs as
             // sender inputs.
@@ -686,7 +735,11 @@ impl Party {
     /// order.
     fn sync(&self) -> Result<(), Error> {
         for _i in (self.id + 1..self.num_parties).rev() {
-            let sync_msg = self.channels.listen.recv().unwrap();
+            let sync_msg = self
+                .channels
+                .listen
+                .recv()
+                .expect("all parties should be online");
             if let MessagePayload::Sync = sync_msg.payload {
                 continue;
             } else {
@@ -704,11 +757,15 @@ impl Party {
                     to: i,
                     payload: MessagePayload::Sync,
                 })
-                .unwrap();
+                .expect("all parties should be online");
         }
 
         for _ in (0..self.id).rev() {
-            let sync_msg = self.channels.listen.recv().unwrap();
+            let sync_msg = self
+                .channels
+                .listen
+                .recv()
+                .expect("all parties should be online");
             if let MessagePayload::Sync = sync_msg.payload {
                 continue;
             } else {

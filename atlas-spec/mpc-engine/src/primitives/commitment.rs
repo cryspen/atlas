@@ -31,19 +31,19 @@ impl Commitment {
     /// Given input value `value`, samples a random bitstring `r` of length
     /// `STATISTICAL_SECURITY` and returns a domain separated commitment
     /// `H(value||r)` as well as the corresponding opening.
-    pub fn new(
-        value: &[u8],
-        domain_separator: &[u8],
-        entropy: &mut Randomness,
-    ) -> Result<(Self, Opening), Error> {
+    pub fn new(value: &[u8], domain_separator: &[u8], entropy: &mut Randomness) -> (Self, Opening) {
         let mut opening = [0u8; STATISTICAL_SECURITY];
-        opening.copy_from_slice(entropy.bytes(STATISTICAL_SECURITY)?);
+        opening.copy_from_slice(
+            entropy
+                .bytes(STATISTICAL_SECURITY)
+                .expect("sufficient randomness should have been provided externally"),
+        );
 
         let mut ikm = Vec::from(value);
         ikm.extend_from_slice(&opening);
 
         let commitment = hkdf_extract(domain_separator, &ikm);
-        Ok((
+        (
             Commitment {
                 commitment,
                 domain_separator: domain_separator.to_vec(),
@@ -52,7 +52,7 @@ impl Commitment {
                 value: value.to_vec(),
                 opening,
             },
-        ))
+        )
     }
 
     /// Open the commitment, returning the committed value, if successful.
@@ -82,9 +82,8 @@ fn simple() {
     let value = b"Hello";
     let another_value = b"Heya";
     let dst = b"Test";
-    let (commitment, opening) = Commitment::new(value, dst, &mut entropy).unwrap();
-    let (_another_commitment, another_opening) =
-        Commitment::new(another_value, dst, &mut entropy).unwrap();
+    let (commitment, opening) = Commitment::new(value, dst, &mut entropy);
+    let (_another_commitment, another_opening) = Commitment::new(another_value, dst, &mut entropy);
     debug_assert!(commitment.open(&opening).is_ok());
     debug_assert!(commitment.open(&another_opening).is_err());
 }

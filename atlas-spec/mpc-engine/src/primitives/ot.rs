@@ -125,8 +125,7 @@ impl OTSender {
 
         let (left_key, right_key) = self.derive_keys(r)?;
 
-        let (left, right) =
-            encrypt_inputs(entropy, left_key, left_input, right_key, right_input).unwrap();
+        let (left, right) = encrypt_inputs(entropy, left_key, left_input, right_key, right_input);
 
         Ok(OTSenderSend { left, right })
     }
@@ -166,10 +165,14 @@ impl OTSender {
         Ok((
             hmac::hkdf_expand(&prk_left, &self.dst, 32)
                 .try_into()
-                .unwrap(),
+                .expect(
+                    "should have received the right number of bytes, because we requested them",
+                ),
             hmac::hkdf_expand(&prk_right, &self.dst, 32)
                 .try_into()
-                .unwrap(),
+                .expect(
+                    "should have received the right number of bytes, because we requested them",
+                ),
         ))
     }
 }
@@ -200,20 +203,24 @@ fn encrypt_inputs(
     left_input: &[u8],
     right_key: [u8; 32],
     right_input: &[u8],
-) -> Result<(OTCiphertext, OTCiphertext), Error> {
+) -> (OTCiphertext, OTCiphertext) {
     let left_iv = entropy
-        .bytes(12)?
+        .bytes(12)
+        .expect("sufficient randomness should have been provided externally")
         .try_into()
-        .expect("should have received 12 bytes of randomness");
+        .expect("should have received the right number of bytes, because we requested them");
+
     let right_iv = entropy
-        .bytes(12)?
+        .bytes(12)
+        .expect("sufficient randomness should have been provided externally")
         .try_into()
-        .expect("should have received 12 bytes of randomness");
+        .expect("should have received the right number of bytes, because we requested them");
+
     let (left_enc, left_tag) =
         hacspec_chacha20poly1305::chacha20_poly1305_encrypt(left_key, left_iv, &[], left_input);
     let (right_enc, right_tag) =
         hacspec_chacha20poly1305::chacha20_poly1305_encrypt(right_key, right_iv, &[], right_input);
-    Ok((
+    (
         OTCiphertext {
             iv: left_iv,
             ciphertext: left_enc,
@@ -224,7 +231,7 @@ fn encrypt_inputs(
             ciphertext: right_enc,
             tag: right_tag,
         },
-    ))
+    )
 }
 
 impl OTReceiver {
@@ -318,7 +325,9 @@ impl OTReceiver {
 
         let prk = hmac::hkdf_extract(&salt, &ikm);
 
-        Ok(hmac::hkdf_expand(&prk, &self.dst, 32).try_into().unwrap())
+        Ok(hmac::hkdf_expand(&prk, &self.dst, 32)
+            .try_into()
+            .expect("should have received the required number of bytes because we requested them"))
     }
 }
 

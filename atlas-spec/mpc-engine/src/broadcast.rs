@@ -49,9 +49,7 @@ impl BroadcastRelay {
                     payload: MessagePayload::BroadcastOpening(_),
                 }) = opening_msg
                 {
-                    if from != to {
-                        panic!("Malformed broadcast opening")
-                    }
+                    debug_assert_eq!(from, to, "malformed broadcast opening");
                     openings.push(opening_msg.expect("already confirmed it's ok"))
                 } else {
                     // One of the parties was dropped, time to shut down.
@@ -71,7 +69,9 @@ impl BroadcastRelay {
                             to: i,
                             payload: MessagePayload::BroadcastOpening(inner_opening.clone()),
                         };
-                        self.parties[i].send(franked_opening).unwrap();
+                        self.parties[i].send(franked_opening).expect(
+                            "all parties should still be online, waiting to receive the opening",
+                        );
                     }
                 }
             }
