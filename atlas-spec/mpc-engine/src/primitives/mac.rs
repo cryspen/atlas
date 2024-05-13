@@ -31,7 +31,7 @@ pub fn mac(
 
     let mut mac = [0u8; MAC_LENGTH];
     for idx in 0..mac.len() {
-        mac[idx] = key[idx] ^ (if *bit { global_key[idx] } else { 0x00 });
+        mac[idx] = key[idx] ^ (*bit as u8) * global_key[idx];
     }
 
     Ok((mac, key))
@@ -40,7 +40,7 @@ pub fn mac(
 /// Verify a MAC on a given bit.
 pub fn verify_mac(bit: &bool, mac: &Mac, key: &MacKey, global_key: &MacKey) -> bool {
     for idx in 0..mac.len() {
-        let recomputed = key[idx] ^ (if *bit { global_key[idx] } else { 0x00 });
+        let recomputed = key[idx] ^ (*bit as u8) * global_key[idx];
         if mac[idx] != recomputed {
             return false;
         }
