@@ -62,6 +62,9 @@ pub const COMPUTATIONAL_SECURITY: usize = 128 / 8;
 /// The statistical security parameter, in bytes.
 pub const STATISTICAL_SECURITY: usize = 128 / 8;
 
+// NOTE: The `broadcast` module implements a broadcast utility via a trusted
+// third-party message relay, in lieu of a secure peer-to-peer broadcast
+// sub-protocol.
 pub mod broadcast;
 pub mod circuit;
 pub mod messages;
