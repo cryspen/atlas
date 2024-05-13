@@ -8,6 +8,17 @@ use messages::{Message, SubMessage};
 
 #[derive(Debug)]
 /// An error type.
+///
+/// We generally expect to definitely panic in two cases:
+/// * Insufficient randomness was provided for a given operation
+/// * A channel handle was prematurely dropped (this indicates a bug in the
+///   specification)
+///
+/// In other cases, the errors might be the result of a buggy protocol
+/// participant, or a detected attempt at cheating. These cases should be
+/// handled by the surrounding application in order to gracefully shut down or,
+/// if possible remove the cheater in a secure way, so these errors should be
+/// handled there.
 pub enum Error {
     /// More random bytes have been asked for than are available.
     InsufficientRandomness,
