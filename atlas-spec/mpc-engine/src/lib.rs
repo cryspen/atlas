@@ -20,8 +20,6 @@ use messages::{Message, SubMessage};
 /// if possible remove the cheater in a secure way, so these errors should be
 /// handled there.
 pub enum Error {
-    /// More random bytes have been asked for than are available.
-    InsufficientRandomness,
     /// An error during circuit processing
     Circuit(CircuitError),
     /// A specific subprotocol message was expected but a different one was
@@ -40,22 +38,9 @@ pub enum Error {
     OtherError,
 }
 
-impl From<hacspec_lib::Error> for Error {
-    fn from(value: hacspec_lib::Error) -> Self {
-        match value {
-            hacspec_lib::Error::InsufficientRandomness => Self::InsufficientRandomness,
-        }
-    }
-}
-
 impl From<p256::Error> for Error {
-    fn from(value: p256::Error) -> Self {
-        match value {
-            p256::Error::InvalidAddition
-            | p256::Error::DeserializeError
-            | p256::Error::PointAtInfinity => Self::CurveError,
-            p256::Error::SamplingError => Self::InsufficientRandomness,
-        }
+    fn from(_value: p256::Error) -> Self {
+        Self::CurveError
     }
 }
 
