@@ -5,6 +5,7 @@
 
 use circuit::CircuitError;
 use messages::{Message, SubMessage};
+use primitives::commitment::COMMITMENT_LENGTH;
 
 #[derive(Debug)]
 /// An error type.
@@ -29,7 +30,11 @@ pub enum Error {
     /// received
     UnexpectedMessage(Message),
     /// Failed to open a commitment
-    BadCommitment(Vec<u8>, Vec<u8>),
+    BadCommitment([u8; COMMITMENT_LENGTH], [u8; COMMITMENT_LENGTH]),
+    /// Failed to deserialize an authenticated bit
+    InvalidSerialization,
+    /// A malicious security check has failed
+    CheckFailed,
     /// Error from the curve implementation
     CurveError,
     /// Error from the AEAD
