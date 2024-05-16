@@ -8,7 +8,7 @@ use crate::{
     messages::{Message, MessagePayload, SubMessage},
     primitives::{
         auth_share::{AuthBit, Bit, BitID, BitKey},
-        commitment::Commitment,
+        commitment::{Commitment, Opening},
         mac::{generate_mac_key, mac, verify_mac, Mac, MacKey, MAC_LENGTH},
     },
     utils::ith_bit,
@@ -207,6 +207,60 @@ impl Party {
 
         self.sync().expect("synchronization should have succeeded");
         Ok(received_values)
+    }
+
+    /// Broadcast three commitments for the share authentication malicious security check.
+    fn broadcast_commitments(
+        &mut self,
+        commitment_0: Commitment,
+        commitment_1: Commitment,
+        commitment_macs: Commitment,
+    ) -> Result<Vec<(usize, Commitment, Commitment, Commitment)>, Error> {
+        let mut commitment_bytes = Vec::new();
+        commitment_bytes.extend_from_slice(&commitment_0.as_bytes());
+        commitment_bytes.extend_from_slice(&commitment_1.as_bytes());
+        commitment_bytes.extend_from_slice(&commitment_macs.as_bytes());
+
+        let other_commitment_bytes = self.broadcast(&commitment_bytes)?;
+        let mut results = Vec::new();
+        for j in 0..self.num_parties {
+            if j == self.id {
+                continue;
+            }
+            let (_party, their_commitment_bytes) = other_commitment_bytes
+                .iter()
+                .find(|(party, _)| *party == j)
+                .expect("should have received commitments from every other party");
+            let (their_commitment_0, rest) = Commitment::from_bytes(their_commitment_bytes)?;
+            let (their_commitment_1, rest) = Commitment::from_bytes(&rest)?;
+            let (their_commitment_macs, rest) = Commitment::from_bytes(&rest)?;
+            debug_assert!(rest.is_empty());
+            results.push((
+                j,
+                their_commitment_0,
+                their_commitment_1,
+                their_commitment_macs,
+            ))
+        }
+
+        Ok(results)
+    }
+
+    /// Broadcast opening values for the share authentication malicious security check.
+    fn broadcast_opening(&mut self, opening: Opening) -> Result<Vec<(usize, Opening)>, Error> {
+        let other_opening_bytes = self.broadcast(&opening.as_bytes())?;
+        let mut results = Vec::new();
+        for j in 0..self.num_parties {
+            if j == self.id {
+                continue;
+            }
+            let (_party, their_opening_bytes) = other_opening_bytes
+                .iter()
+                .find(|(party, _)| *party == j)
+                .expect("should have received openings from all other parties");
+            results.push((j, Opening::from_bytes(their_opening_bytes)?));
+        }
+        Ok(results)
     }
 
     /// Return `true`, if the party is the designated circuit evaluator.
