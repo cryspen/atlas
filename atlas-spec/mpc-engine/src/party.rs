@@ -399,19 +399,6 @@ impl Party {
                 }
             }
 
-            for (bit_holder, xored_key) in xored_keys.iter().enumerate() {
-                self.log(&format!(
-                    "Computed local key for party {}: {:?}",
-                    bit_holder, xored_key
-                ))
-            }
-
-            for (key_holder, xored_tag) in xored_tags.iter().enumerate() {
-                self.log(&format!(
-                    "Computed xored MAC for party {}: {:?}",
-                    key_holder, xored_tag
-                ))
-            }
             // d) Receive / Send xored MACs
             let mut received_macs = Vec::new();
             for _i in 0..self.id {
