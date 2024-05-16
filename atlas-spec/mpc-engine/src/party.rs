@@ -16,6 +16,11 @@ use crate::{
 };
 use std::sync::mpsc::{self, Receiver, Sender};
 
+/// Additional bit authentications computed for malicious security checks.
+const SEC_MARGIN_BIT_AUTH: usize = 2 * STATISTICAL_SECURITY * 8;
+/// Additional cost of authenticating a number of bits into authenticated shares.
+const SEC_MARGIN_SHARE_AUTH: usize = STATISTICAL_SECURITY * 8;
+
 #[derive(Debug)]
 /// A type for tracking the current protocol phase.
 pub enum ProtocolPhase {
@@ -58,6 +63,8 @@ pub struct Party {
     circuit: Circuit,
     /// A local source of random bits and bytes
     entropy: Randomness,
+    /// Pool of pre-computed authenticated bits
+    abit_pool: Vec<AuthBit>,
     /// Tracks the current phase of protocol execution
     current_phase: ProtocolPhase,
     /// Whether to log events
@@ -86,6 +93,7 @@ impl Party {
             global_mac_key: generate_mac_key(&mut entropy),
             circuit: circuit.clone(),
             entropy,
+            abit_pool: Vec::new(),
             current_phase: ProtocolPhase::PreInit,
             log_counter: 0,
             enable_logging: logging,
@@ -278,14 +286,15 @@ impl Party {
 
     /// Jointly compute `len` bit authentications.
     ///
-    /// Internally generates `len + 2 * STATISTICAL_SECURITY * 8` bit
+    /// Internally generates `len +  SEC_MARGIN_BIT_AUTH` bit
     /// authentications for each other party, of which all but `len` are
     /// discarded after performing statistical checks for malicious security.
     /// After this point the guarantee is that a pair-wise consistent
     /// `global_mac_key` was used in all bit-authentications between two
     /// parties.
-    fn multiparty_authenticate(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
-        let len_unchecked = len + 2 * STATISTICAL_SECURITY * 8;
+    fn precompute_abits(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
+        self.log(&format!("{len} bit authentications requested, require an additional {SEC_MARGIN_BIT_AUTH} bit authentications for malicious security."));
+        let len_unchecked = len + SEC_MARGIN_BIT_AUTH;
 
         // 1. Generate `len_unchecked` random local bits for authenticating.
         let random_bytes = self
@@ -360,7 +369,7 @@ impl Party {
 
     /// Perform the active_security check for bit authentication
     fn bit_auth_check(&mut self, auth_bits: &[AuthBit]) -> Result<(), Error> {
-        for j in 0..2 * STATISTICAL_SECURITY * 8 {
+        for j in 0..SEC_MARGIN_BIT_AUTH {
             // a) Sample `ell'` random bit.s
             let r = self.coin_flip(auth_bits.len())?;
 
@@ -465,7 +474,7 @@ impl Party {
             self.log(&format!(
                 "Completed bit auth check [{}/{}]",
                 j + 1,
-                2 * STATISTICAL_SECURITY * 8
+                SEC_MARGIN_BIT_AUTH
             ));
         }
         Ok(())
@@ -757,7 +766,18 @@ impl Party {
 
     /// Run the MPC protocol, returning the parties output, if any.
     pub fn run(&mut self) -> Result<Option<Vec<bool>>, Error> {
-        let _auth_bits = self.multiparty_authenticate(1)?;
+        let num_auth_shares = 1;
+        self.log(&format!(
+            "Want to generate {num_auth_shares} authenticated share(s)"
+        ));
+        let pool_depth = num_auth_shares + SEC_MARGIN_SHARE_AUTH;
+        self.log(&format!(
+            "Pre-computing {num_auth_shares} (+ {SEC_MARGIN_SHARE_AUTH} for share security) bit authentication(s)..."
+        ));
+
+        // We want to compute 1 authenticated share, so need `1 + SEC_MARGIN_SHARE_AUTH` bits in the pool.
+        self.abit_pool = self.precompute_abits(pool_depth)?;
+
 
         Ok(None)
     }
