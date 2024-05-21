@@ -5,6 +5,7 @@
 
 use circuit::CircuitError;
 use messages::{Message, SubMessage};
+use primitives::commitment::COMMITMENT_LENGTH;
 
 #[derive(Debug)]
 /// An error type.
@@ -29,7 +30,11 @@ pub enum Error {
     /// received
     UnexpectedMessage(Message),
     /// Failed to open a commitment
-    BadCommitment(Vec<u8>, Vec<u8>),
+    BadCommitment([u8; COMMITMENT_LENGTH], [u8; COMMITMENT_LENGTH]),
+    /// Failed to deserialize an authenticated bit
+    InvalidSerialization,
+    /// A malicious security check has failed
+    CheckFailed,
     /// Error from the curve implementation
     CurveError,
     /// Error from the AEAD
@@ -56,7 +61,7 @@ impl From<hacspec_chacha20poly1305::Error> for Error {
 pub const COMPUTATIONAL_SECURITY: usize = 128 / 8;
 
 /// The statistical security parameter, in bytes.
-pub const STATISTICAL_SECURITY: usize = 128 / 8;
+pub const STATISTICAL_SECURITY: usize = 5; // for 5 * 8 = 40 bits of statistical security
 
 // NOTE: The `broadcast` module implements a broadcast utility via a trusted
 // third-party message relay, in lieu of a secure peer-to-peer broadcast
