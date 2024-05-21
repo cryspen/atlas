@@ -1,22 +1,24 @@
 //! This module defines the interface for share authentication.
+use serde::{Deserialize, Serialize};
+
 use crate::{primitives::mac::MAC_LENGTH, Error};
 
 use super::mac::{Mac, MacKey};
 
 /// A bit held by a party with a given ID.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bit {
     pub(crate) id: BitID,
     pub(crate) value: bool,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 /// A bit identifier.
 ///
 /// This is unique per party, not globally, so if referring bits held by another
 /// party, their party ID is also required to disambiguate.
 pub struct BitID(pub(crate) usize);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 /// A bit authenticated between two parties.
 pub struct AuthBit {
     pub(crate) bit: Bit,
@@ -61,7 +63,7 @@ impl AuthBit {
 }
 
 /// The key to authenticate a two-party authenticated bit.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitKey {
     pub(crate) holder_bit_id: BitID,
     pub(crate) bit_holder: usize,

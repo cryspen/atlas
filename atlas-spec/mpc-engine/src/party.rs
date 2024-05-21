@@ -916,23 +916,66 @@ impl Party {
     }
 
     /// Run the MPC protocol, returning the parties output, if any.
-    pub fn run(&mut self) -> Result<Option<Vec<bool>>, Error> {
-        let num_auth_shares = 1;
-        self.log(&format!(
-            "Want to generate {num_auth_shares} authenticated share(s)"
-        ));
-        let pool_depth = num_auth_shares + SEC_MARGIN_SHARE_AUTH;
-        self.log(&format!(
-            "Pre-computing {num_auth_shares} (+ {SEC_MARGIN_SHARE_AUTH} for share security) bit authentication(s)..."
-        ));
+    pub fn run(&mut self, precompute: Option<usize>) -> Result<Option<Vec<bool>>, Error> {
+        use std::io::Write;
+        if let Some(target_number) = precompute {
+            self.log(&format!(
+                "Pre-computing {target_number} bit authentication(s)..."
+            ));
 
-        // We want to compute 1 authenticated share, so need `1 + SEC_MARGIN_SHARE_AUTH` bits in the pool.
-        self.abit_pool = self.precompute_abits(pool_depth)?;
+            // We want to compute 1 authenticated share, so need `1 + SEC_MARGIN_SHARE_AUTH` bits in the pool.
+            self.abit_pool = self.precompute_abits(target_number)?;
 
-        self.log("Starting share authentication");
-        let _shares = self.random_authenticated_shares(num_auth_shares)?;
+            let file = std::fs::File::create(format!("{}.triples", self.id))
+                .map_err(|_| Error::OtherError)?;
+            let mut writer = std::io::BufWriter::new(file);
+            serde_json::to_writer(&mut writer, &(self.global_mac_key, &self.abit_pool))
+                .map_err(|_| Error::OtherError)?;
+            writer.flush().unwrap();
+            Ok(None)
+        } else {
+            let num_auth_shares = 1;
+            self.log(&format!(
+                "Want to generate {num_auth_shares} authenticated share(s)"
+            ));
+            self.log("Trying to read authenticated bits from file");
+            let file = std::fs::File::open(format!("{}.triples", self.id));
+            if let Ok(f) = file {
+                (self.global_mac_key, self.abit_pool) =
+                    serde_json::from_reader(f).map_err(|_| Error::OtherError)?;
+                self.log(&format!(
+                    "Read {} authenticated bits from pool",
+                    self.abit_pool.len()
+                ));
 
-        Ok(None)
+                let max_id = self
+                    .abit_pool
+                    .iter()
+                    .max_by_key(|abit| abit.bit.id.0)
+                    .map(|abit| abit.bit.id.0)
+                    .unwrap_or(0);
+                self.bit_counter = max_id;
+
+                if num_auth_shares + SEC_MARGIN_SHARE_AUTH > self.abit_pool.len() {
+                    self.log(&format!(
+                        "Insufficient precomputation (by {})",
+                        num_auth_shares + SEC_MARGIN_SHARE_AUTH - self.abit_pool.len()
+                    ));
+                    return Ok(None);
+                }
+            } else {
+                self.log("Could not read pre-computed bit authentications from file.");
+            }
+
+            self.log("Starting share authentication");
+            let _shares = self.random_authenticated_shares(num_auth_shares)?;
+
+            //let bucket_size = (STATISTICAL_SECURITY as u32 / self.circuit.num_gates().ilog2()) as usize;
+            // let bucket_size = 3;
+            // self.log("Computing AND triples");
+            //let _and_shares = self.random_and_shares(2, bucket_size)?;
+            Ok(None)
+        }
     }
 
     /// Synchronise parties.

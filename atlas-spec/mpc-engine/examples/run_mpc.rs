@@ -36,13 +36,13 @@ fn main() {
         let c = circuit.clone();
         let party_join_handle = thread::spawn(move || {
             let mut rng = rand::thread_rng();
-            let mut bytes = vec![0u8; u16::MAX.try_into().unwrap()];
+            let mut bytes = vec![0u8; 100 * (u16::MAX as usize)];
             rng.fill_bytes(&mut bytes);
             let rng = Randomness::new(bytes);
             let log_enabled = channel_config.id == 1;
             let mut p = mpc_engine::party::Party::new(channel_config, &c, log_enabled, rng);
 
-            let _ = p.run();
+            let _ = p.run(None);
         });
         party_join_handles.push(party_join_handle);
     }
