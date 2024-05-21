@@ -45,6 +45,8 @@ pub enum MessagePayload {
     SubChannel(Sender<SubMessage>, Receiver<SubMessage>),
     /// A bit mac for validity checking
     Mac(Mac),
+    /// Values sent over to other parties in the half-AND protocol
+    HalfAndHashes(bool, bool),
     /// A garbled AND gate, to be sent to the evaluator
     GarbledAnd(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>),
     /// A MAC on a wire mask share

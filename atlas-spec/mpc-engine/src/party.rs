@@ -2,6 +2,7 @@
 //! phases of the protocol.
 
 use hacspec_lib::Randomness;
+use hmac::hkdf_extract;
 
 use crate::{
     circuit::Circuit,
@@ -367,6 +368,7 @@ impl Party {
         Ok(authenticated_bits[0..len].to_vec())
     }
 
+    /// Compute `len` authenticated bit shares.
     fn random_authenticated_shares(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
         let len_unchecked = len + SEC_MARGIN_SHARE_AUTH;
         let authenticated_bits: Vec<AuthBit> = self.abit_pool.drain(..len_unchecked).collect();
@@ -516,6 +518,129 @@ impl Party {
         }
 
         Ok(authenticated_bits[0..len].to_vec())
+    }
+
+    /// Compute unauthenticated cross terms in an AND triple output share.
+    fn half_and(&mut self, x: &AuthBit, y: &AuthBit) -> Result<bool, Error> {
+        fn half_and_hash(dst: &[u8], input: &[u8]) -> [u8; 32] {
+            let mut hash = hkdf_extract(dst, input);
+            hash.truncate(32);
+            hash.try_into().unwrap()
+        }
+
+        /// Obtain the least significant bit of some hash output
+        fn lsb(input: &[u8]) -> bool {
+            (input[input.len() - 1] & 1) != 0
+        }
+
+        let domain_separator = format!("half-and-hash-{}", self.id);
+
+        let mut t_js = vec![false; self.num_parties];
+        let mut s_js = vec![false; self.num_parties];
+
+        // receive earlier hashes
+        for _j in 0..self.id {
+            let hashes_message = self.channels.listen.recv().unwrap();
+            if let Message {
+                from,
+                to,
+                payload: MessagePayload::HalfAndHashes(hash_j_0, hash_j_1),
+            } = hashes_message
+            {
+                debug_assert_eq!(to, self.id);
+                let their_mac = x
+                    .macs
+                    .iter()
+                    .find(|(party, _mac)| *party == from)
+                    .expect("should have MACs from all other parties")
+                    .1;
+                let hash_lsb = lsb(&half_and_hash(domain_separator.as_bytes(), &their_mac));
+                let t_j = if x.bit.value {
+                    hash_j_1 ^ hash_lsb
+                } else {
+                    hash_j_0 ^ hash_lsb
+                };
+                t_js[from] = t_j;
+            } else {
+                return Err(Error::UnexpectedMessage(hashes_message));
+            }
+        }
+
+        for j in 0..self.num_parties {
+            if j == self.id {
+                continue;
+            }
+            let s_j = self
+                .entropy
+                .bit()
+                .expect("sufficient randomness should have been provided externally");
+            s_js[j] = s_j;
+
+            // K_i[x^j]
+            let input_0 = x
+                .mac_keys
+                .iter()
+                .find(|key| key.bit_holder == j)
+                .expect("should have keys for all other parties")
+                .mac_key;
+
+            // K_i[x^j] xor Delta_i
+            let mut input_1 = [0u8; MAC_LENGTH];
+            for byte in 0..MAC_LENGTH {
+                input_1[byte] = input_0[byte] ^ self.global_mac_key[byte];
+            }
+
+            let h_0 = lsb(&half_and_hash(domain_separator.as_bytes(), &input_0)) ^ s_j;
+            let h_1 =
+                lsb(&half_and_hash(domain_separator.as_bytes(), &input_1)) ^ s_j ^ y.bit.value;
+            self.channels.parties[j]
+                .send(Message {
+                    from: self.id,
+                    to: j,
+                    payload: MessagePayload::HalfAndHashes(h_0, h_1),
+                })
+                .unwrap();
+        }
+
+        // receive later hashes
+        for _j in self.id + 1..self.num_parties {
+            let hashes_message = self.channels.listen.recv().unwrap();
+            if let Message {
+                from,
+                to,
+                payload: MessagePayload::HalfAndHashes(hash_j_0, hash_j_1),
+            } = hashes_message
+            {
+                debug_assert_eq!(to, self.id);
+                let their_mac = x
+                    .macs
+                    .iter()
+                    .find(|(party, _mac)| *party == from)
+                    .expect("should have MACs from all other parties")
+                    .1;
+                let hash_lsb = lsb(&half_and_hash(domain_separator.as_bytes(), &their_mac));
+                let t_j = if x.bit.value {
+                    hash_j_1 ^ hash_lsb
+                } else {
+                    hash_j_0 ^ hash_lsb
+                };
+                t_js[from] = t_j;
+            } else {
+                return Err(Error::UnexpectedMessage(hashes_message));
+            }
+        }
+
+        self.sync().expect("sync should always succeed");
+
+        let mut v_i = false;
+        for j in 0..self.num_parties {
+            if j == self.id {
+                continue;
+            }
+            v_i ^= t_js[j] ^ s_js[j];
+        }
+
+        Ok(v_i)
     }
 
     /// Perform the active_security check for bit authentication
