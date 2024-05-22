@@ -969,7 +969,20 @@ impl Party {
         // get `len * BUCKET_SIZE` leaky ANDs
         let leaky_ands = self.random_leaky_and(len * bucket_size)?;
 
-        // randomly partition them: TODO
+        // Shuffle the list.
+        // Using random u128 bit indices for shuffling should prevent collisions
+        // for at least 2^40 triples except with probability 2^-40.
+        let random_indices = self.coin_flip(leaky_ands.len() * 16)?;
+        let mut indexed_ands: Vec<(u128, (AuthBit, AuthBit, AuthBit))> = random_indices
+            .chunks_exact(16)
+            .map(|chunk| {
+                u128::from_be_bytes(chunk.try_into().expect("chunks are exactly the right size"))
+            })
+            .zip(leaky_ands)
+            .collect();
+        indexed_ands.sort_by_key(|(index, _)| *index);
+        let leaky_ands: Vec<&(AuthBit, AuthBit, AuthBit)> =
+            indexed_ands.iter().map(|(_, triple)| triple).collect();
 
         // combine all buckets to single ANDs
         let mut results = Vec::new();
