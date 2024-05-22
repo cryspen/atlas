@@ -1,6 +1,7 @@
 //! This module defines an information theoretic MAC for authenticating bits.
 
 use hacspec_lib::Randomness;
+use hmac::hkdf_extract;
 
 use crate::COMPUTATIONAL_SECURITY;
 
@@ -11,6 +12,24 @@ pub const MAC_LENGTH: usize = COMPUTATIONAL_SECURITY;
 pub type Mac = [u8; MAC_LENGTH];
 /// A MAC key for authenticating a bit to another party.
 pub type MacKey = [u8; MAC_LENGTH];
+
+/// Hash the given input to the width of a MAC.
+///
+/// Instantiates a Random Oracle.
+pub fn hash_to_mac_width(dst: &[u8], input: &[u8]) -> [u8; 16] {
+    let mut hash = hkdf_extract(dst, input);
+    hash.truncate(16);
+    hash.try_into().unwrap()
+}
+
+/// XOR of two MAC-width byte arrays.
+pub fn xor_mac_width(left: &Mac, right: &Mac) -> Mac {
+    let mut result = [0u8; MAC_LENGTH];
+    for (index, byte) in result.iter_mut().enumerate() {
+        *byte = left[index] ^ right[index];
+    }
+    result
+}
 
 /// Generate a fresh MAC key.
 pub fn generate_mac_key(entropy: &mut Randomness) -> MacKey {
