@@ -839,6 +839,160 @@ impl Party {
         Ok(results)
     }
 
+    /// Verifiably open an authenticated bit, revealing its value to all parties.
+    fn open_bit(&mut self, bit: &AuthBit) -> Result<Vec<(usize, bool)>, Error> {
+        let mut results = Vec::new();
+
+        // receive earlier parties MACs and verify them
+        for _j in 0..self.id {
+            let reveal_message = self.channels.listen.recv().unwrap();
+            if let Message {
+                from,
+                to,
+                payload: MessagePayload::BitReveal(value, mac),
+            } = reveal_message
+            {
+                debug_assert_eq!(self.id, to);
+                let my_key = bit
+                    .mac_keys
+                    .iter()
+                    .find(|k| k.bit_holder == from)
+                    .expect("should have a key for every other party");
+                if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
+                    return Err(Error::CheckFailed);
+                }
+                results.push((from, value));
+            } else {
+                return Err(Error::UnexpectedMessage(reveal_message));
+            }
+        }
+
+        // send out own MACs
+        for j in 0..self.num_parties {
+            if j == self.id {
+                continue;
+            }
+            let (_, their_mac) = bit
+                .macs
+                .iter()
+                .find(|(maccing_party, _mac)| j == *maccing_party)
+                .expect("should have MACs from all other parties");
+            self.channels.parties[j]
+                .send(Message {
+                    from: self.id,
+                    to: j,
+                    payload: MessagePayload::BitReveal(bit.bit.value, their_mac.clone()),
+                })
+                .unwrap();
+        }
+
+        // receive later parties MACs and verify them
+        for _j in self.id + 1..self.num_parties {
+            let reveal_message = self.channels.listen.recv().unwrap();
+            if let Message {
+                from,
+                to,
+                payload: MessagePayload::BitReveal(value, mac),
+            } = reveal_message
+            {
+                debug_assert_eq!(self.id, to);
+                let my_key = bit
+                    .mac_keys
+                    .iter()
+                    .find(|k| k.bit_holder == from)
+                    .expect("should have a key for every other party");
+                if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
+                    return Err(Error::CheckFailed);
+                }
+                results.push((from, value));
+            } else {
+                return Err(Error::UnexpectedMessage(reveal_message));
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Locally compute the XOR of two authenticated bits, which will itself be
+    /// authenticated already.
+    fn xor_abits(&mut self, a: &AuthBit, b: &AuthBit) -> AuthBit {
+        let mut macs = Vec::new();
+        for (maccing_party, mac) in a.macs.iter() {
+            let mut xored_mac = [0u8; MAC_LENGTH];
+            let other_mac = b
+                .macs
+                .iter()
+                .find(|(party, _)| *party == *maccing_party)
+                .expect("should have MACs from all other parties")
+                .1;
+            for byte in 0..MAC_LENGTH {
+                xored_mac[byte] = mac[byte] ^ other_mac[byte];
+            }
+            macs.push((*maccing_party, xored_mac))
+        }
+
+        let mut mac_keys = Vec::new();
+        for key in a.mac_keys.iter() {
+            let mut xored_key = [0u8; MAC_LENGTH];
+            let other_key = b
+                .mac_keys
+                .iter()
+                .find(|other_key| key.bit_holder == other_key.bit_holder)
+                .expect("should have two MAC keys for every other party")
+                .mac_key;
+            for byte in 0..MAC_LENGTH {
+                xored_key[byte] = key.mac_key[byte] ^ other_key[byte];
+            }
+            mac_keys.push(BitKey {
+                holder_bit_id: BitID(0), // XXX: We can't know their bit ID here, is it necessary for anything though?
+                bit_holder: key.bit_holder,
+                mac_key: xored_key,
+            })
+        }
+
+        AuthBit {
+            bit: Bit {
+                id: self.fresh_bit_id(),
+                value: a.bit.value ^ b.bit.value,
+            },
+            macs,
+            mac_keys,
+        }
+    }
+
+    /// Build oblivious AND triples by combining leaky AND triples.
+    fn random_and_shares(
+        &mut self,
+        len: usize,
+        bucket_size: usize,
+    ) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
+        // get `len * BUCKET_SIZE` leaky ANDs
+        let leaky_ands = self.random_leaky_and(len * bucket_size)?;
+
+        // randomly partition them: TODO
+
+        // combine all buckets to single ANDs
+        let mut results = Vec::new();
+        for bucket in leaky_ands.chunks_exact(bucket_size) {
+            let (mut x, mut y, mut z) = bucket[0].clone();
+
+            for (next_x, next_y, next_z) in bucket[1..].iter() {
+                let d = self.xor_abits(&y, next_y);
+                self.open_bit(&d)?;
+
+                x = self.xor_abits(&x, next_x);
+                y = next_y.clone();
+                z = self.xor_abits(&z, next_z);
+                if d.bit.value {
+                    z = self.xor_abits(&z, next_x);
+                }
+            }
+            results.push((x, y, z));
+        }
+
+        Ok(results)
+    }
+
     /// Perform the active_security check for bit authentication
     fn bit_auth_check(&mut self, auth_bits: &[AuthBit]) -> Result<(), Error> {
         for j in 0..SEC_MARGIN_BIT_AUTH {

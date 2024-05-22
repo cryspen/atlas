@@ -49,6 +49,8 @@ pub enum MessagePayload {
     HalfAndHashes(bool, bool),
     /// Value exchanged during leaky AND-triple check
     LeakyAndU(Mac),
+    /// A two-party bit reveal message
+    BitReveal(bool, Mac),
     /// A garbled AND gate, to be sent to the evaluator
     GarbledAnd(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>),
     /// A MAC on a wire mask share
