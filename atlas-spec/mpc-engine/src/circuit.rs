@@ -65,6 +65,8 @@
 //!
 //!
 
+use crate::{party::SEC_MARGIN_SHARE_AUTH, STATISTICAL_SECURITY};
+
 /// Data type to uniquely identify gate output wires.
 pub type WireIndex = usize;
 
@@ -303,5 +305,44 @@ impl Circuit {
             output_packed.push(wire_evaluations[*output_gate]);
         }
         Ok(output_packed)
+    }
+
+    /// Returns the number of gates (i.e. the size) of the circuit.
+    pub fn num_gates(&self) -> usize {
+        self.gates.len()
+    }
+
+    /// Computes the required bucket size for leaky AND triple combination.
+    pub fn and_bucket_size(&self) -> usize {
+        let and_bucket_size = (STATISTICAL_SECURITY as u32 / self.num_gates().ilog2()) as usize;
+        and_bucket_size
+    }
+
+    /// Returns the number of AND gates in the circuit.
+    pub fn num_and_gates(&self) -> usize {
+        self.gates
+            .iter()
+            .filter(|gate| matches!(gate, WiredGate::And(_, _)))
+            .count()
+    }
+    /// Computes the total number of share authentications that will be necessary
+    /// to evaluate this circuit using the MPC protocol, excluding malicious security overhead.
+    pub fn share_authentication_cost(&self) -> usize {
+        let mut result: usize = 0;
+
+        for party_input_width in self.input_widths.iter() {
+            result += party_input_width;
+        }
+
+        let num_and_gates = self
+            .gates
+            .iter()
+            .filter(|gate| matches!(gate, WiredGate::And(_, _)))
+            .count();
+
+        result += num_and_gates;
+        result += num_and_gates * 3 * self.and_bucket_size();
+
+        result
     }
 }
