@@ -664,17 +664,16 @@ impl Party {
                     .expect("should have received e_j from every other party j");
                 let correction_necessary = other_e_j[0] != 0;
                 if correction_necessary {
-                    for byte in 0..MAC_LENGTH {
-                        key.mac_key[byte] ^= self.global_mac_key[byte];
-                    }
+                    key.mac_key = xor_mac_width(&key.mac_key, &self.global_mac_key);
                 }
             }
             r.bit.value = z_i_value;
             let z = r;
 
             self.sync().expect("sync should always succeed");
+
             // Triple Check
-            // 1. compute Phi
+            // 4. compute Phi
             let mut phi = [0u8; MAC_LENGTH];
             for key in y.mac_keys.iter() {
                 let (_, their_mac) = y
@@ -682,21 +681,18 @@ impl Party {
                     .iter()
                     .find(|(maccing_party, _)| *maccing_party == key.bit_holder)
                     .unwrap();
-                for byte in 0..MAC_LENGTH {
-                    phi[byte] ^= key.mac_key[byte] ^ their_mac[byte];
-                }
+                let intermediate_xor = xor_mac_width(&key.mac_key, their_mac);
+                phi = xor_mac_width(&phi, &intermediate_xor);
             }
 
             if y.bit.value {
-                for byte in 0..MAC_LENGTH {
-                    phi[byte] ^= self.global_mac_key[byte];
-                }
+                phi = xor_mac_width(&phi, &self.global_mac_key);
             }
 
-            // 2. receive earlier Us
+            // 5. receive earlier Us
             let mut mac_phis = Vec::new();
             let mut key_phis = Vec::new();
-
+            let domain_separator_triple = &format!("triple-check");
             for _j in 0..self.id {
                 let u_message = self.channels.listen.recv().unwrap();
                 if let Message {
@@ -707,13 +703,13 @@ impl Party {
                 {
                     debug_assert_eq!(self.id, to);
                     // compute M_phi
-                    let domain_separator_mac = &format!("mac-phi-{}-{}", self.id, from);
                     let (_, their_mac) = x
                         .macs
                         .iter()
                         .find(|(maccing_party, _)| *maccing_party == from)
                         .expect("should have MACs from all other parties");
-                    let mut mac_phi = hash_to_mac_width(domain_separator_mac.as_bytes(), their_mac);
+                    let mut mac_phi =
+                        hash_to_mac_width(domain_separator_triple.as_bytes(), their_mac);
                     if x.bit.value {
                         for byte in 0..MAC_LENGTH {
                             mac_phi[byte] ^= u[byte];
@@ -725,26 +721,24 @@ impl Party {
                 }
             }
 
-            // 2. send out own Us
+            // 5. send out own Us
             for j in 0..self.num_parties {
                 if j == self.id {
                     continue;
                 }
                 // compute k_phi
-                let domain_separator_key = &format!("key-phi-{}-{}", self.id, j);
                 let my_key = x
                     .mac_keys
                     .iter()
                     .find(|k| k.bit_holder == j)
                     .expect("should have keys for all other parties' bits");
 
-                let k_phi = hash_to_mac_width(domain_separator_key.as_bytes(), &my_key.mac_key);
+                let k_phi = hash_to_mac_width(domain_separator_triple.as_bytes(), &my_key.mac_key);
                 key_phis.push((j, k_phi));
 
                 // compute U_j
-                let domain_separator_u = &format!("u-phi-{}-{}", self.id, j);
                 let u_j_hash = hash_to_mac_width(
-                    domain_separator_u.as_bytes(),
+                    domain_separator_triple.as_bytes(),
                     &xor_mac_width(&my_key.mac_key, &self.global_mac_key),
                 );
                 let u_j = xor_mac_width(&u_j_hash, &k_phi);
@@ -759,7 +753,7 @@ impl Party {
                     .unwrap();
             }
 
-            // 2. Receive later Us
+            // 5. Receive later Us
             for _j in self.id + 1..self.num_parties {
                 let u_message = self.channels.listen.recv().unwrap();
                 if let Message {
@@ -770,13 +764,13 @@ impl Party {
                 {
                     debug_assert_eq!(self.id, to);
                     // compute M_phi
-                    let domain_separator_mac = &format!("mac-phi-{}-{}", self.id, from);
                     let (_, their_mac) = x
                         .macs
                         .iter()
                         .find(|(maccing_party, _)| *maccing_party == from)
                         .expect("should have MACs from all other parties");
-                    let mut mac_phi = hash_to_mac_width(domain_separator_mac.as_bytes(), their_mac);
+                    let mut mac_phi =
+                        hash_to_mac_width(domain_separator_triple.as_bytes(), their_mac);
                     if x.bit.value {
                         for byte in 0..MAC_LENGTH {
                             mac_phi[byte] ^= u[byte];
@@ -790,7 +784,7 @@ impl Party {
 
             self.sync().expect("sync should always succeed");
 
-            // 3. Compute H_i
+            // 6. Compute H_i
             let mut h = [0u8; MAC_LENGTH];
 
             for (j, key_phi) in key_phis {
@@ -819,10 +813,10 @@ impl Party {
                 h = xor_mac_width(&h, &self.global_mac_key);
             }
 
-            // 4. Broadcast H_is
+            // 6. Broadcast H_is
             let other_hs = self.broadcast(&h)?;
 
-            // 5. Check H_is xor to 0
+            // 7. Check H_is xor to 0
             let mut test = h;
             for (_, other_h) in other_hs {
                 test = xor_mac_width(
@@ -913,6 +907,8 @@ impl Party {
                 return Err(Error::UnexpectedMessage(reveal_message));
             }
         }
+
+        self.sync().expect("sync should always succeed");
 
         Ok(results)
     }
