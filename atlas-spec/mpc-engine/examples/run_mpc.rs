@@ -44,7 +44,7 @@ fn main() {
             let log_enabled = channel_config.id == 1;
             let mut p = mpc_engine::party::Party::new(channel_config, &c, log_enabled, rng);
 
-            let _ = p.run(None);
+            let _ = p.run(false);
         });
         party_join_handles.push(party_join_handle);
     }

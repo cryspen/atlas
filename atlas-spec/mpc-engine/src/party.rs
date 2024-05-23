@@ -18,12 +18,15 @@ use crate::{
     Error, STATISTICAL_SECURITY,
 };
 
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::{
+    fs::read,
+    sync::mpsc::{self, Receiver, Sender},
+};
 
 /// Additional bit authentications computed for malicious security checks.
 const SEC_MARGIN_BIT_AUTH: usize = 2 * STATISTICAL_SECURITY * 8;
 /// Additional cost of authenticating a number of bits into authenticated shares.
-const SEC_MARGIN_SHARE_AUTH: usize = STATISTICAL_SECURITY * 8;
+pub(crate) const SEC_MARGIN_SHARE_AUTH: usize = STATISTICAL_SECURITY * 8;
 
 #[derive(Debug)]
 /// A type for tracking the current protocol phase.
@@ -69,6 +72,8 @@ pub struct Party {
     entropy: Randomness,
     /// Pool of pre-computed authenticated bits
     abit_pool: Vec<AuthBit>,
+    /// Pool of pre-computed authenticated shares
+    ashare_pool: Vec<AuthBit>,
     /// Tracks the current phase of protocol execution
     current_phase: ProtocolPhase,
     /// Whether to log events
@@ -89,6 +94,12 @@ impl Party {
         logging: bool,
         mut entropy: Randomness,
     ) -> Self {
+        // Validate the circuit
+        circuit
+            .validate_circuit_specification()
+            .map_err(|e| Error::Circuit(e))
+            .unwrap();
+
         Self {
             bit_counter: 0,
             id: channels.id,
@@ -98,6 +109,7 @@ impl Party {
             circuit: circuit.clone(),
             entropy,
             abit_pool: Vec::new(),
+            ashare_pool: Vec::new(),
             current_phase: ProtocolPhase::PreInit,
             log_counter: 0,
             enable_logging: logging,
@@ -371,7 +383,7 @@ impl Party {
         Ok(authenticated_bits[0..len].to_vec())
     }
 
-    /// Compute `len` authenticated bit shares.
+    /// Transform authenticated bits into `len` authenticated bit shares.
     fn random_authenticated_shares(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
         let len_unchecked = len + SEC_MARGIN_SHARE_AUTH;
         let authenticated_bits: Vec<AuthBit> = self.abit_pool.drain(..len_unchecked).collect();
@@ -645,7 +657,7 @@ impl Party {
     /// Compute authenticated AND triples.
     fn random_leaky_and(&mut self, len: usize) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
         let mut results = Vec::new();
-        let mut shares = self.random_authenticated_shares(3 * len)?;
+        let mut shares: Vec<AuthBit> = self.ashare_pool.drain(..3 * len).collect();
         for _i in 0..len {
             let x = shares.pop().expect("requested enough authenticated bits");
             let y = shares.pop().expect("requested enough authenticated bits");
@@ -985,13 +997,9 @@ impl Party {
         Ok(())
     }
     /// Build oblivious AND triples by combining leaky AND triples.
-    fn random_and_shares(
-        &mut self,
-        len: usize,
-        bucket_size: usize,
-    ) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
+    fn random_and_shares(&mut self, len: usize) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
         // get `len * BUCKET_SIZE` leaky ANDs
-        let leaky_ands = self.random_leaky_and(len * bucket_size)?;
+        let leaky_ands = self.random_leaky_and(len * self.circuit.and_bucket_size())?;
 
         // Shuffle the list.
         // Using random u128 bit indices for shuffling should prevent collisions
@@ -1010,8 +1018,8 @@ impl Party {
 
         // combine all buckets to single ANDs
         let mut results = Vec::new();
-        for bucket in leaky_ands.chunks_exact(bucket_size) {
-            let (mut x, mut y, mut z) = bucket[0].clone();
+        for bucket in leaky_ands.chunks_exact(self.circuit.and_bucket_size()) {
+            let (mut x, y, mut z) = bucket[0].clone();
 
             for (next_x, next_y, next_z) in bucket[1..].iter() {
                 let d_i = self.xor_abits(&y, next_y);
@@ -1431,28 +1439,15 @@ impl Party {
     }
 
     /// Run the MPC protocol, returning the parties output, if any.
-    pub fn run(&mut self, precompute: Option<usize>) -> Result<Option<Vec<bool>>, Error> {
+    pub fn run(&mut self, read_stored_triples: bool) -> Result<Option<Vec<bool>>, Error> {
         use std::io::Write;
-        if let Some(target_number) = precompute {
-            self.log(&format!(
-                "Pre-computing {target_number} bit authentication(s)..."
-            ));
 
-            // We want to compute 1 authenticated share, so need `1 + SEC_MARGIN_SHARE_AUTH` bits in the pool.
-            self.abit_pool = self.precompute_abits(target_number)?;
+        let num_auth_shares = self.circuit.share_authentication_cost() + SEC_MARGIN_SHARE_AUTH;
+        self.log(&format!(
+            "Require {num_auth_shares} authenticated share(s) in total to evaluate circuit."
+        ));
 
-            let file = std::fs::File::create(format!("{}.triples", self.id))
-                .map_err(|_| Error::OtherError)?;
-            let mut writer = std::io::BufWriter::new(file);
-            serde_json::to_writer(&mut writer, &(self.global_mac_key, &self.abit_pool))
-                .map_err(|_| Error::OtherError)?;
-            writer.flush().unwrap();
-            Ok(None)
-        } else {
-            let num_auth_shares = 1;
-            self.log(&format!(
-                "Want to generate {num_auth_shares} authenticated share(s)"
-            ));
+        if read_stored_triples {
             self.log("Trying to read authenticated bits from file");
             let file = std::fs::File::open(format!("{}.triples", self.id));
             if let Ok(f) = file {
@@ -1471,41 +1466,46 @@ impl Party {
                     .unwrap_or(0);
                 self.bit_counter = max_id;
 
-                if num_auth_shares + SEC_MARGIN_SHARE_AUTH > self.abit_pool.len() {
+                if num_auth_shares > self.abit_pool.len() {
                     self.log(&format!(
                         "Insufficient precomputation (by {})",
-                        num_auth_shares + SEC_MARGIN_SHARE_AUTH - self.abit_pool.len()
+                        num_auth_shares - self.abit_pool.len()
                     ));
                     return Ok(None);
                 }
-            } else {
-                self.log("Could not read pre-computed bit authentications from file.");
             }
-
-            self.log("Starting share authentication");
-            let _shares = self.random_authenticated_shares(num_auth_shares)?;
-
-            // let bucket_size =
-            //     (STATISTICAL_SECURITY as u32 / self.circuit.num_gates().ilog2()) as usize;
-            let bucket_size = 3;
-            self.log("Computing AND triples");
-            let and_shares = self.random_and_shares(100, bucket_size).unwrap();
-            for (index, triple) in and_shares.iter().enumerate() {
-                self.log(&format!(
-                    "Checking AND triples [{} / {}]",
-                    index + 1,
-                    and_shares.len()
+        } else {
+            let target_number = self.circuit.share_authentication_cost();
+            self.log(&format!(
+                    "Pre-computing {target_number} + {SEC_MARGIN_SHARE_AUTH} maliciously secure bit authentication(s)..."
                 ));
-                self.check_and(triple).unwrap();
-                self.log(&format!(
-                    "Check complete [{} / {}]",
-                    index + 1,
-                    and_shares.len()
-                ));
-            }
 
-            Ok(None)
+            self.abit_pool = self.precompute_abits(target_number + SEC_MARGIN_SHARE_AUTH)?;
+
+            let file = std::fs::File::create(format!("{}.triples", self.id))
+                .map_err(|_| Error::OtherError)?;
+            let mut writer = std::io::BufWriter::new(file);
+            serde_json::to_writer(&mut writer, &(self.global_mac_key, &self.abit_pool))
+                .map_err(|_| Error::OtherError)?;
+            writer.flush().unwrap();
         }
+
+        self.ashare_pool =
+            self.random_authenticated_shares(self.circuit.share_authentication_cost())?;
+
+        let num_and_triples = self.circuit.num_and_gates();
+        self.log(&format!("Computing {} random AND triples", num_and_triples));
+        let and_shares = self.random_and_shares(num_and_triples).unwrap();
+        for (index, triple) in and_shares.iter().enumerate() {
+            self.check_and(triple).unwrap();
+            self.log(&format!(
+                "AND triple check complete [{} / {}]",
+                index + 1,
+                and_shares.len()
+            ));
+        }
+
+        Ok(None)
     }
 
     /// Synchronise parties.
