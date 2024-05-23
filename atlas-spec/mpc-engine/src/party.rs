@@ -509,7 +509,9 @@ impl Party {
                         "Error while checking party {}'s bit commitment!",
                         party
                     ));
-                    return Err(Error::CheckFailed);
+                    return Err(Error::CheckFailed(
+                        "Share Authentication failed".to_string(),
+                    ));
                 }
             }
 
@@ -832,7 +834,7 @@ impl Party {
             }
 
             if test != [0u8; MAC_LENGTH] {
-                return Err(Error::CheckFailed);
+                return Err(Error::CheckFailed("Leaky AND xor check failed".to_string()));
             }
 
             results.push((x, y, z));
@@ -861,7 +863,7 @@ impl Party {
                     .find(|k| k.bit_holder == from)
                     .expect("should have a key for every other party");
                 if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
-                    return Err(Error::CheckFailed);
+                    return Err(Error::CheckFailed("Bit reveal failed".to_string()));
                 }
                 results.push((from, value));
             } else {
@@ -904,7 +906,7 @@ impl Party {
                     .find(|k| k.bit_holder == from)
                     .expect("should have a key for every other party");
                 if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
-                    return Err(Error::CheckFailed);
+                    return Err(Error::CheckFailed("Bit reveal failed".to_string()));
                 }
                 results.push((from, value));
             } else {
