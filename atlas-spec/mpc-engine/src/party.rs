@@ -994,13 +994,16 @@ impl Party {
             let (mut x, mut y, mut z) = bucket[0].clone();
 
             for (next_x, next_y, next_z) in bucket[1..].iter() {
-                let d = self.xor_abits(&y, next_y);
-                self.open_bit(&d)?;
+                let d_i = self.xor_abits(&y, next_y);
+                let other_djs = self.open_bit(&d_i)?;
+                let mut d = d_i.bit.value;
+                for (_, d_j) in other_djs {
+                    d ^= d_j;
+                }
 
                 x = self.xor_abits(&x, next_x);
-                y = next_y.clone();
                 z = self.xor_abits(&z, next_z);
-                if d.bit.value {
+                if d {
                     z = self.xor_abits(&z, next_x);
                 }
             }
