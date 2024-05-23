@@ -976,7 +976,7 @@ impl Party {
         // Shuffle the list.
         // Using random u128 bit indices for shuffling should prevent collisions
         // for at least 2^40 triples except with probability 2^-40.
-        let random_indices = self.coin_flip(leaky_ands.len() * 16)?;
+        let random_indices = self.coin_flip(leaky_ands.len() * 8 * 16)?;
         let mut indexed_ands: Vec<(u128, (AuthBit, AuthBit, AuthBit))> = random_indices
             .chunks_exact(16)
             .map(|chunk| {
