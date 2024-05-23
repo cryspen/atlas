@@ -12,10 +12,12 @@ fn build_circuit() -> Circuit {
             WiredGate::Input(0),  // Gate 0
             WiredGate::Input(1),  // Gate 1
             WiredGate::Input(2),  // Gate 2
-            WiredGate::And(0, 1), // Gate 3
-            WiredGate::And(3, 2), // Gate 4
+            WiredGate::Input(3),  // Gate 3
+            WiredGate::And(0, 1), // Gate 4
+            WiredGate::And(2, 3), // Gate 5
+            WiredGate::Xor(4, 5), // Gate 6
         ],
-        output_gates: vec![4],
+        output_gates: vec![6],
     }
 }
 fn main() {
