@@ -651,7 +651,7 @@ impl Party {
 
             let v_i = self.half_and(&x, &y)?;
 
-            let z_i_value = y.bit.value && x.bit.value ^ v_i;
+            let z_i_value = (y.bit.value && x.bit.value) ^ v_i;
             let e_i_value = z_i_value ^ r.bit.value;
 
             let other_e_is = self.broadcast(&[e_i_value as u8])?;
