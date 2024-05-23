@@ -667,8 +667,10 @@ impl Party {
                     }
                 }
             }
+            r.bit.value = z_i_value;
             let z = r;
 
+            self.sync().expect("sync should always succeed");
             // Triple Check
             // 1. compute Phi
             let mut phi = [0u8; MAC_LENGTH];
