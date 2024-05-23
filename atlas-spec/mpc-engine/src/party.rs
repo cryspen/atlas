@@ -530,7 +530,7 @@ impl Party {
             (input[input.len() - 1] & 1) != 0
         }
 
-        let domain_separator = format!("half-and-hash-{}", self.id);
+        let domain_separator = format!("half-and-hash");
 
         let mut t_js = vec![false; self.num_parties];
         let mut s_js = vec![false; self.num_parties];
