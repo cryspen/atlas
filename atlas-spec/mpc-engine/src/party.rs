@@ -18,10 +18,7 @@ use crate::{
     Error, STATISTICAL_SECURITY,
 };
 
-use std::{
-    fs::read,
-    sync::mpsc::{self, Receiver, Sender},
-};
+use std::sync::mpsc::{self, Receiver, Sender};
 
 /// Additional bit authentications computed for malicious security checks.
 const SEC_MARGIN_BIT_AUTH: usize = 2 * STATISTICAL_SECURITY * 8;
@@ -97,7 +94,7 @@ impl Party {
         // Validate the circuit
         circuit
             .validate_circuit_specification()
-            .map_err(|e| Error::Circuit(e))
+            .map_err(Error::Circuit)
             .unwrap();
 
         Self {
@@ -544,7 +541,7 @@ impl Party {
             (input[input.len() - 1] & 1) != 0
         }
 
-        let domain_separator = format!("half-and-hash");
+        let domain_separator = b"half-and-hash";
 
         let mut t_js = vec![false; self.num_parties];
         let mut s_js = vec![false; self.num_parties];
@@ -565,7 +562,7 @@ impl Party {
                     .find(|(party, _mac)| *party == from)
                     .expect("should have MACs from all other parties")
                     .1;
-                let hash_lsb = lsb(&hash_to_mac_width(domain_separator.as_bytes(), &their_mac));
+                let hash_lsb = lsb(&hash_to_mac_width(domain_separator, &their_mac));
                 let t_j = if x.bit.value {
                     hash_j_1 ^ hash_lsb
                 } else {
@@ -601,9 +598,8 @@ impl Party {
                 input_1[byte] = input_0[byte] ^ self.global_mac_key[byte];
             }
 
-            let h_0 = lsb(&hash_to_mac_width(domain_separator.as_bytes(), &input_0)) ^ s_j;
-            let h_1 =
-                lsb(&hash_to_mac_width(domain_separator.as_bytes(), &input_1)) ^ s_j ^ y.bit.value;
+            let h_0 = lsb(&hash_to_mac_width(domain_separator, &input_0)) ^ s_j;
+            let h_1 = lsb(&hash_to_mac_width(domain_separator, &input_1)) ^ s_j ^ y.bit.value;
             self.channels.parties[j]
                 .send(Message {
                     from: self.id,
@@ -629,7 +625,7 @@ impl Party {
                     .find(|(party, _mac)| *party == from)
                     .expect("should have MACs from all other parties")
                     .1;
-                let hash_lsb = lsb(&hash_to_mac_width(domain_separator.as_bytes(), &their_mac));
+                let hash_lsb = lsb(&hash_to_mac_width(domain_separator, &their_mac));
                 let t_j = if x.bit.value {
                     hash_j_1 ^ hash_lsb
                 } else {
@@ -704,7 +700,7 @@ impl Party {
             // 5. receive earlier Us
             let mut mac_phis = Vec::new();
             let mut key_phis = Vec::new();
-            let domain_separator_triple = &format!("triple-check");
+            let domain_separator_triple = b"triple-check";
             for _j in 0..self.id {
                 let u_message = self.channels.listen.recv().unwrap();
                 if let Message {
@@ -720,8 +716,7 @@ impl Party {
                         .iter()
                         .find(|(maccing_party, _)| *maccing_party == from)
                         .expect("should have MACs from all other parties");
-                    let mut mac_phi =
-                        hash_to_mac_width(domain_separator_triple.as_bytes(), their_mac);
+                    let mut mac_phi = hash_to_mac_width(domain_separator_triple, their_mac);
                     if x.bit.value {
                         for byte in 0..MAC_LENGTH {
                             mac_phi[byte] ^= u[byte];
@@ -745,12 +740,12 @@ impl Party {
                     .find(|k| k.bit_holder == j)
                     .expect("should have keys for all other parties' bits");
 
-                let k_phi = hash_to_mac_width(domain_separator_triple.as_bytes(), &my_key.mac_key);
+                let k_phi = hash_to_mac_width(domain_separator_triple, &my_key.mac_key);
                 key_phis.push((j, k_phi));
 
                 // compute U_j
                 let u_j_hash = hash_to_mac_width(
-                    domain_separator_triple.as_bytes(),
+                    domain_separator_triple,
                     &xor_mac_width(&my_key.mac_key, &self.global_mac_key),
                 );
                 let u_j = xor_mac_width(&u_j_hash, &k_phi);
@@ -781,8 +776,7 @@ impl Party {
                         .iter()
                         .find(|(maccing_party, _)| *maccing_party == from)
                         .expect("should have MACs from all other parties");
-                    let mut mac_phi =
-                        hash_to_mac_width(domain_separator_triple.as_bytes(), their_mac);
+                    let mut mac_phi = hash_to_mac_width(domain_separator_triple, their_mac);
                     if x.bit.value {
                         for byte in 0..MAC_LENGTH {
                             mac_phi[byte] ^= u[byte];
@@ -891,7 +885,7 @@ impl Party {
                 .send(Message {
                     from: self.id,
                     to: j,
-                    payload: MessagePayload::BitReveal(bit.bit.value, their_mac.clone()),
+                    payload: MessagePayload::BitReveal(bit.bit.value, *their_mac),
                 })
                 .unwrap();
         }
@@ -990,7 +984,7 @@ impl Party {
             z ^= other_z;
         }
 
-        if !((x & y) == z) {
+        if (x & y) != z {
             return Err(Error::CheckFailed("Invalid AND triple".to_owned()));
         }
 

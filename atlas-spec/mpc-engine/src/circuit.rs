@@ -65,7 +65,7 @@
 //!
 //!
 
-use crate::{party::SEC_MARGIN_SHARE_AUTH, STATISTICAL_SECURITY};
+use crate::STATISTICAL_SECURITY;
 
 /// Data type to uniquely identify gate output wires.
 pub type WireIndex = usize;
@@ -314,8 +314,7 @@ impl Circuit {
 
     /// Computes the required bucket size for leaky AND triple combination.
     pub fn and_bucket_size(&self) -> usize {
-        let and_bucket_size = (STATISTICAL_SECURITY as u32 / self.num_gates().ilog2()) as usize;
-        and_bucket_size
+        (STATISTICAL_SECURITY as u32 / self.num_gates().ilog2()) as usize
     }
 
     /// Returns the number of AND gates in the circuit.
