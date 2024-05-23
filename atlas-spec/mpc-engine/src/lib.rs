@@ -34,7 +34,7 @@ pub enum Error {
     /// Failed to deserialize an authenticated bit
     InvalidSerialization,
     /// A malicious security check has failed
-    CheckFailed,
+    CheckFailed(String),
     /// Error from the curve implementation
     CurveError,
     /// Error from the AEAD

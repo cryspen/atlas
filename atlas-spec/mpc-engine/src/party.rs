@@ -960,6 +960,30 @@ impl Party {
         }
     }
 
+    fn check_and(&mut self, triple: &(AuthBit, AuthBit, AuthBit)) -> Result<(), Error> {
+        let other_xs = self.open_bit(&triple.0)?;
+        let other_ys = self.open_bit(&triple.1)?;
+        let other_zs = self.open_bit(&triple.2)?;
+
+        let mut x = triple.0.bit.value;
+        for (_, other_x) in other_xs {
+            x ^= other_x;
+        }
+        let mut y = triple.1.bit.value;
+        for (_, other_y) in other_ys {
+            y ^= other_y;
+        }
+        let mut z = triple.2.bit.value;
+        for (_, other_z) in other_zs {
+            z ^= other_z;
+        }
+
+        if !((x & y) == z) {
+            return Err(Error::CheckFailed("Invalid AND triple".to_owned()));
+        }
+
+        Ok(())
+    }
     /// Build oblivious AND triples by combining leaky AND triples.
     fn random_and_shares(
         &mut self,
@@ -1461,10 +1485,25 @@ impl Party {
             self.log("Starting share authentication");
             let _shares = self.random_authenticated_shares(num_auth_shares)?;
 
-            //let bucket_size = (STATISTICAL_SECURITY as u32 / self.circuit.num_gates().ilog2()) as usize;
-            // let bucket_size = 3;
-            // self.log("Computing AND triples");
-            //let _and_shares = self.random_and_shares(2, bucket_size)?;
+            // let bucket_size =
+            //     (STATISTICAL_SECURITY as u32 / self.circuit.num_gates().ilog2()) as usize;
+            let bucket_size = 3;
+            self.log("Computing AND triples");
+            let and_shares = self.random_and_shares(100, bucket_size).unwrap();
+            for (index, triple) in and_shares.iter().enumerate() {
+                self.log(&format!(
+                    "Checking AND triples [{} / {}]",
+                    index + 1,
+                    and_shares.len()
+                ));
+                self.check_and(triple).unwrap();
+                self.log(&format!(
+                    "Check complete [{} / {}]",
+                    index + 1,
+                    and_shares.len()
+                ));
+            }
+
             Ok(None)
         }
     }
