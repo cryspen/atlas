@@ -1007,6 +1007,24 @@ impl Party {
         Ok(result)
     }
 
+    /// Invert an authenticated bit, resulting in an authentication of the
+    /// inverted bit.
+    fn invert_abit(&mut self, a: &AuthBit) -> AuthBit {
+        let mut mac_keys = a.mac_keys.clone();
+        for key in mac_keys.iter_mut() {
+            key.mac_key = xor_mac_width(&key.mac_key, &self.global_mac_key)
+        }
+
+        AuthBit {
+            bit: Bit {
+                id: self.fresh_bit_id(),
+                value: a.bit.value ^ true,
+            },
+            macs: a.macs.clone(),
+            mac_keys,
+        }
+    }
+
     fn check_and(&mut self, triple: &(AuthBit, AuthBit, AuthBit)) -> Result<(), Error> {
         let x = self.open_bit(&triple.0)?;
         let y = self.open_bit(&triple.1)?;
@@ -1618,7 +1636,24 @@ impl Party {
                         }
                     }
                 }
-                crate::circuit::WiredGate::Not(_) => todo!(),
+                crate::circuit::WiredGate::Not(input) => {
+                    let share_input = self.wire_shares[input]
+                        .clone()
+                        .expect("should have shares for all earlier wires already");
+
+                    let inverted_share = self.invert_abit(&share_input.0);
+                    if self.is_evaluator() {
+                        self.wire_shares[gate_index] = Some((inverted_share, None));
+                    } else {
+                        let WireLabel(input_label) = share_input
+                            .1
+                            .expect("should have labels for all earlier shares already");
+
+                        let inverted_label = xor_mac_width(&input_label, &self.global_mac_key);
+                        self.wire_shares[gate_index] =
+                            Some((inverted_share, Some(WireLabel(inverted_label))));
+                    }
+                }
                 crate::circuit::WiredGate::Input(_) => continue,
             }
         }
