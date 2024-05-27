@@ -15,7 +15,7 @@ use crate::{
         },
     },
     utils::ith_bit,
-    Error, STATISTICAL_SECURITY,
+    Error, COMPUTATIONAL_SECURITY, STATISTICAL_SECURITY,
 };
 
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -51,6 +51,10 @@ pub struct ChannelConfig {
     pub id: usize,
 }
 
+/// A Wire label given by a party.
+#[derive(Debug, Clone)]
+pub struct WireLabel([u8; COMPUTATIONAL_SECURITY]);
+
 /// A struct defining protocol party state during a protocol execution.
 #[allow(dead_code)] // TODO: Remove this later.
 pub struct Party {
@@ -77,6 +81,8 @@ pub struct Party {
     enable_logging: bool,
     /// Incremental counter for ordering logs
     log_counter: u128,
+    /// Wire labels for every wire in the circuit
+    wire_shares: Vec<Option<(AuthBit, Option<WireLabel>)>>,
 }
 
 #[allow(dead_code)] // TODO: Remove this later.
@@ -110,6 +116,7 @@ impl Party {
             current_phase: ProtocolPhase::PreInit,
             log_counter: 0,
             enable_logging: logging,
+            wire_shares: vec![None; circuit.num_gates()],
         }
     }
 
@@ -1408,8 +1415,32 @@ impl Party {
     }
 
     /// Run the function independent pre-processing phase of the protocol.
-    pub fn function_independent(&mut self) {
-        todo!("the function-independent pre-processing phase is not yet implemented (cf. GitHub issue #51")
+    ///
+    /// This generates labeled wire shares for all input wires and AND-gate output wires.
+    pub fn function_independent(&mut self) -> Result<(), Error> {
+        self.ashare_pool =
+            self.random_authenticated_shares(self.circuit.share_authentication_cost())?;
+
+        for (gate_index, gate) in self.circuit.gates.iter().enumerate() {
+            match *gate {
+                crate::circuit::WiredGate::Input(_) | crate::circuit::WiredGate::And(_, _) => {
+                    let share = self
+                        .ashare_pool
+                        .pop()
+                        .expect("should have pre-computed enough authenticated random shares");
+                    let label = self
+                        .entropy
+                        .bytes(COMPUTATIONAL_SECURITY)
+                        .expect("should have provided enough randoness externally")
+                        .try_into()
+                        .expect("should have received the right number of bytes");
+                    self.wire_shares[gate_index] = Some((share, Some(WireLabel(label))));
+                }
+                _ => continue,
+            }
+        }
+
+        Ok(())
     }
 
     /// Run the function-dependent pre-processing phase of the protocol.
