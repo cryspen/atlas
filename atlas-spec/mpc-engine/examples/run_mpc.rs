@@ -12,10 +12,12 @@ fn build_circuit() -> Circuit {
             WiredGate::Input(0),  // Gate 0
             WiredGate::Input(1),  // Gate 1
             WiredGate::Input(2),  // Gate 2
-            WiredGate::And(0, 1), // Gate 3
-            WiredGate::And(3, 2), // Gate 4
+            WiredGate::Input(3),  // Gate 3
+            WiredGate::And(0, 1), // Gate 4
+            WiredGate::And(2, 3), // Gate 5
+            WiredGate::Xor(4, 5), // Gate 6
         ],
-        output_gates: vec![4],
+        output_gates: vec![6],
     }
 }
 fn main() {
@@ -36,13 +38,13 @@ fn main() {
         let c = circuit.clone();
         let party_join_handle = thread::spawn(move || {
             let mut rng = rand::thread_rng();
-            let mut bytes = vec![0u8; u16::MAX.try_into().unwrap()];
+            let mut bytes = vec![0u8; 100 * usize::from(u16::MAX)];
             rng.fill_bytes(&mut bytes);
             let rng = Randomness::new(bytes);
             let log_enabled = channel_config.id == 1;
             let mut p = mpc_engine::party::Party::new(channel_config, &c, log_enabled, rng);
 
-            let _ = p.run();
+            let _ = p.run(false);
         });
         party_join_handles.push(party_join_handle);
     }

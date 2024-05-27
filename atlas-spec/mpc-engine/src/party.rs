@@ -9,17 +9,21 @@ use crate::{
     primitives::{
         auth_share::{AuthBit, Bit, BitID, BitKey},
         commitment::{Commitment, Opening},
-        mac::{generate_mac_key, mac, verify_mac, Mac, MacKey, MAC_LENGTH},
+        mac::{
+            generate_mac_key, hash_to_mac_width, mac, verify_mac, xor_mac_width, Mac, MacKey,
+            MAC_LENGTH,
+        },
     },
     utils::ith_bit,
     Error, STATISTICAL_SECURITY,
 };
+
 use std::sync::mpsc::{self, Receiver, Sender};
 
 /// Additional bit authentications computed for malicious security checks.
 const SEC_MARGIN_BIT_AUTH: usize = 2 * STATISTICAL_SECURITY * 8;
 /// Additional cost of authenticating a number of bits into authenticated shares.
-const SEC_MARGIN_SHARE_AUTH: usize = STATISTICAL_SECURITY * 8;
+pub(crate) const SEC_MARGIN_SHARE_AUTH: usize = STATISTICAL_SECURITY * 8;
 
 #[derive(Debug)]
 /// A type for tracking the current protocol phase.
@@ -65,6 +69,8 @@ pub struct Party {
     entropy: Randomness,
     /// Pool of pre-computed authenticated bits
     abit_pool: Vec<AuthBit>,
+    /// Pool of pre-computed authenticated shares
+    ashare_pool: Vec<AuthBit>,
     /// Tracks the current phase of protocol execution
     current_phase: ProtocolPhase,
     /// Whether to log events
@@ -85,6 +91,12 @@ impl Party {
         logging: bool,
         mut entropy: Randomness,
     ) -> Self {
+        // Validate the circuit
+        circuit
+            .validate_circuit_specification()
+            .map_err(Error::Circuit)
+            .unwrap();
+
         Self {
             bit_counter: 0,
             id: channels.id,
@@ -94,6 +106,7 @@ impl Party {
             circuit: circuit.clone(),
             entropy,
             abit_pool: Vec::new(),
+            ashare_pool: Vec::new(),
             current_phase: ProtocolPhase::PreInit,
             log_counter: 0,
             enable_logging: logging,
@@ -367,6 +380,7 @@ impl Party {
         Ok(authenticated_bits[0..len].to_vec())
     }
 
+    /// Transform authenticated bits into `len` authenticated bit shares.
     fn random_authenticated_shares(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
         let len_unchecked = len + SEC_MARGIN_SHARE_AUTH;
         let authenticated_bits: Vec<AuthBit> = self.abit_pool.drain(..len_unchecked).collect();
@@ -504,7 +518,9 @@ impl Party {
                         "Error while checking party {}'s bit commitment!",
                         party
                     ));
-                    return Err(Error::CheckFailed);
+                    return Err(Error::CheckFailed(
+                        "Share Authentication failed".to_string(),
+                    ));
                 }
             }
 
@@ -516,6 +532,507 @@ impl Party {
         }
 
         Ok(authenticated_bits[0..len].to_vec())
+    }
+
+    /// Compute unauthenticated cross terms in an AND triple output share.
+    fn half_and(&mut self, x: &AuthBit, y: &AuthBit) -> Result<bool, Error> {
+        /// Obtain the least significant bit of some hash output
+        fn lsb(input: &[u8]) -> bool {
+            (input[input.len() - 1] & 1) != 0
+        }
+
+        let domain_separator = b"half-and-hash";
+
+        let mut t_js = vec![false; self.num_parties];
+        let mut s_js = vec![false; self.num_parties];
+
+        // receive earlier hashes
+        for _j in 0..self.id {
+            let hashes_message = self.channels.listen.recv().unwrap();
+            if let Message {
+                from,
+                to,
+                payload: MessagePayload::HalfAndHashes(hash_j_0, hash_j_1),
+            } = hashes_message
+            {
+                debug_assert_eq!(to, self.id);
+                let their_mac = x
+                    .macs
+                    .iter()
+                    .find(|(party, _mac)| *party == from)
+                    .expect("should have MACs from all other parties")
+                    .1;
+                let hash_lsb = lsb(&hash_to_mac_width(domain_separator, &their_mac));
+                let t_j = if x.bit.value {
+                    hash_j_1 ^ hash_lsb
+                } else {
+                    hash_j_0 ^ hash_lsb
+                };
+                t_js[from] = t_j;
+            } else {
+                return Err(Error::UnexpectedMessage(hashes_message));
+            }
+        }
+
+        for j in 0..self.num_parties {
+            if j == self.id {
+                continue;
+            }
+            let s_j = self
+                .entropy
+                .bit()
+                .expect("sufficient randomness should have been provided externally");
+            s_js[j] = s_j;
+
+            // K_i[x^j]
+            let input_0 = x
+                .mac_keys
+                .iter()
+                .find(|key| key.bit_holder == j)
+                .expect("should have keys for all other parties")
+                .mac_key;
+
+            // K_i[x^j] xor Delta_i
+            let mut input_1 = [0u8; MAC_LENGTH];
+            for byte in 0..MAC_LENGTH {
+                input_1[byte] = input_0[byte] ^ self.global_mac_key[byte];
+            }
+
+            let h_0 = lsb(&hash_to_mac_width(domain_separator, &input_0)) ^ s_j;
+            let h_1 = lsb(&hash_to_mac_width(domain_separator, &input_1)) ^ s_j ^ y.bit.value;
+            self.channels.parties[j]
+                .send(Message {
+                    from: self.id,
+                    to: j,
+                    payload: MessagePayload::HalfAndHashes(h_0, h_1),
+                })
+                .unwrap();
+        }
+
+        // receive later hashes
+        for _j in self.id + 1..self.num_parties {
+            let hashes_message = self.channels.listen.recv().unwrap();
+            if let Message {
+                from,
+                to,
+                payload: MessagePayload::HalfAndHashes(hash_j_0, hash_j_1),
+            } = hashes_message
+            {
+                debug_assert_eq!(to, self.id);
+                let their_mac = x
+                    .macs
+                    .iter()
+                    .find(|(party, _mac)| *party == from)
+                    .expect("should have MACs from all other parties")
+                    .1;
+                let hash_lsb = lsb(&hash_to_mac_width(domain_separator, &their_mac));
+                let t_j = if x.bit.value {
+                    hash_j_1 ^ hash_lsb
+                } else {
+                    hash_j_0 ^ hash_lsb
+                };
+                t_js[from] = t_j;
+            } else {
+                return Err(Error::UnexpectedMessage(hashes_message));
+            }
+        }
+
+        self.sync().expect("sync should always succeed");
+
+        let mut v_i = false;
+        for j in 0..self.num_parties {
+            if j == self.id {
+                continue;
+            }
+            v_i ^= t_js[j] ^ s_js[j];
+        }
+
+        Ok(v_i)
+    }
+
+    /// Compute authenticated AND triples.
+    fn random_leaky_and(&mut self, len: usize) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
+        let mut results = Vec::new();
+        let mut shares: Vec<AuthBit> = self.ashare_pool.drain(..3 * len).collect();
+        for _i in 0..len {
+            let x = shares.pop().expect("requested enough authenticated bits");
+            let y = shares.pop().expect("requested enough authenticated bits");
+            let mut r = shares.pop().expect("requested enough authenticated bits");
+
+            let v_i = self.half_and(&x, &y)?;
+
+            let z_i_value = (y.bit.value && x.bit.value) ^ v_i;
+            let e_i_value = z_i_value ^ r.bit.value;
+
+            let other_e_is = self.broadcast(&[e_i_value as u8])?;
+            for key in r.mac_keys.iter_mut() {
+                let (_, other_e_j) = other_e_is
+                    .iter()
+                    .find(|(party, _)| *party == key.bit_holder)
+                    .expect("should have received e_j from every other party j");
+                let correction_necessary = other_e_j[0] != 0;
+                if correction_necessary {
+                    key.mac_key = xor_mac_width(&key.mac_key, &self.global_mac_key);
+                }
+            }
+            r.bit.value = z_i_value;
+            let z = r;
+
+            self.sync().expect("sync should always succeed");
+
+            // Triple Check
+            // 4. compute Phi
+            let mut phi = [0u8; MAC_LENGTH];
+            for key in y.mac_keys.iter() {
+                let (_, their_mac) = y
+                    .macs
+                    .iter()
+                    .find(|(maccing_party, _)| *maccing_party == key.bit_holder)
+                    .unwrap();
+                let intermediate_xor = xor_mac_width(&key.mac_key, their_mac);
+                phi = xor_mac_width(&phi, &intermediate_xor);
+            }
+
+            if y.bit.value {
+                phi = xor_mac_width(&phi, &self.global_mac_key);
+            }
+
+            // 5. receive earlier Us
+            let mut mac_phis = Vec::new();
+            let mut key_phis = Vec::new();
+            let domain_separator_triple = b"triple-check";
+            for _j in 0..self.id {
+                let u_message = self.channels.listen.recv().unwrap();
+                if let Message {
+                    from,
+                    to,
+                    payload: MessagePayload::LeakyAndU(u),
+                } = u_message
+                {
+                    debug_assert_eq!(self.id, to);
+                    // compute M_phi
+                    let (_, their_mac) = x
+                        .macs
+                        .iter()
+                        .find(|(maccing_party, _)| *maccing_party == from)
+                        .expect("should have MACs from all other parties");
+                    let mut mac_phi = hash_to_mac_width(domain_separator_triple, their_mac);
+                    if x.bit.value {
+                        for byte in 0..MAC_LENGTH {
+                            mac_phi[byte] ^= u[byte];
+                        }
+                    }
+                    mac_phis.push((from, mac_phi));
+                } else {
+                    return Err(Error::UnexpectedMessage(u_message));
+                }
+            }
+
+            // 5. send out own Us
+            for j in 0..self.num_parties {
+                if j == self.id {
+                    continue;
+                }
+                // compute k_phi
+                let my_key = x
+                    .mac_keys
+                    .iter()
+                    .find(|k| k.bit_holder == j)
+                    .expect("should have keys for all other parties' bits");
+
+                let k_phi = hash_to_mac_width(domain_separator_triple, &my_key.mac_key);
+                key_phis.push((j, k_phi));
+
+                // compute U_j
+                let u_j_hash = hash_to_mac_width(
+                    domain_separator_triple,
+                    &xor_mac_width(&my_key.mac_key, &self.global_mac_key),
+                );
+                let u_j = xor_mac_width(&u_j_hash, &k_phi);
+                let u_j = xor_mac_width(&u_j, &phi);
+
+                self.channels.parties[j]
+                    .send(Message {
+                        from: self.id,
+                        to: j,
+                        payload: MessagePayload::LeakyAndU(u_j),
+                    })
+                    .unwrap();
+            }
+
+            // 5. Receive later Us
+            for _j in self.id + 1..self.num_parties {
+                let u_message = self.channels.listen.recv().unwrap();
+                if let Message {
+                    from,
+                    to,
+                    payload: MessagePayload::LeakyAndU(u),
+                } = u_message
+                {
+                    debug_assert_eq!(self.id, to);
+                    // compute M_phi
+                    let (_, their_mac) = x
+                        .macs
+                        .iter()
+                        .find(|(maccing_party, _)| *maccing_party == from)
+                        .expect("should have MACs from all other parties");
+                    let mut mac_phi = hash_to_mac_width(domain_separator_triple, their_mac);
+                    if x.bit.value {
+                        for byte in 0..MAC_LENGTH {
+                            mac_phi[byte] ^= u[byte];
+                        }
+                    }
+                    mac_phis.push((from, mac_phi));
+                } else {
+                    return Err(Error::UnexpectedMessage(u_message));
+                }
+            }
+
+            self.sync().expect("sync should always succeed");
+
+            // 6. Compute H_i
+            let mut h = [0u8; MAC_LENGTH];
+
+            for (j, key_phi) in key_phis {
+                let (_, mac_phi) = mac_phis
+                    .iter()
+                    .find(|(maccing_party, _)| *maccing_party == j)
+                    .expect("should have a MAC from every other party");
+                let intermediate_xor = xor_mac_width(&key_phi, mac_phi);
+                h = xor_mac_width(&h, &intermediate_xor);
+            }
+
+            for key in z.mac_keys.iter() {
+                let (_, their_mac) = z
+                    .macs
+                    .iter()
+                    .find(|(maccing_party, _)| key.bit_holder == *maccing_party)
+                    .expect("should have MACs from all other parties");
+                let intermediate_xor = xor_mac_width(&key.mac_key, their_mac);
+                h = xor_mac_width(&h, &intermediate_xor);
+            }
+
+            if x.bit.value {
+                h = xor_mac_width(&h, &phi);
+            }
+            if z.bit.value {
+                h = xor_mac_width(&h, &self.global_mac_key);
+            }
+
+            // 6. Broadcast H_is
+            let other_hs = self.broadcast(&h)?;
+
+            // 7. Check H_is xor to 0
+            let mut test = h;
+            for (_, other_h) in other_hs {
+                test = xor_mac_width(
+                    &test,
+                    &other_h
+                        .try_into()
+                        .expect("should have received the right number of bytes"),
+                );
+            }
+
+            if test != [0u8; MAC_LENGTH] {
+                return Err(Error::CheckFailed("Leaky AND xor check failed".to_string()));
+            }
+
+            results.push((x, y, z));
+        }
+
+        Ok(results)
+    }
+
+    /// Verifiably open an authenticated bit, revealing its value to all parties.
+    fn open_bit(&mut self, bit: &AuthBit) -> Result<Vec<(usize, bool)>, Error> {
+        let mut results = Vec::new();
+
+        // receive earlier parties MACs and verify them
+        for _j in 0..self.id {
+            let reveal_message = self.channels.listen.recv().unwrap();
+            if let Message {
+                from,
+                to,
+                payload: MessagePayload::BitReveal(value, mac),
+            } = reveal_message
+            {
+                debug_assert_eq!(self.id, to);
+                let my_key = bit
+                    .mac_keys
+                    .iter()
+                    .find(|k| k.bit_holder == from)
+                    .expect("should have a key for every other party");
+                if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
+                    return Err(Error::CheckFailed("Bit reveal failed".to_string()));
+                }
+                results.push((from, value));
+            } else {
+                return Err(Error::UnexpectedMessage(reveal_message));
+            }
+        }
+
+        // send out own MACs
+        for j in 0..self.num_parties {
+            if j == self.id {
+                continue;
+            }
+            let (_, their_mac) = bit
+                .macs
+                .iter()
+                .find(|(maccing_party, _mac)| j == *maccing_party)
+                .expect("should have MACs from all other parties");
+            self.channels.parties[j]
+                .send(Message {
+                    from: self.id,
+                    to: j,
+                    payload: MessagePayload::BitReveal(bit.bit.value, *their_mac),
+                })
+                .unwrap();
+        }
+
+        // receive later parties MACs and verify them
+        for _j in self.id + 1..self.num_parties {
+            let reveal_message = self.channels.listen.recv().unwrap();
+            if let Message {
+                from,
+                to,
+                payload: MessagePayload::BitReveal(value, mac),
+            } = reveal_message
+            {
+                debug_assert_eq!(self.id, to);
+                let my_key = bit
+                    .mac_keys
+                    .iter()
+                    .find(|k| k.bit_holder == from)
+                    .expect("should have a key for every other party");
+                if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
+                    return Err(Error::CheckFailed("Bit reveal failed".to_string()));
+                }
+                results.push((from, value));
+            } else {
+                return Err(Error::UnexpectedMessage(reveal_message));
+            }
+        }
+
+        self.sync().expect("sync should always succeed");
+
+        Ok(results)
+    }
+
+    /// Locally compute the XOR of two authenticated bits, which will itself be
+    /// authenticated already.
+    fn xor_abits(&mut self, a: &AuthBit, b: &AuthBit) -> AuthBit {
+        let mut macs = Vec::new();
+        for (maccing_party, mac) in a.macs.iter() {
+            let mut xored_mac = [0u8; MAC_LENGTH];
+            let other_mac = b
+                .macs
+                .iter()
+                .find(|(party, _)| *party == *maccing_party)
+                .expect("should have MACs from all other parties")
+                .1;
+            for byte in 0..MAC_LENGTH {
+                xored_mac[byte] = mac[byte] ^ other_mac[byte];
+            }
+            macs.push((*maccing_party, xored_mac))
+        }
+
+        let mut mac_keys = Vec::new();
+        for key in a.mac_keys.iter() {
+            let mut xored_key = [0u8; MAC_LENGTH];
+            let other_key = b
+                .mac_keys
+                .iter()
+                .find(|other_key| key.bit_holder == other_key.bit_holder)
+                .expect("should have two MAC keys for every other party")
+                .mac_key;
+            for byte in 0..MAC_LENGTH {
+                xored_key[byte] = key.mac_key[byte] ^ other_key[byte];
+            }
+            mac_keys.push(BitKey {
+                holder_bit_id: BitID(0), // XXX: We can't know their bit ID here, is it necessary for anything though?
+                bit_holder: key.bit_holder,
+                mac_key: xored_key,
+            })
+        }
+
+        AuthBit {
+            bit: Bit {
+                id: self.fresh_bit_id(),
+                value: a.bit.value ^ b.bit.value,
+            },
+            macs,
+            mac_keys,
+        }
+    }
+
+    fn check_and(&mut self, triple: &(AuthBit, AuthBit, AuthBit)) -> Result<(), Error> {
+        let other_xs = self.open_bit(&triple.0)?;
+        let other_ys = self.open_bit(&triple.1)?;
+        let other_zs = self.open_bit(&triple.2)?;
+
+        let mut x = triple.0.bit.value;
+        for (_, other_x) in other_xs {
+            x ^= other_x;
+        }
+        let mut y = triple.1.bit.value;
+        for (_, other_y) in other_ys {
+            y ^= other_y;
+        }
+        let mut z = triple.2.bit.value;
+        for (_, other_z) in other_zs {
+            z ^= other_z;
+        }
+
+        if (x & y) != z {
+            return Err(Error::CheckFailed("Invalid AND triple".to_owned()));
+        }
+
+        Ok(())
+    }
+    /// Build oblivious AND triples by combining leaky AND triples.
+    fn random_and_shares(&mut self, len: usize) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
+        // get `len * BUCKET_SIZE` leaky ANDs
+        let leaky_ands = self.random_leaky_and(len * self.circuit.and_bucket_size())?;
+
+        // Shuffle the list.
+        // Using random u128 bit indices for shuffling should prevent collisions
+        // for at least 2^40 triples except with probability 2^-40.
+        let random_indices = self.coin_flip(leaky_ands.len() * 8 * 16)?;
+        let mut indexed_ands: Vec<(u128, (AuthBit, AuthBit, AuthBit))> = random_indices
+            .chunks_exact(16)
+            .map(|chunk| {
+                u128::from_be_bytes(chunk.try_into().expect("chunks are exactly the right size"))
+            })
+            .zip(leaky_ands)
+            .collect();
+        indexed_ands.sort_by_key(|(index, _)| *index);
+        let leaky_ands: Vec<&(AuthBit, AuthBit, AuthBit)> =
+            indexed_ands.iter().map(|(_, triple)| triple).collect();
+
+        // combine all buckets to single ANDs
+        let mut results = Vec::new();
+        for bucket in leaky_ands.chunks_exact(self.circuit.and_bucket_size()) {
+            let (mut x, y, mut z) = bucket[0].clone();
+
+            for (next_x, next_y, next_z) in bucket[1..].iter() {
+                let d_i = self.xor_abits(&y, next_y);
+                let other_djs = self.open_bit(&d_i)?;
+                let mut d = d_i.bit.value;
+                for (_, d_j) in other_djs {
+                    d ^= d_j;
+                }
+
+                x = self.xor_abits(&x, next_x);
+                z = self.xor_abits(&z, next_z);
+                if d {
+                    z = self.xor_abits(&z, next_x);
+                }
+            }
+            results.push((x, y, z));
+        }
+
+        Ok(results)
     }
 
     /// Perform the active_security check for bit authentication
@@ -916,21 +1433,71 @@ impl Party {
     }
 
     /// Run the MPC protocol, returning the parties output, if any.
-    pub fn run(&mut self) -> Result<Option<Vec<bool>>, Error> {
-        let num_auth_shares = 1;
+    pub fn run(&mut self, read_stored_triples: bool) -> Result<Option<Vec<bool>>, Error> {
+        use std::io::Write;
+
+        let num_auth_shares = self.circuit.share_authentication_cost() + SEC_MARGIN_SHARE_AUTH;
         self.log(&format!(
-            "Want to generate {num_auth_shares} authenticated share(s)"
-        ));
-        let pool_depth = num_auth_shares + SEC_MARGIN_SHARE_AUTH;
-        self.log(&format!(
-            "Pre-computing {num_auth_shares} (+ {SEC_MARGIN_SHARE_AUTH} for share security) bit authentication(s)..."
+            "Require {num_auth_shares} authenticated share(s) in total to evaluate circuit."
         ));
 
-        // We want to compute 1 authenticated share, so need `1 + SEC_MARGIN_SHARE_AUTH` bits in the pool.
-        self.abit_pool = self.precompute_abits(pool_depth)?;
+        if read_stored_triples {
+            self.log("Trying to read authenticated bits from file");
+            let file = std::fs::File::open(format!("{}.triples", self.id));
+            if let Ok(f) = file {
+                (self.global_mac_key, self.abit_pool) =
+                    serde_json::from_reader(f).map_err(|_| Error::OtherError)?;
+                self.log(&format!(
+                    "Read {} authenticated bits from pool",
+                    self.abit_pool.len()
+                ));
 
-        self.log("Starting share authentication");
-        let _shares = self.random_authenticated_shares(num_auth_shares)?;
+                let max_id = self
+                    .abit_pool
+                    .iter()
+                    .max_by_key(|abit| abit.bit.id.0)
+                    .map(|abit| abit.bit.id.0)
+                    .unwrap_or(0);
+                self.bit_counter = max_id;
+
+                if num_auth_shares > self.abit_pool.len() {
+                    self.log(&format!(
+                        "Insufficient precomputation (by {})",
+                        num_auth_shares - self.abit_pool.len()
+                    ));
+                    return Ok(None);
+                }
+            }
+        } else {
+            let target_number = self.circuit.share_authentication_cost();
+            self.log(&format!(
+                    "Pre-computing {target_number} + {SEC_MARGIN_SHARE_AUTH} maliciously secure bit authentication(s)..."
+                ));
+
+            self.abit_pool = self.precompute_abits(target_number + SEC_MARGIN_SHARE_AUTH)?;
+
+            let file = std::fs::File::create(format!("{}.triples", self.id))
+                .map_err(|_| Error::OtherError)?;
+            let mut writer = std::io::BufWriter::new(file);
+            serde_json::to_writer(&mut writer, &(self.global_mac_key, &self.abit_pool))
+                .map_err(|_| Error::OtherError)?;
+            writer.flush().unwrap();
+        }
+
+        self.ashare_pool =
+            self.random_authenticated_shares(self.circuit.share_authentication_cost())?;
+
+        let num_and_triples = self.circuit.num_and_gates();
+        self.log(&format!("Computing {} random AND triples", num_and_triples));
+        let and_shares = self.random_and_shares(num_and_triples).unwrap();
+        for (index, triple) in and_shares.iter().enumerate() {
+            self.check_and(triple).unwrap();
+            self.log(&format!(
+                "AND triple check complete [{} / {}]",
+                index + 1,
+                and_shares.len()
+            ));
+        }
 
         Ok(None)
     }
