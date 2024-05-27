@@ -2,6 +2,7 @@
 //! phases of the protocol.
 
 use hacspec_lib::Randomness;
+use hmac::{hkdf_expand, hkdf_extract};
 
 use crate::{
     circuit::Circuit,
@@ -25,6 +26,7 @@ const SEC_MARGIN_BIT_AUTH: usize = 2 * STATISTICAL_SECURITY * 8;
 /// Additional cost of authenticating a number of bits into authenticated shares.
 pub(crate) const SEC_MARGIN_SHARE_AUTH: usize = STATISTICAL_SECURITY * 8;
 
+const EVALUATOR_ID: usize = 0;
 #[derive(Debug)]
 /// A type for tracking the current protocol phase.
 pub enum ProtocolPhase {
@@ -83,6 +85,8 @@ pub struct Party {
     log_counter: u128,
     /// Wire labels for every wire in the circuit
     wire_shares: Vec<Option<(AuthBit, Option<WireLabel>)>>,
+    /// The evaluators list of received garbled AND gates (from, gate_index, g0, g1, g2, g3)
+    garbled_ands: Option<Vec<(usize, usize, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)>>,
 }
 
 #[allow(dead_code)] // TODO: Remove this later.
@@ -117,6 +121,7 @@ impl Party {
             log_counter: 0,
             enable_logging: logging,
             wire_shares: vec![None; circuit.num_gates()],
+            garbled_ands: None,
         }
     }
 
@@ -293,7 +298,7 @@ impl Party {
 
     /// Return `true`, if the party is the designated circuit evaluator.
     fn is_evaluator(&self) -> bool {
-        self.id == 0
+        self.id == EVALUATOR_ID
     }
 
     /// Send a message to the evaluator.
@@ -851,8 +856,8 @@ impl Party {
     }
 
     /// Verifiably open an authenticated bit, revealing its value to all parties.
-    fn open_bit(&mut self, bit: &AuthBit) -> Result<Vec<(usize, bool)>, Error> {
-        let mut results = Vec::new();
+    fn open_bit(&mut self, bit: &AuthBit) -> Result<bool, Error> {
+        let mut other_bits = Vec::new();
 
         // receive earlier parties MACs and verify them
         for _j in 0..self.id {
@@ -872,7 +877,7 @@ impl Party {
                 if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
                     return Err(Error::CheckFailed("Bit reveal failed".to_string()));
                 }
-                results.push((from, value));
+                other_bits.push((from, value));
             } else {
                 return Err(Error::UnexpectedMessage(reveal_message));
             }
@@ -915,15 +920,20 @@ impl Party {
                 if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
                     return Err(Error::CheckFailed("Bit reveal failed".to_string()));
                 }
-                results.push((from, value));
+                other_bits.push((from, value));
             } else {
                 return Err(Error::UnexpectedMessage(reveal_message));
             }
         }
 
+        let mut result = bit.bit.value;
+        for (_, other_bit) in other_bits {
+            result ^= other_bit
+        }
+
         self.sync().expect("sync should always succeed");
 
-        Ok(results)
+        Ok(result)
     }
 
     /// Locally compute the XOR of two authenticated bits, which will itself be
@@ -973,23 +983,34 @@ impl Party {
         }
     }
 
-    fn check_and(&mut self, triple: &(AuthBit, AuthBit, AuthBit)) -> Result<(), Error> {
-        let other_xs = self.open_bit(&triple.0)?;
-        let other_ys = self.open_bit(&triple.1)?;
-        let other_zs = self.open_bit(&triple.2)?;
+    fn and_abits(
+        &mut self,
+        random_triple: (AuthBit, AuthBit, AuthBit),
+        x: &AuthBit,
+        y: &AuthBit,
+    ) -> Result<AuthBit, Error> {
+        let (a, b, c) = random_triple;
+        let blinded_x_share = self.xor_abits(x, &a);
+        let blinded_y_share = self.xor_abits(y, &b);
 
-        let mut x = triple.0.bit.value;
-        for (_, other_x) in other_xs {
-            x ^= other_x;
+        let blinded_x = self.open_bit(&blinded_x_share)?;
+        let blinded_y = self.open_bit(&blinded_y_share)?;
+
+        let mut result = c;
+        if blinded_x {
+            result = self.xor_abits(&result, &y);
         }
-        let mut y = triple.1.bit.value;
-        for (_, other_y) in other_ys {
-            y ^= other_y;
+        if !blinded_y {
+            result = self.xor_abits(&result, &a);
         }
-        let mut z = triple.2.bit.value;
-        for (_, other_z) in other_zs {
-            z ^= other_z;
-        }
+
+        Ok(result)
+    }
+
+    fn check_and(&mut self, triple: &(AuthBit, AuthBit, AuthBit)) -> Result<(), Error> {
+        let x = self.open_bit(&triple.0)?;
+        let y = self.open_bit(&triple.1)?;
+        let z = self.open_bit(&triple.2)?;
 
         if (x & y) != z {
             return Err(Error::CheckFailed("Invalid AND triple".to_owned()));
@@ -1024,11 +1045,7 @@ impl Party {
 
             for (next_x, next_y, next_z) in bucket[1..].iter() {
                 let d_i = self.xor_abits(&y, next_y);
-                let other_djs = self.open_bit(&d_i)?;
-                let mut d = d_i.bit.value;
-                for (_, d_j) in other_djs {
-                    d ^= d_j;
-                }
+                let d = self.open_bit(&d_i)?;
 
                 x = self.xor_abits(&x, next_x);
                 z = self.xor_abits(&z, next_z);
@@ -1444,8 +1461,173 @@ impl Party {
     }
 
     /// Run the function-dependent pre-processing phase of the protocol.
-    pub fn function_dependent(&mut self) {
-        todo!("the function-dependent pre-processing phase is not yet implemented (cf. GitHub issue #51")
+    pub fn function_dependent(&mut self) -> Result<(), Error> {
+        let num_and_triples = self.circuit.num_and_gates();
+        self.log(&format!("Computing {} random AND triples", num_and_triples));
+        let mut and_shares = self.random_and_shares(num_and_triples).unwrap();
+
+        let mut garbled_ands = Vec::new();
+        for (gate_index, gate) in self.circuit.clone().gates.iter().enumerate() {
+            match *gate {
+                crate::circuit::WiredGate::Xor(left, right) => {
+                    let share_left = self.wire_shares[left]
+                        .clone()
+                        .expect("should have shares for all earlier wires already");
+                    let share_right = self.wire_shares[right]
+                        .clone()
+                        .expect("should have shares for all earlier wires already");
+
+                    let xor_share = self.xor_abits(&share_left.0, &share_right.0);
+                    if self.is_evaluator() {
+                        self.wire_shares[gate_index] = Some((xor_share, None));
+                    } else {
+                        let WireLabel(left_label) = share_left
+                            .1
+                            .expect("should have labels for all earlier shares already");
+                        let WireLabel(right_label) = share_right
+                            .1
+                            .expect("should have labels for all earlier shares already");
+                        let xor_label = xor_mac_width(&left_label, &right_label);
+                        self.wire_shares[gate_index] =
+                            Some((xor_share, Some(WireLabel(xor_label))));
+                    }
+                }
+                crate::circuit::WiredGate::And(left, right) => {
+                    let share_left = self.wire_shares[left]
+                        .clone()
+                        .expect("should have shares for all earlier wires already");
+                    let share_right = self.wire_shares[right]
+                        .clone()
+                        .expect("should have shares for all earlier wires already");
+
+                    let random_and_triple = and_shares
+                        .pop()
+                        .expect("should have pre-computed enough AND triples");
+                    let and_share =
+                        self.and_abits(random_and_triple, &share_left.0, &share_right.0)?;
+
+                    let and_output_share = self.wire_shares[gate_index]
+                        .clone()
+                        .expect("should have labels for all AND gate output wires");
+
+                    let and_0 = self.xor_abits(&and_output_share.0, &and_share);
+                    let and_1 = self.xor_abits(&and_0, &share_left.0);
+                    let and_2 = self.xor_abits(&and_0, &share_right.0);
+                    let mut and_3 = self.xor_abits(&and_1, &share_right.0);
+
+                    if self.is_evaluator() {
+                        // do local computation and receive values
+                        and_3.bit.value ^= true;
+
+                        for _j in 1..self.num_parties {
+                            let garbled_and_message = self.channels.listen.recv().unwrap();
+                            if let Message {
+                                from,
+                                to,
+                                payload: MessagePayload::GarbledAnd(g0, g1, g2, g3),
+                            } = garbled_and_message
+                            {
+                                debug_assert_eq!(to, self.id);
+                                garbled_ands.push((from, gate_index, g0, g1, g2, g3));
+                            } else {
+                                return Err(Error::UnexpectedMessage(garbled_and_message));
+                            }
+                        }
+
+                        for j in (1..self.num_parties).rev() {
+                            self.channels.parties[j]
+                                .send(Message {
+                                    from: self.id,
+                                    to: j,
+                                    payload: MessagePayload::Sync,
+                                })
+                                .unwrap();
+                        }
+                    } else {
+                        // do local computation and send values
+                        let evaluator_key = and_3
+                            .mac_keys
+                            .iter_mut()
+                            .find(|key| key.bit_holder == EVALUATOR_ID)
+                            .expect("should have key for evaluator");
+                        evaluator_key.mac_key =
+                            xor_mac_width(&evaluator_key.mac_key, &self.global_mac_key);
+
+                        let WireLabel(left_label) = share_left
+                            .1
+                            .expect("should have labels for all earlier wires");
+                        let WireLabel(right_label) = share_right
+                            .1
+                            .expect("should have labels for all earlier wires");
+                        let left_inv_label = xor_mac_width(&left_label, &self.global_mac_key);
+                        let right_inv_label = xor_mac_width(&right_label, &self.global_mac_key);
+
+                        let WireLabel(output_label) = and_output_share.1.unwrap();
+                        let garble_0 = self.garble_and(
+                            gate_index,
+                            0,
+                            and_0,
+                            output_label,
+                            left_label,
+                            right_label,
+                        );
+                        let garble_1 = self.garble_and(
+                            gate_index,
+                            1,
+                            and_1,
+                            output_label,
+                            left_label,
+                            right_inv_label,
+                        );
+                        let garble_2 = self.garble_and(
+                            gate_index,
+                            2,
+                            and_2,
+                            output_label,
+                            left_inv_label,
+                            right_label,
+                        );
+                        let garble_3 = self.garble_and(
+                            gate_index,
+                            3,
+                            and_3,
+                            output_label,
+                            left_inv_label,
+                            right_inv_label,
+                        );
+
+                        self.channels
+                            .evaluator
+                            .send(Message {
+                                from: self.id,
+                                to: EVALUATOR_ID,
+                                payload: MessagePayload::GarbledAnd(
+                                    garble_0, garble_1, garble_2, garble_3,
+                                ),
+                            })
+                            .unwrap();
+
+                        let sync = self.channels.listen.recv().unwrap();
+                        match sync.payload {
+                            MessagePayload::Sync => {
+                                if sync.from != EVALUATOR_ID || sync.to != self.id {
+                                    return Err(Error::UnexpectedMessage(sync));
+                                }
+                            }
+                            _ => return Err(Error::UnexpectedMessage(sync)),
+                        }
+                    }
+                }
+                crate::circuit::WiredGate::Not(_) => todo!(),
+                crate::circuit::WiredGate::Input(_) => continue,
+            }
+        }
+
+        if self.is_evaluator() {
+            self.garbled_ands = Some(garbled_ands);
+        }
+
+        Ok(())
     }
 
     /// Run the input-processing phase of the protocol.
@@ -1515,19 +1697,13 @@ impl Party {
             writer.flush().unwrap();
         }
 
-        self.ashare_pool =
-            self.random_authenticated_shares(self.circuit.share_authentication_cost())?;
-
-        let num_and_triples = self.circuit.num_and_gates();
-        self.log(&format!("Computing {} random AND triples", num_and_triples));
-        let and_shares = self.random_and_shares(num_and_triples).unwrap();
-        for (index, triple) in and_shares.iter().enumerate() {
-            self.check_and(triple).unwrap();
-            self.log(&format!(
-                "AND triple check complete [{} / {}]",
-                index + 1,
-                and_shares.len()
-            ));
+        self.function_independent().unwrap();
+        self.function_dependent().unwrap();
+        if self.is_evaluator() {
+            debug_assert_eq!(
+                self.garbled_ands.as_ref().unwrap().len(),
+                self.circuit.num_and_gates() * (self.num_parties - 1)
+            );
         }
 
         Ok(None)
@@ -1595,4 +1771,58 @@ impl Party {
             self.log_counter += 1;
         }
     }
+
+    fn garble_and(
+        &self,
+        gate_index: usize,
+        garble_index: u8,
+        and_share: AuthBit,
+        output_label: [u8; 16],
+        left_label: [u8; 16],
+        right_label: [u8; 16],
+    ) -> Vec<u8> {
+        let garble_serialization: Vec<u8> = self.garbling_serialize(and_share, output_label);
+        let blinding: Vec<u8> = compute_blinding(
+            garble_serialization.len(),
+            left_label,
+            right_label,
+            gate_index,
+            garble_index,
+        );
+        let mut result = vec![0u8; garble_serialization.len()];
+        for byte in 0..result.len() {
+            result[byte] = garble_serialization[byte] ^ blinding[byte];
+        }
+        result
+    }
+
+    fn garbling_serialize(&self, and_share: AuthBit, output_label: [u8; 16]) -> Vec<u8> {
+        let mut result = and_share.serialize_bit_macs();
+        let mut garbled_label = output_label;
+        for key in and_share.mac_keys {
+            garbled_label = xor_mac_width(&garbled_label, &key.mac_key);
+        }
+
+        if and_share.bit.value {
+            garbled_label = xor_mac_width(&garbled_label, &self.global_mac_key);
+        }
+        result.extend_from_slice(&garbled_label);
+        result
+    }
+}
+
+fn compute_blinding(
+    len: usize,
+    left_label: [u8; 16],
+    right_label: [u8; 16],
+    gate_index: usize,
+    garble_index: u8,
+) -> Vec<u8> {
+    let mut ikm = vec![garble_index];
+    ikm.extend_from_slice(&left_label);
+    ikm.extend_from_slice(&right_label);
+    ikm.extend_from_slice(&gate_index.to_be_bytes());
+    let domain_separator = "garble-blinding";
+    let prekey = hkdf_extract(domain_separator.as_bytes(), &ikm);
+    hkdf_expand(&prekey, b"", len)
 }
