@@ -38,7 +38,7 @@ fn main() {
         let c = circuit.clone();
         let party_join_handle = thread::spawn(move || {
             let mut rng = rand::thread_rng();
-            let mut bytes = vec![0u8; (100 * u16::MAX).into()];
+            let mut bytes = vec![0u8; 100 * usize::from(u16::MAX)];
             rng.fill_bytes(&mut bytes);
             let rng = Randomness::new(bytes);
             let log_enabled = channel_config.id == 1;
