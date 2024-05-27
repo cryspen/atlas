@@ -314,7 +314,9 @@ impl Circuit {
 
     /// Computes the required bucket size for leaky AND triple combination.
     pub fn and_bucket_size(&self) -> usize {
-        (STATISTICAL_SECURITY as u32 / self.num_gates().ilog2()) as usize
+        (STATISTICAL_SECURITY as u32 / self.num_gates().ilog2())
+            .try_into()
+            .unwrap()
     }
 
     /// Returns the number of AND gates in the circuit.
