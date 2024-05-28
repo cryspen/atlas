@@ -2078,6 +2078,13 @@ impl Party {
             );
         }
 
+        let (masked_input_wire_values, input_wire_labels) = self.input_processing()?;
+
+        if self.is_evaluator() {
+            let (masked_wire_values, wire_labels) =
+                self.evaluate_circuit(garbled_ands, masked_input_wire_values, input_wire_labels)?;
+        }
+
         Ok(None)
     }
 
