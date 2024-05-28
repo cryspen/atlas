@@ -1868,8 +1868,148 @@ impl Party {
     }
 
     /// Run the circuit evaluation phase of the protocol.
-    pub fn evaluate_circuit(&mut self) {
-        todo!("the circuit evaluation phase is not yet implemented (cf. GitHub issue #54")
+    fn evaluate_circuit(
+        &mut self,
+        garbled_ands: Vec<GarbledAnd>,
+        masked_input_wire_values: Vec<(usize, bool)>,
+        input_wire_labels: Vec<(usize, usize, [u8; MAC_LENGTH])>,
+    ) -> Result<(Vec<(usize, bool)>, Vec<(usize, usize, [u8; 16])>), Error> {
+        let mut masked_wire_values = masked_input_wire_values;
+        let mut wire_labels = input_wire_labels;
+        for (gate_index, gate) in self.circuit.gates.iter().enumerate() {
+            match *gate {
+                crate::circuit::WiredGate::Input(_) => continue,
+                crate::circuit::WiredGate::Xor(left, right) => {
+                    let left_masked_value = masked_wire_values
+                        .iter()
+                        .find(|(wire_index, _)| *wire_index == left)
+                        .expect("should have labels and mask for all earlier wires")
+                        .1;
+                    let right_masked_value = masked_wire_values
+                        .iter()
+                        .find(|(wire_index, _)| *wire_index == right)
+                        .expect("should have labels and mask for all earlier wires")
+                        .1;
+
+                    let output_wire_mask = left_masked_value ^ right_masked_value;
+                    masked_wire_values.push((gate_index, output_wire_mask));
+
+                    for party in 1..self.num_parties {
+                        let their_left_label = wire_labels
+                            .iter()
+                            .find(|(labeling_party, wire_index, _)| {
+                                *labeling_party == party && *wire_index == left
+                            })
+                            .expect("should have labels from all parties for all earlier wires")
+                            .2;
+                        let their_right_label = wire_labels
+                            .iter()
+                            .find(|(labeling_party, wire_index, _)| {
+                                *labeling_party == party && *wire_index == right
+                            })
+                            .expect("should have labels from all parties for all earlier wires")
+                            .2;
+                        let output_wire_label =
+                            xor_mac_width(&their_left_label, &their_right_label);
+                        wire_labels.push((party, gate_index, output_wire_label));
+                    }
+                }
+
+                crate::circuit::WiredGate::And(left, right) => {
+                    let output_wire_share = &self.wire_shares[gate_index]
+                        .as_ref()
+                        .expect("should have shares for all AND gates")
+                        .0;
+                    let left_masked_value = masked_wire_values
+                        .iter()
+                        .find(|(wire_index, _)| *wire_index == left)
+                        .expect("should have labels and mask for all earlier wires")
+                        .1;
+                    let right_masked_value = masked_wire_values
+                        .iter()
+                        .find(|(wire_index, _)| *wire_index == right)
+                        .expect("should have labels and mask for all earlier wires")
+                        .1;
+
+                    let mut masked_output_value = output_wire_share.bit.value;
+                    let mut this_wires_labels = Vec::new();
+                    for j in 1..self.num_parties {
+                        let garble_index =
+                            2 * (left_masked_value as u8) + (right_masked_value as u8);
+                        // recover output wire shares and labels from garbled tables
+                        let their_left_label = wire_labels
+                            .iter()
+                            .find(|(sender, gate_index, _)| *sender == j && *gate_index == left)
+                            .expect("should have labels from all other parties")
+                            .2;
+                        let their_right_label = wire_labels
+                            .iter()
+                            .find(|(sender, gate_index, _)| *sender == j && *gate_index == right)
+                            .expect("should have labels from all other parties")
+                            .2;
+                        let garbled_and_table = garbled_ands
+                            .iter()
+                            .find(|g| g.gate_index == gate_index && g.sender == j)
+                            .expect("should habe garbled and from all parties for all and gates");
+                        let garbled_and = match garble_index {
+                            0 => &garbled_and_table.g0,
+                            1 => &garbled_and_table.g1,
+                            2 => &garbled_and_table.g2,
+                            3 => &garbled_and_table.g3,
+                            _ => panic!("Invalid garble index"),
+                        };
+                        let (r_j, macs, initial_output_label) = self.ungarble_and(
+                            gate_index,
+                            garble_index,
+                            garbled_and,
+                            their_left_label,
+                            their_right_label,
+                        )?;
+                        // check my MAC on recovered share
+
+                        let my_mac = macs[self.id];
+                        let my_key = output_wire_share
+                            .mac_keys
+                            .iter()
+                            .find(|k| k.bit_holder == j)
+                            .expect("should have keys for all other parties' MACs");
+                        if !verify_mac(&r_j, &my_mac, &my_key.mac_key, &self.global_mac_key) {
+                            return Err(Error::CheckFailed(
+                                "AND gate evaluation: MAC check failed".to_owned(),
+                            ));
+                        }
+                        masked_output_value ^= r_j;
+                        let mut their_output_wire_label = initial_output_label;
+                        for mac in macs {
+                            their_output_wire_label = xor_mac_width(&their_output_wire_label, &mac);
+                        }
+                        this_wires_labels.push((j, their_output_wire_label));
+                        wire_labels.push((j, gate_index, their_output_wire_label));
+                    }
+
+                    masked_wire_values.push((gate_index, masked_output_value));
+                }
+
+                crate::circuit::WiredGate::Not(before) => {
+                    let before_masked_value = masked_wire_values
+                        .iter()
+                        .find(|(wire_index, _)| *wire_index == before)
+                        .expect("should have labels and mask for all earlier wires")
+                        .1;
+                    let output_wire_mask = before_masked_value ^ true;
+                    masked_wire_values.push((gate_index, output_wire_mask));
+                    for j in 1..self.num_parties {
+                        let their_label = wire_labels
+                            .iter()
+                            .find(|(sender, gate_index, _)| *sender == j && *gate_index == before)
+                            .expect("should have labels for all earlier wires")
+                            .2;
+                        wire_labels.push((j, gate_index, their_label)); // XXX: Label stays the same here. OK?
+                    }
+                }
+            }
+        }
+        Ok((masked_wire_values, wire_labels))
     }
 
     /// Run the output processing phase of the protocol
@@ -2028,6 +2168,29 @@ impl Party {
         result
     }
 
+    fn ungarble_and(
+        &self,
+        gate_index: usize,
+        garble_index: u8,
+        garbled_and: &[u8],
+        left_label: [u8; 16],
+        right_label: [u8; 16],
+    ) -> Result<(bool, Vec<[u8; MAC_LENGTH]>, [u8; MAC_LENGTH]), Error> {
+        let blinding: Vec<u8> = compute_blinding(
+            garbled_and.len(),
+            left_label,
+            right_label,
+            gate_index,
+            garble_index,
+        );
+        let mut result_bytes = vec![0u8; garbled_and.len()];
+        for byte in 0..result_bytes.len() {
+            result_bytes[byte] = garbled_and[byte] ^ blinding[byte];
+        }
+
+        self.garbling_deserialize(&result_bytes)
+    }
+
     fn garbling_serialize(&self, and_share: AuthBit, output_label: [u8; 16]) -> Vec<u8> {
         let mut result = and_share.serialize_bit_macs();
         let mut garbled_label = output_label;
@@ -2040,6 +2203,15 @@ impl Party {
         }
         result.extend_from_slice(&garbled_label);
         result
+    }
+
+    fn garbling_deserialize(
+        &self,
+        serialization: &[u8],
+    ) -> Result<(bool, Vec<[u8; 16]>, [u8; 16]), Error> {
+        let (bit_mac_bytes, label) = serialization.split_at(1 + MAC_LENGTH * self.num_parties);
+        let (bit_value, macs) = AuthBit::deserialize_bit_macs(bit_mac_bytes)?;
+        Ok((bit_value, macs, label.try_into().unwrap()))
     }
 }
 
