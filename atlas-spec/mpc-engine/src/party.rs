@@ -1686,8 +1686,185 @@ impl Party {
     }
 
     /// Run the input-processing phase of the protocol.
-    pub fn input_processing(&mut self) {
-        todo!("the input processing phase is not yet implemented (cf. GitHub issue #52")
+    pub fn input_processing(
+        &mut self,
+    ) -> Result<(Vec<(usize, bool)>, Vec<(usize, usize, [u8; 16])>), Error> {
+        let mut masked_wire_values = Vec::new();
+        let mut wire_labels = Vec::new();
+        let mut input_wire_offset = 0;
+        for (party, input_width) in self.circuit.clone().input_widths.iter().enumerate() {
+            for input_index in 0..*input_width {
+                let input_wire_index = input_wire_offset + input_index;
+                let wire_share = &self.wire_shares[input_wire_index]
+                    .clone()
+                    .expect("should have wire shares for all input wires");
+                let mut masked_wire_value = false;
+                if party == self.id {
+                    let input_value = self.input_values[input_index];
+                    // receive input wire shares from the other parties
+                    let mut other_wire_mask_shares = Vec::new();
+                    for j in 0..self.num_parties {
+                        if j == self.id {
+                            continue;
+                        }
+
+                        let mac_message = self.channels.listen.recv().unwrap();
+                        if let Message {
+                            from,
+                            to,
+                            payload: MessagePayload::WireMac(r_j, mac_j),
+                        } = mac_message
+                        {
+                            // verify mac
+                            let my_key = wire_share
+                                .0
+                                .mac_keys
+                                .iter()
+                                .find(|key| key.bit_holder == from)
+                                .expect("should have keys for all other parties");
+                            if !verify_mac(&r_j, &mac_j, &my_key.mac_key, &self.global_mac_key) {
+                                return Err(Error::CheckFailed(
+                                    "invalid nput wire MAC ".to_owned(),
+                                ));
+                            }
+                            other_wire_mask_shares.push(r_j);
+                        } else {
+                            return Err(Error::UnexpectedMessage(mac_message));
+                        }
+                    }
+
+                    // compute blinded input value
+                    masked_wire_value = input_value ^ wire_share.0.bit.value;
+                    for bit in other_wire_mask_shares {
+                        masked_wire_value ^= bit;
+                    }
+
+                    // acknowledge received messages
+                    for j in (0..self.num_parties).rev() {
+                        if j == self.id {
+                            continue;
+                        }
+                        self.channels.parties[j]
+                            .send(Message {
+                                from: self.id,
+                                to: j,
+                                payload: MessagePayload::Sync,
+                            })
+                            .unwrap();
+                    }
+
+                    // Broadcast masked wire. Don't care about other parties' values here.
+                    self.broadcast(&vec![masked_wire_value as u8])?;
+                } else {
+                    // send input wire shares to the party
+                    let their_mac = wire_share
+                        .0
+                        .macs
+                        .iter()
+                        .find(|(maccing_party, _)| *maccing_party == party)
+                        .expect("should have macs from all other parties")
+                        .1;
+                    self.channels.parties[party]
+                        .send(Message {
+                            from: self.id,
+                            to: party,
+                            payload: MessagePayload::WireMac(wire_share.0.bit.value, their_mac),
+                        })
+                        .unwrap();
+
+                    // receive acknowlegement
+                    let sync_message = self.channels.listen.recv().unwrap();
+
+                    if !(sync_message.from == party
+                        && sync_message.to == self.id
+                        && matches!(sync_message.payload, MessagePayload::Sync))
+                    {
+                        return Err(Error::UnexpectedMessage(sync_message));
+                    }
+
+                    // receive masked wire value broadcast
+                    masked_wire_value = self
+                        .broadcast(&[])?
+                        .iter()
+                        .find(|(sending_party, _)| *sending_party == party)
+                        .expect("should have received broadcast from all other parties")
+                        .1[0]
+                        != 0;
+                }
+
+                masked_wire_values.push((input_wire_index, masked_wire_value));
+
+                // Send correct wire label to evaluator.
+                if self.is_evaluator() {
+                    // listen for all wire labels
+                    for _j in 0..self.num_parties - 1 {
+                        let label_message = self.channels.listen.recv().unwrap();
+                        if let Message {
+                            from,
+                            to,
+                            payload: MessagePayload::WireLabel { wire, label },
+                        } = label_message
+                        {
+                            debug_assert_eq!(to, self.id);
+                            debug_assert_eq!(wire, input_wire_index);
+
+                            wire_labels.push((from, wire, label));
+                        } else {
+                            return Err(Error::UnexpectedMessage(label_message));
+                        }
+                    }
+
+                    // acknowledge received messages
+                    for j in (0..self.num_parties).rev() {
+                        if j == self.id {
+                            continue;
+                        }
+                        self.channels.parties[j]
+                            .send(Message {
+                                from: self.id,
+                                to: j,
+                                payload: MessagePayload::Sync,
+                            })
+                            .unwrap();
+                    }
+                } else {
+                    // send my wire label according to the received / computed wire_mask
+                    let WireLabel(mut label) = wire_share
+                        .clone()
+                        .1
+                        .expect("should have labels for all input wires");
+                    if masked_wire_value {
+                        label = xor_mac_width(&label, &self.global_mac_key)
+                    }
+
+                    self.channels
+                        .evaluator
+                        .send(Message {
+                            from: self.id,
+                            to: EVALUATOR_ID,
+                            payload: MessagePayload::WireLabel {
+                                wire: input_wire_index,
+                                label,
+                            },
+                        })
+                        .unwrap();
+
+                    // listen for acknowledgement
+                    let sync_message = self.channels.listen.recv().unwrap();
+
+                    if !(sync_message.from == EVALUATOR_ID
+                        && sync_message.to == self.id
+                        && matches!(sync_message.payload, MessagePayload::Sync))
+                    {
+                        return Err(Error::UnexpectedMessage(sync_message));
+                    }
+                }
+            }
+
+            input_wire_offset += input_width;
+        }
+
+        Ok((masked_wire_values, wire_labels))
     }
 
     /// Run the circuit evaluation phase of the protocol.
