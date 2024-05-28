@@ -40,11 +40,13 @@ fn main() {
             let mut rng = rand::thread_rng();
             let mut bytes = vec![0u8; 100 * usize::from(u16::MAX)];
             rng.fill_bytes(&mut bytes);
-            let rng = Randomness::new(bytes);
+            let mut rng = Randomness::new(bytes);
             let log_enabled = channel_config.id == 1;
-            let mut p = mpc_engine::party::Party::new(channel_config, &c, log_enabled, rng);
+            let input = rng.bit().unwrap();
+            let mut p =
+                mpc_engine::party::Party::new(channel_config, &c, &vec![input], log_enabled, rng);
 
-            let _ = p.run(false);
+            let _ = p.run(true);
         });
         party_join_handles.push(party_join_handle);
     }

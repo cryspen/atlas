@@ -71,6 +71,8 @@ pub struct Party {
     global_mac_key: MacKey,
     /// The circuit to be evaluated
     circuit: Circuit,
+    /// The party's input to the circuit
+    input_values: Vec<bool>,
     /// A local source of random bits and bytes
     entropy: Randomness,
     /// Pool of pre-computed authenticated bits
@@ -98,6 +100,7 @@ impl Party {
     pub fn new(
         channels: ChannelConfig,
         circuit: &Circuit,
+        input: &[bool],
         logging: bool,
         mut entropy: Randomness,
     ) -> Self {
@@ -119,6 +122,7 @@ impl Party {
             ashare_pool: Vec::new(),
             current_phase: ProtocolPhase::PreInit,
             log_counter: 0,
+            input_values: input.to_owned(),
             enable_logging: logging,
             wire_shares: vec![None; circuit.num_gates()],
             garbled_ands: None,
