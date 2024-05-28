@@ -57,6 +57,15 @@ pub struct ChannelConfig {
 #[derive(Debug, Clone)]
 pub struct WireLabel([u8; COMPUTATIONAL_SECURITY]);
 
+struct GarbledAnd {
+    sender: usize,
+    gate_index: usize,
+    g0: Vec<u8>,
+    g1: Vec<u8>,
+    g2: Vec<u8>,
+    g3: Vec<u8>,
+}
+
 /// A struct defining protocol party state during a protocol execution.
 #[allow(dead_code)] // TODO: Remove this later.
 pub struct Party {
@@ -109,6 +118,10 @@ impl Party {
             .validate_circuit_specification()
             .map_err(Error::Circuit)
             .unwrap();
+
+        if circuit.input_widths[channels.id] != input.len() {
+            panic!("Invalid input provided to party {}", channels.id)
+        }
 
         Self {
             bit_counter: 0,
@@ -1456,7 +1469,7 @@ impl Party {
     /// Run the function independent pre-processing phase of the protocol.
     ///
     /// This generates labeled wire shares for all input wires and AND-gate output wires.
-    pub fn function_independent(&mut self) -> Result<(), Error> {
+    fn function_independent(&mut self) -> Result<(), Error> {
         self.ashare_pool =
             self.random_authenticated_shares(self.circuit.share_authentication_cost())?;
 
@@ -1483,7 +1496,7 @@ impl Party {
     }
 
     /// Run the function-dependent pre-processing phase of the protocol.
-    pub fn function_dependent(&mut self) -> Result<(), Error> {
+    fn function_dependent(&mut self) -> Result<Vec<GarbledAnd>, Error> {
         let num_and_triples = self.circuit.num_and_gates();
         self.log(&format!("Computing {} random AND triples", num_and_triples));
         let mut and_shares = self.random_and_shares(num_and_triples).unwrap();
@@ -1550,7 +1563,14 @@ impl Party {
                             } = garbled_and_message
                             {
                                 debug_assert_eq!(to, self.id);
-                                garbled_ands.push((from, gate_index, g0, g1, g2, g3));
+                                garbled_ands.push(GarbledAnd {
+                                    sender: from,
+                                    gate_index,
+                                    g0,
+                                    g1,
+                                    g2,
+                                    g3,
+                                });
                             } else {
                                 return Err(Error::UnexpectedMessage(garbled_and_message));
                             }
@@ -1662,11 +1682,7 @@ impl Party {
             }
         }
 
-        if self.is_evaluator() {
-            self.garbled_ands = Some(garbled_ands);
-        }
-
-        Ok(())
+        Ok(garbled_ands)
     }
 
     /// Run the input-processing phase of the protocol.
@@ -1737,10 +1753,10 @@ impl Party {
         }
 
         self.function_independent().unwrap();
-        self.function_dependent().unwrap();
+        let garbled_ands = self.function_dependent().unwrap();
         if self.is_evaluator() {
             debug_assert_eq!(
-                self.garbled_ands.as_ref().unwrap().len(),
+                garbled_ands.len(),
                 self.circuit.num_and_gates() * (self.num_parties - 1)
             );
         }
