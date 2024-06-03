@@ -335,7 +335,6 @@ impl Party {
     /// `global_mac_key` was used in all bit-authentications between two
     /// parties.
     fn precompute_abits(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
-        self.log(&format!("{len} bit authentications requested, require an additional {SEC_MARGIN_BIT_AUTH} bit authentications for malicious security."));
         let len_unchecked = len + SEC_MARGIN_BIT_AUTH;
 
         // 1. Generate `len_unchecked` random local bits for authenticating.
@@ -384,12 +383,6 @@ impl Party {
 
             self.sync().expect("synchronization should have succeeded");
 
-            self.log(&format!(
-                "Completed a bit authentication [{}/{}]",
-                bit_index + 1,
-                len_unchecked
-            ));
-
             authenticated_bits.push(AuthBit {
                 bit,
                 macs: received_macs,
@@ -413,10 +406,6 @@ impl Party {
     fn random_authenticated_shares(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
         let len_unchecked = len + SEC_MARGIN_SHARE_AUTH;
         let authenticated_bits: Vec<AuthBit> = self.abit_pool.drain(..len_unchecked).collect();
-        self.log(&format!(
-            "Obtained {} authenticated bits from the pool to generate {len} authenticated bit shares.",
-            authenticated_bits.len()
-        ));
 
         // Malicious security checks
         for r in len..len + SEC_MARGIN_SHARE_AUTH {
@@ -552,12 +541,6 @@ impl Party {
                     ));
                 }
             }
-
-            self.log(&format!(
-                "Completed share auth check [{}/{}]",
-                r + 1 - len,
-                SEC_MARGIN_SHARE_AUTH
-            ));
         }
 
         Ok(authenticated_bits[0..len].to_vec())
@@ -1197,12 +1180,6 @@ impl Party {
                     panic!("Party {}: {}'s MAC verification failed: {other_xj}\nMAC: {mac:?}\nLocal key: {key:?}\nGlobal key: {:?}\n", self.id, party, self.global_mac_key);
                 }
             }
-
-            self.log(&format!(
-                "Completed bit auth check [{}/{}]",
-                j + 1,
-                SEC_MARGIN_BIT_AUTH
-            ));
         }
         Ok(())
     }
@@ -1496,12 +1473,14 @@ impl Party {
     }
 
     /// Run the function-dependent pre-processing phase of the protocol.
-    fn function_dependent(&mut self) -> Result<Vec<GarbledAnd>, Error> {
+    fn function_dependent(
+        &mut self,
+    ) -> Result<(Vec<GarbledAnd>, Vec<(usize, u8, AuthBit)>), Error> {
         let num_and_triples = self.circuit.num_and_gates();
-        self.log(&format!("Computing {} random AND triples", num_and_triples));
         let mut and_shares = self.random_and_shares(num_and_triples).unwrap();
 
         let mut garbled_ands = Vec::new();
+        let mut local_ands = Vec::new();
         for (gate_index, gate) in self.circuit.clone().gates.iter().enumerate() {
             match *gate {
                 crate::circuit::WiredGate::Xor(left, right) => {
@@ -1585,6 +1564,10 @@ impl Party {
                                 })
                                 .unwrap();
                         }
+                        local_ands.push((gate_index, 0, and_0));
+                        local_ands.push((gate_index, 1, and_1));
+                        local_ands.push((gate_index, 2, and_2));
+                        local_ands.push((gate_index, 3, and_3));
                     } else {
                         // do local computation and send values
                         let evaluator_key = and_3
@@ -1682,7 +1665,7 @@ impl Party {
             }
         }
 
-        Ok(garbled_ands)
+        Ok((garbled_ands, local_ands))
     }
 
     /// Run the input-processing phase of the protocol.
@@ -1871,6 +1854,7 @@ impl Party {
     fn evaluate_circuit(
         &mut self,
         garbled_ands: Vec<GarbledAnd>,
+        local_ands: Vec<(usize, u8, AuthBit)>,
         masked_input_wire_values: Vec<(usize, bool)>,
         input_wire_labels: Vec<(usize, usize, [u8; MAC_LENGTH])>,
     ) -> Result<(Vec<(usize, bool)>, Vec<(usize, usize, [u8; 16])>), Error> {
@@ -1966,13 +1950,18 @@ impl Party {
                             their_right_label,
                         )?;
                         // check my MAC on recovered share
-
                         let my_mac = macs[self.id];
-                        let my_key = output_wire_share
+                        let my_key = local_ands
+                            .iter()
+                            .find(|(gate, garble, _)| {
+                                *gate == gate_index && *garble == garble_index
+                            })
+                            .expect("should have keys for all other parties' MACs")
+                            .2
                             .mac_keys
                             .iter()
                             .find(|k| k.bit_holder == j)
-                            .expect("should have keys for all other parties' MACs");
+                            .unwrap();
                         if !verify_mac(&r_j, &my_mac, &my_key.mac_key, &self.global_mac_key) {
                             return Err(Error::CheckFailed(
                                 "AND gate evaluation: MAC check failed".to_owned(),
@@ -2013,29 +2002,109 @@ impl Party {
     }
 
     /// Run the output processing phase of the protocol
-    pub fn output_processing(&mut self) {
-        todo!("the output processing phase is not yet implemented (cf. GitHub issue #53")
+    pub fn output_processing(
+        &mut self,
+        masked_wire_values: Vec<(usize, bool)>,
+    ) -> Result<Vec<(usize, bool)>, Error> {
+        let mut output_values = Vec::new();
+        // receive output wire mask shares
+        for output_wire_index in self.circuit.clone().output_gates {
+            let output_wire_share = &self.wire_shares[output_wire_index]
+                .clone()
+                .expect("should have wire shares for all input wires")
+                .0;
+            if self.is_evaluator() {
+                let mut output_wire_value = masked_wire_values
+                    .iter()
+                    .find(|(wire_index, _)| *wire_index == output_wire_index)
+                    .expect("should have masked values for all output wires after evaluation")
+                    .1;
+                for _j in 0..self.num_parties - 1 {
+                    let share_message = self.channels.listen.recv().unwrap();
+                    if let Message {
+                        from,
+                        to,
+                        payload: MessagePayload::WireMac(wire_mask_share, mac),
+                    } = share_message
+                    {
+                        debug_assert_eq!(to, self.id);
+                        // verify mac
+                        let my_key = output_wire_share
+                            .mac_keys
+                            .iter()
+                            .find(|key| key.bit_holder == from)
+                            .expect("should have keys for all other parties");
+                        if !verify_mac(
+                            &wire_mask_share,
+                            &mac,
+                            &my_key.mac_key,
+                            &self.global_mac_key,
+                        ) {
+                            return Err(Error::CheckFailed("invalid nput wire MAC ".to_owned()));
+                        }
+                        output_wire_value ^= wire_mask_share;
+                    } else {
+                        return Err(Error::UnexpectedMessage(share_message));
+                    }
+                }
+
+                output_values.push((output_wire_index, output_wire_value));
+
+                // acknowledge received messages
+                for j in (0..self.num_parties).rev() {
+                    if j == self.id {
+                        continue;
+                    }
+                    self.channels.parties[j]
+                        .send(Message {
+                            from: self.id,
+                            to: j,
+                            payload: MessagePayload::Sync,
+                        })
+                        .unwrap();
+                }
+            } else {
+                // send output wire mask shares
+                let evaluator_mac = output_wire_share.macs[EVALUATOR_ID].1;
+                self.channels
+                    .evaluator
+                    .send(Message {
+                        from: self.id,
+                        to: EVALUATOR_ID,
+                        payload: MessagePayload::WireMac(
+                            output_wire_share.bit.value,
+                            evaluator_mac,
+                        ),
+                    })
+                    .unwrap();
+
+                // listen for acknowledgement
+                let sync_message = self.channels.listen.recv().unwrap();
+
+                if !(sync_message.from == EVALUATOR_ID
+                    && sync_message.to == self.id
+                    && matches!(sync_message.payload, MessagePayload::Sync))
+                {
+                    return Err(Error::UnexpectedMessage(sync_message));
+                }
+            }
+        }
+
+        self.sync().expect("sync should always succeed");
+        Ok(output_values)
     }
 
     /// Run the MPC protocol, returning the parties output, if any.
-    pub fn run(&mut self, read_stored_triples: bool) -> Result<Option<Vec<bool>>, Error> {
+    pub fn run(&mut self, read_stored_triples: bool) -> Result<Option<Vec<(usize, bool)>>, Error> {
         use std::io::Write;
 
         let num_auth_shares = self.circuit.share_authentication_cost() + SEC_MARGIN_SHARE_AUTH;
-        self.log(&format!(
-            "Require {num_auth_shares} authenticated share(s) in total to evaluate circuit."
-        ));
 
         if read_stored_triples {
-            self.log("Trying to read authenticated bits from file");
             let file = std::fs::File::open(format!("{}.triples", self.id));
             if let Ok(f) = file {
                 (self.global_mac_key, self.abit_pool) =
                     serde_json::from_reader(f).map_err(|_| Error::OtherError)?;
-                self.log(&format!(
-                    "Read {} authenticated bits from pool",
-                    self.abit_pool.len()
-                ));
 
                 let max_id = self
                     .abit_pool
@@ -2055,9 +2124,6 @@ impl Party {
             }
         } else {
             let target_number = self.circuit.share_authentication_cost();
-            self.log(&format!(
-                    "Pre-computing {target_number} + {SEC_MARGIN_SHARE_AUTH} maliciously secure bit authentication(s)..."
-                ));
 
             self.abit_pool = self.precompute_abits(target_number + SEC_MARGIN_SHARE_AUTH)?;
 
@@ -2070,7 +2136,8 @@ impl Party {
         }
 
         self.function_independent().unwrap();
-        let garbled_ands = self.function_dependent().unwrap();
+
+        let (garbled_ands, local_ands) = self.function_dependent().unwrap();
         if self.is_evaluator() {
             debug_assert_eq!(
                 garbled_ands.len(),
@@ -2078,14 +2145,32 @@ impl Party {
             );
         }
 
-        let (masked_input_wire_values, input_wire_labels) = self.input_processing()?;
+        let (masked_input_wire_values, input_wire_labels) = self.input_processing().unwrap();
 
-        if self.is_evaluator() {
-            let (masked_wire_values, wire_labels) =
-                self.evaluate_circuit(garbled_ands, masked_input_wire_values, input_wire_labels)?;
-        }
+        let result = if self.is_evaluator() {
+            let (masked_wire_values, wire_labels) = self
+                .evaluate_circuit(
+                    garbled_ands,
+                    local_ands,
+                    masked_input_wire_values,
+                    input_wire_labels,
+                )
+                .unwrap();
+            let result = self.output_processing(masked_wire_values).unwrap();
 
-        Ok(None)
+            self.log(&format!("Got result {result:?}"));
+            result
+        } else {
+            let result = self.output_processing(masked_input_wire_values).unwrap();
+
+            result
+        };
+
+        Ok(if result.is_empty() {
+            Some(result)
+        } else {
+            None
+        })
     }
 
     /// Synchronise parties.
@@ -2195,7 +2280,8 @@ impl Party {
             result_bytes[byte] = garbled_and[byte] ^ blinding[byte];
         }
 
-        self.garbling_deserialize(&result_bytes)
+        let result = self.garbling_deserialize(&result_bytes)?;
+        Ok(result)
     }
 
     fn garbling_serialize(&self, and_share: AuthBit, output_label: [u8; 16]) -> Vec<u8> {
