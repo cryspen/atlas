@@ -317,13 +317,13 @@ impl Party {
         //    their local bits.
         let mut authenticated_bits = Vec::new();
         for (_bit_index, bit) in bits.into_iter().enumerate() {
-            let mut computed_keys: Vec<BitKey> = Vec::new();
+            let mut computed_keys = [mac::zero_key(); NUM_PARTIES];
             let mut received_macs = [mac::zero_mac(); NUM_PARTIES];
 
             // Obliviously authenticate local bits of earlier parties.
             for bit_holder in 0..self.id {
                 let computed_key = self.provide_bit_authentication(bit_holder)?;
-                computed_keys.push(computed_key)
+                computed_keys[bit_holder] = computed_key.mac_key;
             }
 
             // Obliviously obtain MACs on the current bit from all other parties.
@@ -339,7 +339,7 @@ impl Party {
             // Obliviously authenticate local bits of later parties.
             for bit_holder in self.id + 1..self.num_parties {
                 let computed_key = self.provide_bit_authentication(bit_holder)?;
-                computed_keys.push(computed_key)
+                computed_keys[bit_holder] = computed_key.mac_key;
             }
 
             self.sync().expect("synchronization should have succeeded");
@@ -381,14 +381,14 @@ impl Party {
             let mut mac_0 = [0u8; MAC_LENGTH]; // XOR of all auth keys
             for key in authenticated_bits[r].mac_keys.iter() {
                 for byte in 0..mac_0.len() {
-                    mac_0[byte] ^= key.mac_key[byte];
+                    mac_0[byte] ^= key[byte];
                 }
             }
 
             let mut mac_1 = [0u8; MAC_LENGTH]; // XOR of all (auth keys xor Delta)
             for key in authenticated_bits[r].mac_keys.iter() {
                 for byte in 0..mac_1.len() {
-                    mac_1[byte] ^= key.mac_key[byte] ^ self.global_mac_key[byte];
+                    mac_1[byte] ^= key[byte] ^ self.global_mac_key[byte];
                 }
             }
 
@@ -558,12 +558,7 @@ impl Party {
             s_js[j] = s_j;
 
             // K_i[x^j]
-            let input_0 = x
-                .mac_keys
-                .iter()
-                .find(|key| key.bit_holder == j)
-                .expect("should have keys for all other parties")
-                .mac_key;
+            let input_0 = x.mac_keys[j];
 
             // K_i[x^j] xor Delta_i
             let mut input_1 = [0u8; MAC_LENGTH];
@@ -644,14 +639,14 @@ impl Party {
             let e_i_value = z_i_value ^ r.bit.value;
 
             let other_e_is = self.broadcast(&[e_i_value as u8])?;
-            for key in r.mac_keys.iter_mut() {
+            for (bit_holder, key) in r.mac_keys.iter_mut().enumerate() {
                 let (_, other_e_j) = other_e_is
                     .iter()
-                    .find(|(party, _)| *party == key.bit_holder)
+                    .find(|(party, _)| *party == bit_holder)
                     .expect("should have received e_j from every other party j");
                 let correction_necessary = other_e_j[0] != 0;
                 if correction_necessary {
-                    key.mac_key = xor_mac_width(&key.mac_key, &self.global_mac_key);
+                    *key = xor_mac_width(&key, &self.global_mac_key);
                 }
             }
             r.bit.value = z_i_value;
@@ -662,10 +657,10 @@ impl Party {
             // Triple Check
             // 4. compute Phi
             let mut phi = [0u8; MAC_LENGTH];
-            for key in y.mac_keys.iter() {
-                let their_mac = y.macs[key.bit_holder];
+            for (bit_holder, key) in y.mac_keys.iter().enumerate() {
+                let their_mac = y.macs[bit_holder];
 
-                let intermediate_xor = xor_mac_width(&key.mac_key, &their_mac);
+                let intermediate_xor = xor_mac_width(&key, &their_mac);
                 phi = xor_mac_width(&phi, &intermediate_xor);
             }
 
@@ -707,19 +702,15 @@ impl Party {
                     continue;
                 }
                 // compute k_phi
-                let my_key = x
-                    .mac_keys
-                    .iter()
-                    .find(|k| k.bit_holder == j)
-                    .expect("should have keys for all other parties' bits");
+                let my_key = x.mac_keys[j];
 
-                let k_phi = hash_to_mac_width(domain_separator_triple, &my_key.mac_key);
+                let k_phi = hash_to_mac_width(domain_separator_triple, &my_key);
                 key_phis.push((j, k_phi));
 
                 // compute U_j
                 let u_j_hash = hash_to_mac_width(
                     domain_separator_triple,
-                    &xor_mac_width(&my_key.mac_key, &self.global_mac_key),
+                    &xor_mac_width(&my_key, &self.global_mac_key),
                 );
                 let u_j = xor_mac_width(&u_j_hash, &k_phi);
                 let u_j = xor_mac_width(&u_j, &phi);
@@ -772,10 +763,10 @@ impl Party {
                 h = xor_mac_width(&h, &intermediate_xor);
             }
 
-            for key in z.mac_keys.iter() {
-                let their_mac = z.macs[key.bit_holder];
+            for (bit_holder, key) in z.mac_keys.iter().enumerate() {
+                let their_mac = z.macs[bit_holder];
 
-                let intermediate_xor = xor_mac_width(&key.mac_key, &their_mac);
+                let intermediate_xor = xor_mac_width(&key, &their_mac);
                 h = xor_mac_width(&h, &intermediate_xor);
             }
 
@@ -824,12 +815,9 @@ impl Party {
             } = reveal_message
             {
                 debug_assert_eq!(self.id, to);
-                let my_key = bit
-                    .mac_keys
-                    .iter()
-                    .find(|k| k.bit_holder == from)
-                    .expect("should have a key for every other party");
-                if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
+                let my_key = bit.mac_keys[from];
+
+                if !verify_mac(&value, &mac, &my_key, &self.global_mac_key) {
                     return Err(Error::CheckFailed("Bit reveal failed".to_string()));
                 }
                 other_bits.push((from, value));
@@ -864,12 +852,9 @@ impl Party {
             } = reveal_message
             {
                 debug_assert_eq!(self.id, to);
-                let my_key = bit
-                    .mac_keys
-                    .iter()
-                    .find(|k| k.bit_holder == from)
-                    .expect("should have a key for every other party");
-                if !verify_mac(&value, &mac, &my_key.mac_key, &self.global_mac_key) {
+                let my_key = bit.mac_keys[from];
+
+                if !verify_mac(&value, &mac, &my_key, &self.global_mac_key) {
                     return Err(Error::CheckFailed("Bit reveal failed".to_string()));
                 }
                 other_bits.push((from, value));
@@ -896,6 +881,7 @@ impl Party {
         b: &AuthBit<NUM_PARTIES>,
     ) -> AuthBit<NUM_PARTIES> {
         let mut macs = [mac::zero_mac(); NUM_PARTIES];
+
         for (maccing_party, mac) in a.macs.iter().enumerate() {
             let mut xored_mac = [0u8; MAC_LENGTH];
             let other_mac = b.macs[maccing_party];
@@ -906,23 +892,15 @@ impl Party {
             macs[maccing_party] = xored_mac;
         }
 
-        let mut mac_keys = Vec::new();
-        for key in a.mac_keys.iter() {
+        let mut mac_keys = [mac::zero_key(); NUM_PARTIES];
+        for (bit_holder, key) in a.mac_keys.iter().enumerate() {
             let mut xored_key = [0u8; MAC_LENGTH];
-            let other_key = b
-                .mac_keys
-                .iter()
-                .find(|other_key| key.bit_holder == other_key.bit_holder)
-                .expect("should have two MAC keys for every other party")
-                .mac_key;
+            let other_key = b.mac_keys[bit_holder];
+
             for byte in 0..MAC_LENGTH {
-                xored_key[byte] = key.mac_key[byte] ^ other_key[byte];
+                xored_key[byte] = key[byte] ^ other_key[byte];
             }
-            mac_keys.push(BitKey {
-                holder_bit_id: BitID(0), // XXX: We can't know their bit ID here, is it necessary for anything though?
-                bit_holder: key.bit_holder,
-                mac_key: xored_key,
-            })
+            mac_keys[bit_holder] = xored_key;
         }
 
         AuthBit {
@@ -968,7 +946,7 @@ impl Party {
     fn invert_abit(&mut self, a: &AuthBit<NUM_PARTIES>) -> AuthBit<NUM_PARTIES> {
         let mut mac_keys = a.mac_keys.clone();
         for key in mac_keys.iter_mut() {
-            key.mac_key = xor_mac_width(&key.mac_key, &self.global_mac_key)
+            *key = xor_mac_width(&key, &self.global_mac_key)
         }
 
         AuthBit {
@@ -1071,10 +1049,8 @@ impl Party {
             let mut xored_tags = vec![[0u8; MAC_LENGTH]; self.num_parties];
             for (m, xm) in auth_bits.iter().enumerate() {
                 if ith_bit(m, &r) {
-                    for mac_keys in xm.mac_keys.iter() {
-                        for byte in 0..mac_keys.mac_key.len() {
-                            xored_keys[mac_keys.bit_holder][byte] ^= mac_keys.mac_key[byte];
-                        }
+                    for (bit_holder, key) in xm.mac_keys.iter().enumerate() {
+                        xored_keys[bit_holder] = xor_mac_width(&xored_keys[bit_holder], key);
                     }
                     for (key_holder, tag) in xm.macs.iter().enumerate() {
                         for (index, tag_byte) in tag.iter().enumerate() {
@@ -1465,13 +1441,9 @@ impl Party {
                         local_ands.push((gate_index, 3, and_3));
                     } else {
                         // do local computation and send values
-                        let evaluator_key = and_3
-                            .mac_keys
-                            .iter_mut()
-                            .find(|key| key.bit_holder == EVALUATOR_ID)
-                            .expect("should have key for evaluator");
-                        evaluator_key.mac_key =
-                            xor_mac_width(&evaluator_key.mac_key, &self.global_mac_key);
+                        let mut evaluator_key = and_3.mac_keys[EVALUATOR_ID];
+
+                        evaluator_key = xor_mac_width(&evaluator_key, &self.global_mac_key);
 
                         let WireLabel(left_label) = share_left
                             .1
@@ -1597,13 +1569,9 @@ impl Party {
                         {
                             debug_assert_eq!(to, self.id);
                             // verify mac
-                            let my_key = wire_share
-                                .0
-                                .mac_keys
-                                .iter()
-                                .find(|key| key.bit_holder == from)
-                                .expect("should have keys for all other parties");
-                            if !verify_mac(&r_j, &mac_j, &my_key.mac_key, &self.global_mac_key) {
+                            let my_key = wire_share.0.mac_keys[from];
+
+                            if !verify_mac(&r_j, &mac_j, &my_key, &self.global_mac_key) {
                                 return Err(Error::CheckFailed(
                                     "invalid input wire MAC ".to_owned(),
                                 ));
@@ -1852,11 +1820,9 @@ impl Party {
                             })
                             .expect("should have keys for all other parties' MACs")
                             .2
-                            .mac_keys
-                            .iter()
-                            .find(|k| k.bit_holder == j)
-                            .unwrap();
-                        if !verify_mac(&r_j, &my_mac, &my_key.mac_key, &self.global_mac_key) {
+                            .mac_keys[j];
+
+                        if !verify_mac(&r_j, &my_mac, &my_key, &self.global_mac_key) {
                             return Err(Error::CheckFailed(
                                 "AND gate evaluation: MAC check failed".to_owned(),
                             ));
@@ -1924,17 +1890,9 @@ impl Party {
                     {
                         debug_assert_eq!(to, self.id);
                         // verify mac
-                        let my_key = output_wire_share
-                            .mac_keys
-                            .iter()
-                            .find(|key| key.bit_holder == from)
-                            .expect("should have keys for all other parties");
-                        if !verify_mac(
-                            &wire_mask_share,
-                            &mac,
-                            &my_key.mac_key,
-                            &self.global_mac_key,
-                        ) {
+                        let my_key = output_wire_share.mac_keys[from];
+
+                        if !verify_mac(&wire_mask_share, &mac, &my_key, &self.global_mac_key) {
                             return Err(Error::CheckFailed("invalid nput wire MAC ".to_owned()));
                         }
                         output_wire_value ^= wire_mask_share;
@@ -1992,7 +1950,6 @@ impl Party {
     /// Run the MPC protocol, returning the parties output, if any.
     pub fn run(
         &mut self,
-        read_stored_triples: bool,
         circuit: &Circuit,
         input: &[bool],
     ) -> Result<Option<Vec<(usize, bool)>>, Error> {
@@ -2174,7 +2131,7 @@ impl Party {
         let mut result = and_share.serialize_bit_macs();
         let mut garbled_label = output_label;
         for key in and_share.mac_keys {
-            garbled_label = xor_mac_width(&garbled_label, &key.mac_key);
+            garbled_label = xor_mac_width(&garbled_label, &key);
         }
 
         if and_share.bit.value {

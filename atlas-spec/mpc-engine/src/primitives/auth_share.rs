@@ -23,7 +23,7 @@ pub struct BitID(pub(crate) usize);
 pub struct AuthBit<const NUM_PARTIES: usize> {
     pub(crate) bit: Bit,
     pub(crate) macs: [Mac; NUM_PARTIES],
-    pub(crate) mac_keys: Vec<BitKey>,
+    pub(crate) mac_keys: [MacKey; NUM_PARTIES],
 }
 
 impl<const NUM_PARTIES: usize> AuthBit<NUM_PARTIES> {
