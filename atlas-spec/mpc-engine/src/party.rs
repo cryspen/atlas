@@ -81,7 +81,7 @@ pub struct Party {
     /// Incremental counter for ordering logs
     log_counter: u128,
     /// Wire labels for every wire in the circuit
-    wire_shares: Vec<Option<(AuthBit, Option<WireLabel>)>>
+    wire_shares: Vec<Option<(AuthBit, Option<WireLabel>)>>,
 }
 
 impl Party {
@@ -985,17 +985,6 @@ impl Party {
         }
     }
 
-    fn check_and(&mut self, triple: &(AuthBit, AuthBit, AuthBit)) -> Result<(), Error> {
-        let x = self.open_bit(&triple.0)?;
-        let y = self.open_bit(&triple.1)?;
-        let z = self.open_bit(&triple.2)?;
-
-        if (x & y) != z {
-            return Err(Error::CheckFailed("Invalid AND triple".to_owned()));
-        }
-
-        Ok(())
-    }
     /// Build oblivious AND triples by combining leaky AND triples.
     fn random_and_shares(
         &mut self,
@@ -1576,7 +1565,7 @@ impl Party {
                 let wire_share = &self.wire_shares[input_wire_index]
                     .clone()
                     .expect("should have wire shares for all input wires");
-                let mut masked_wire_value = false;
+                let mut masked_wire_value;
                 if party == self.id {
                     let input_value = input_values[input_index];
                     // receive input wire shares from the other parties
