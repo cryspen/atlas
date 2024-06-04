@@ -11,7 +11,7 @@ use crate::{
         auth_share::{AuthBit, Bit, BitID, BitKey},
         commitment::{Commitment, Opening},
         mac::{
-            generate_mac_key, hash_to_mac_width, mac, verify_mac, xor_mac_width, Mac, MacKey,
+            self, generate_mac_key, hash_to_mac_width, mac, verify_mac, xor_mac_width, Mac, MacKey,
             MAC_LENGTH,
         },
     },
@@ -27,6 +27,7 @@ const SEC_MARGIN_BIT_AUTH: usize = 2 * STATISTICAL_SECURITY * 8;
 pub(crate) const SEC_MARGIN_SHARE_AUTH: usize = STATISTICAL_SECURITY * 8;
 
 const EVALUATOR_ID: usize = 0;
+const NUM_PARTIES: usize = 4;
 
 /// Collects all party communication channels.
 ///
@@ -73,15 +74,15 @@ pub struct Party {
     /// A local source of random bits and bytes
     entropy: Randomness,
     /// Pool of pre-computed authenticated bits
-    abit_pool: Vec<AuthBit>,
+    abit_pool: Vec<AuthBit<NUM_PARTIES>>,
     /// Pool of pre-computed authenticated shares
-    ashare_pool: Vec<AuthBit>,
+    ashare_pool: Vec<AuthBit<NUM_PARTIES>>,
     /// Whether to log events
     enable_logging: bool,
     /// Incremental counter for ordering logs
     log_counter: u128,
     /// Wire labels for every wire in the circuit
-    wire_shares: Vec<Option<(AuthBit, Option<WireLabel>)>>,
+    wire_shares: Vec<Option<(AuthBit<NUM_PARTIES>, Option<WireLabel>)>>,
 }
 
 impl Party {
@@ -294,7 +295,7 @@ impl Party {
     /// After this point the guarantee is that a pair-wise consistent
     /// `global_mac_key` was used in all bit-authentications between two
     /// parties.
-    fn precompute_abits(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
+    fn precompute_abits(&mut self, len: usize) -> Result<Vec<AuthBit<NUM_PARTIES>>, Error> {
         let len_unchecked = len + SEC_MARGIN_BIT_AUTH;
 
         // 1. Generate `len_unchecked` random local bits for authenticating.
@@ -317,7 +318,7 @@ impl Party {
         let mut authenticated_bits = Vec::new();
         for (_bit_index, bit) in bits.into_iter().enumerate() {
             let mut computed_keys: Vec<BitKey> = Vec::new();
-            let mut received_macs = Vec::new();
+            let mut received_macs = [mac::zero_mac(); NUM_PARTIES];
 
             // Obliviously authenticate local bits of earlier parties.
             for bit_holder in 0..self.id {
@@ -332,7 +333,7 @@ impl Party {
                 }
 
                 let received_mac: Mac = self.obtain_bit_authentication(authenticator, &bit)?;
-                received_macs.push((authenticator, received_mac));
+                received_macs[authenticator] = received_mac;
             }
 
             // Obliviously authenticate local bits of later parties.
@@ -363,9 +364,13 @@ impl Party {
     }
 
     /// Transform authenticated bits into `len` authenticated bit shares.
-    fn random_authenticated_shares(&mut self, len: usize) -> Result<Vec<AuthBit>, Error> {
+    fn random_authenticated_shares(
+        &mut self,
+        len: usize,
+    ) -> Result<Vec<AuthBit<NUM_PARTIES>>, Error> {
         let len_unchecked = len + SEC_MARGIN_SHARE_AUTH;
-        let authenticated_bits: Vec<AuthBit> = self.abit_pool.drain(..len_unchecked).collect();
+        let authenticated_bits: Vec<AuthBit<NUM_PARTIES>> =
+            self.abit_pool.drain(..len_unchecked).collect();
 
         // Malicious security checks
         for r in len..len + SEC_MARGIN_SHARE_AUTH {
@@ -412,7 +417,9 @@ impl Party {
                     .expect("should have received commitments from all parties");
                 other_bits_macs.push((
                     party,
-                    AuthBit::deserialize_bit_macs(&their_mac_commitment.open(&their_opening)?)?,
+                    AuthBit::<NUM_PARTIES>::deserialize_bit_macs(
+                        &their_mac_commitment.open(&their_opening)?,
+                    )?,
                 ));
             }
 
@@ -433,12 +440,7 @@ impl Party {
 
                 for p in 0..self.num_parties {
                     let their_mac = if p == self.id {
-                        authenticated_bits[r]
-                            .macs
-                            .iter()
-                            .find(|(party, _mac)| *party == maccing_party)
-                            .expect("should have MACs from all other parties")
-                            .1
+                        authenticated_bits[r].macs[maccing_party]
                     } else {
                         let (_sending_party, (_other_bit, other_macs)) = other_bits_macs
                             .iter()
@@ -507,7 +509,11 @@ impl Party {
     }
 
     /// Compute unauthenticated cross terms in an AND triple output share.
-    fn half_and(&mut self, x: &AuthBit, y: &AuthBit) -> Result<bool, Error> {
+    fn half_and(
+        &mut self,
+        x: &AuthBit<NUM_PARTIES>,
+        y: &AuthBit<NUM_PARTIES>,
+    ) -> Result<bool, Error> {
         /// Obtain the least significant bit of some hash output
         fn lsb(input: &[u8]) -> bool {
             (input[input.len() - 1] & 1) != 0
@@ -528,12 +534,7 @@ impl Party {
             } = hashes_message
             {
                 debug_assert_eq!(to, self.id);
-                let their_mac = x
-                    .macs
-                    .iter()
-                    .find(|(party, _mac)| *party == from)
-                    .expect("should have MACs from all other parties")
-                    .1;
+                let their_mac = x.macs[from];
                 let hash_lsb = lsb(&hash_to_mac_width(domain_separator, &their_mac));
                 let t_j = if x.bit.value {
                     hash_j_1 ^ hash_lsb
@@ -591,12 +592,8 @@ impl Party {
             } = hashes_message
             {
                 debug_assert_eq!(to, self.id);
-                let their_mac = x
-                    .macs
-                    .iter()
-                    .find(|(party, _mac)| *party == from)
-                    .expect("should have MACs from all other parties")
-                    .1;
+                let their_mac = x.macs[from];
+
                 let hash_lsb = lsb(&hash_to_mac_width(domain_separator, &their_mac));
                 let t_j = if x.bit.value {
                     hash_j_1 ^ hash_lsb
@@ -623,9 +620,19 @@ impl Party {
     }
 
     /// Compute authenticated AND triples.
-    fn random_leaky_and(&mut self, len: usize) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
+    fn random_leaky_and(
+        &mut self,
+        len: usize,
+    ) -> Result<
+        Vec<(
+            AuthBit<NUM_PARTIES>,
+            AuthBit<NUM_PARTIES>,
+            AuthBit<NUM_PARTIES>,
+        )>,
+        Error,
+    > {
         let mut results = Vec::new();
-        let mut shares: Vec<AuthBit> = self.ashare_pool.drain(..3 * len).collect();
+        let mut shares: Vec<AuthBit<NUM_PARTIES>> = self.ashare_pool.drain(..3 * len).collect();
         for _i in 0..len {
             let x = shares.pop().expect("requested enough authenticated bits");
             let y = shares.pop().expect("requested enough authenticated bits");
@@ -656,12 +663,9 @@ impl Party {
             // 4. compute Phi
             let mut phi = [0u8; MAC_LENGTH];
             for key in y.mac_keys.iter() {
-                let (_, their_mac) = y
-                    .macs
-                    .iter()
-                    .find(|(maccing_party, _)| *maccing_party == key.bit_holder)
-                    .unwrap();
-                let intermediate_xor = xor_mac_width(&key.mac_key, their_mac);
+                let their_mac = y.macs[key.bit_holder];
+
+                let intermediate_xor = xor_mac_width(&key.mac_key, &their_mac);
                 phi = xor_mac_width(&phi, &intermediate_xor);
             }
 
@@ -683,12 +687,9 @@ impl Party {
                 {
                     debug_assert_eq!(self.id, to);
                     // compute M_phi
-                    let (_, their_mac) = x
-                        .macs
-                        .iter()
-                        .find(|(maccing_party, _)| *maccing_party == from)
-                        .expect("should have MACs from all other parties");
-                    let mut mac_phi = hash_to_mac_width(domain_separator_triple, their_mac);
+                    let their_mac = x.macs[from];
+
+                    let mut mac_phi = hash_to_mac_width(domain_separator_triple, &their_mac);
                     if x.bit.value {
                         for byte in 0..MAC_LENGTH {
                             mac_phi[byte] ^= u[byte];
@@ -743,12 +744,9 @@ impl Party {
                 {
                     debug_assert_eq!(self.id, to);
                     // compute M_phi
-                    let (_, their_mac) = x
-                        .macs
-                        .iter()
-                        .find(|(maccing_party, _)| *maccing_party == from)
-                        .expect("should have MACs from all other parties");
-                    let mut mac_phi = hash_to_mac_width(domain_separator_triple, their_mac);
+                    let their_mac = x.macs[from];
+
+                    let mut mac_phi = hash_to_mac_width(domain_separator_triple, &their_mac);
                     if x.bit.value {
                         for byte in 0..MAC_LENGTH {
                             mac_phi[byte] ^= u[byte];
@@ -775,12 +773,9 @@ impl Party {
             }
 
             for key in z.mac_keys.iter() {
-                let (_, their_mac) = z
-                    .macs
-                    .iter()
-                    .find(|(maccing_party, _)| key.bit_holder == *maccing_party)
-                    .expect("should have MACs from all other parties");
-                let intermediate_xor = xor_mac_width(&key.mac_key, their_mac);
+                let their_mac = z.macs[key.bit_holder];
+
+                let intermediate_xor = xor_mac_width(&key.mac_key, &their_mac);
                 h = xor_mac_width(&h, &intermediate_xor);
             }
 
@@ -816,7 +811,7 @@ impl Party {
     }
 
     /// Verifiably open an authenticated bit, revealing its value to all parties.
-    fn open_bit(&mut self, bit: &AuthBit) -> Result<bool, Error> {
+    fn open_bit(&mut self, bit: &AuthBit<NUM_PARTIES>) -> Result<bool, Error> {
         let mut other_bits = Vec::new();
 
         // receive earlier parties MACs and verify them
@@ -848,16 +843,13 @@ impl Party {
             if j == self.id {
                 continue;
             }
-            let (_, their_mac) = bit
-                .macs
-                .iter()
-                .find(|(maccing_party, _mac)| j == *maccing_party)
-                .expect("should have MACs from all other parties");
+            let their_mac = bit.macs[j];
+
             self.channels.parties[j]
                 .send(Message {
                     from: self.id,
                     to: j,
-                    payload: MessagePayload::BitReveal(bit.bit.value, *their_mac),
+                    payload: MessagePayload::BitReveal(bit.bit.value, their_mac),
                 })
                 .unwrap();
         }
@@ -898,20 +890,20 @@ impl Party {
 
     /// Locally compute the XOR of two authenticated bits, which will itself be
     /// authenticated already.
-    fn xor_abits(&mut self, a: &AuthBit, b: &AuthBit) -> AuthBit {
-        let mut macs = Vec::new();
-        for (maccing_party, mac) in a.macs.iter() {
+    fn xor_abits(
+        &mut self,
+        a: &AuthBit<NUM_PARTIES>,
+        b: &AuthBit<NUM_PARTIES>,
+    ) -> AuthBit<NUM_PARTIES> {
+        let mut macs = [mac::zero_mac(); NUM_PARTIES];
+        for (maccing_party, mac) in a.macs.iter().enumerate() {
             let mut xored_mac = [0u8; MAC_LENGTH];
-            let other_mac = b
-                .macs
-                .iter()
-                .find(|(party, _)| *party == *maccing_party)
-                .expect("should have MACs from all other parties")
-                .1;
+            let other_mac = b.macs[maccing_party];
+
             for byte in 0..MAC_LENGTH {
                 xored_mac[byte] = mac[byte] ^ other_mac[byte];
             }
-            macs.push((*maccing_party, xored_mac))
+            macs[maccing_party] = xored_mac;
         }
 
         let mut mac_keys = Vec::new();
@@ -945,10 +937,14 @@ impl Party {
 
     fn and_abits(
         &mut self,
-        random_triple: (AuthBit, AuthBit, AuthBit),
-        x: &AuthBit,
-        y: &AuthBit,
-    ) -> Result<AuthBit, Error> {
+        random_triple: (
+            AuthBit<NUM_PARTIES>,
+            AuthBit<NUM_PARTIES>,
+            AuthBit<NUM_PARTIES>,
+        ),
+        x: &AuthBit<NUM_PARTIES>,
+        y: &AuthBit<NUM_PARTIES>,
+    ) -> Result<AuthBit<NUM_PARTIES>, Error> {
         let (a, b, c) = random_triple;
         let blinded_x_share = self.xor_abits(x, &a);
         let blinded_y_share = self.xor_abits(y, &b);
@@ -969,7 +965,7 @@ impl Party {
 
     /// Invert an authenticated bit, resulting in an authentication of the
     /// inverted bit.
-    fn invert_abit(&mut self, a: &AuthBit) -> AuthBit {
+    fn invert_abit(&mut self, a: &AuthBit<NUM_PARTIES>) -> AuthBit<NUM_PARTIES> {
         let mut mac_keys = a.mac_keys.clone();
         for key in mac_keys.iter_mut() {
             key.mac_key = xor_mac_width(&key.mac_key, &self.global_mac_key)
@@ -990,7 +986,14 @@ impl Party {
         &mut self,
         len: usize,
         bucket_size: usize,
-    ) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
+    ) -> Result<
+        Vec<(
+            AuthBit<NUM_PARTIES>,
+            AuthBit<NUM_PARTIES>,
+            AuthBit<NUM_PARTIES>,
+        )>,
+        Error,
+    > {
         // get `len * BUCKET_SIZE` leaky ANDs
         let leaky_ands = self.random_leaky_and(len * bucket_size)?;
 
@@ -998,7 +1001,14 @@ impl Party {
         // Using random u128 bit indices for shuffling should prevent collisions
         // for at least 2^40 triples except with probability 2^-40.
         let random_indices = self.coin_flip(leaky_ands.len() * 8 * 16)?;
-        let mut indexed_ands: Vec<(u128, (AuthBit, AuthBit, AuthBit))> = random_indices
+        let mut indexed_ands: Vec<(
+            u128,
+            (
+                AuthBit<NUM_PARTIES>,
+                AuthBit<NUM_PARTIES>,
+                AuthBit<NUM_PARTIES>,
+            ),
+        )> = random_indices
             .chunks_exact(16)
             .map(|chunk| {
                 u128::from_be_bytes(chunk.try_into().expect("chunks are exactly the right size"))
@@ -1006,8 +1016,11 @@ impl Party {
             .zip(leaky_ands)
             .collect();
         indexed_ands.sort_by_key(|(index, _)| *index);
-        let leaky_ands: Vec<&(AuthBit, AuthBit, AuthBit)> =
-            indexed_ands.iter().map(|(_, triple)| triple).collect();
+        let leaky_ands: Vec<&(
+            AuthBit<NUM_PARTIES>,
+            AuthBit<NUM_PARTIES>,
+            AuthBit<NUM_PARTIES>,
+        )> = indexed_ands.iter().map(|(_, triple)| triple).collect();
 
         // combine all buckets to single ANDs
         let mut results = Vec::new();
@@ -1031,7 +1044,7 @@ impl Party {
     }
 
     /// Perform the active_security check for bit authentication
-    fn bit_auth_check(&mut self, auth_bits: &[AuthBit]) -> Result<(), Error> {
+    fn bit_auth_check(&mut self, auth_bits: &[AuthBit<NUM_PARTIES>]) -> Result<(), Error> {
         for _j in 0..SEC_MARGIN_BIT_AUTH {
             // a) Sample `ell'` random bit.s
             let r = self.coin_flip(auth_bits.len())?;
@@ -1063,9 +1076,9 @@ impl Party {
                             xored_keys[mac_keys.bit_holder][byte] ^= mac_keys.mac_key[byte];
                         }
                     }
-                    for (key_holder, tag) in xm.macs.iter() {
+                    for (key_holder, tag) in xm.macs.iter().enumerate() {
                         for (index, tag_byte) in tag.iter().enumerate() {
-                            xored_tags[*key_holder][index] ^= *tag_byte;
+                            xored_tags[key_holder][index] ^= *tag_byte;
                         }
                     }
                 }
@@ -1355,7 +1368,7 @@ impl Party {
     fn function_dependent(
         &mut self,
         circuit: &Circuit,
-    ) -> Result<(Vec<GarbledAnd>, Vec<(usize, u8, AuthBit)>), Error> {
+    ) -> Result<(Vec<GarbledAnd>, Vec<(usize, u8, AuthBit<NUM_PARTIES>)>), Error> {
         let num_and_triples = circuit.num_and_gates();
         let mut and_shares = self
             .random_and_shares(num_and_triples, circuit.and_bucket_size())
@@ -1625,13 +1638,8 @@ impl Party {
                     self.broadcast(&vec![masked_wire_value as u8])?;
                 } else {
                     // send input wire shares to the party
-                    let their_mac = wire_share
-                        .0
-                        .macs
-                        .iter()
-                        .find(|(maccing_party, _)| *maccing_party == party)
-                        .expect("should have macs from all other parties")
-                        .1;
+                    let their_mac = wire_share.0.macs[party];
+
                     self.channels.parties[party]
                         .send(Message {
                             from: self.id,
@@ -1740,7 +1748,7 @@ impl Party {
         &mut self,
         circuit: &Circuit,
         garbled_ands: Vec<GarbledAnd>,
-        local_ands: Vec<(usize, u8, AuthBit)>,
+        local_ands: Vec<(usize, u8, AuthBit<NUM_PARTIES>)>,
         masked_input_wire_values: Vec<(usize, bool)>,
         input_wire_labels: Vec<(usize, usize, [u8; MAC_LENGTH])>,
     ) -> Result<(Vec<(usize, bool)>, Vec<(usize, usize, [u8; 16])>), Error> {
@@ -1952,7 +1960,7 @@ impl Party {
                 }
             } else {
                 // send output wire mask shares
-                let evaluator_mac = output_wire_share.macs[EVALUATOR_ID].1;
+                let evaluator_mac = output_wire_share.macs[EVALUATOR_ID];
                 self.channels
                     .evaluator
                     .send(Message {
@@ -1988,8 +1996,6 @@ impl Party {
         circuit: &Circuit,
         input: &[bool],
     ) -> Result<Option<Vec<(usize, bool)>>, Error> {
-        use std::io::Write;
-
         // Validate the circuit
         circuit
             .validate_circuit_specification()
@@ -2000,42 +2006,9 @@ impl Party {
             panic!("Invalid input provided to party {}", self.id)
         }
 
-        let num_auth_shares = circuit.share_authentication_cost() + SEC_MARGIN_SHARE_AUTH;
+        let target_number = circuit.share_authentication_cost();
 
-        if read_stored_triples {
-            let file = std::fs::File::open(format!("{}.triples", self.id));
-            if let Ok(f) = file {
-                (self.global_mac_key, self.abit_pool) =
-                    serde_json::from_reader(f).map_err(|_| Error::OtherError)?;
-
-                let max_id = self
-                    .abit_pool
-                    .iter()
-                    .max_by_key(|abit| abit.bit.id.0)
-                    .map(|abit| abit.bit.id.0)
-                    .unwrap_or(0);
-                self.bit_counter = max_id;
-
-                if num_auth_shares > self.abit_pool.len() {
-                    self.log(&format!(
-                        "Insufficient precomputation (by {})",
-                        num_auth_shares - self.abit_pool.len()
-                    ));
-                    return Ok(None);
-                }
-            }
-        } else {
-            let target_number = circuit.share_authentication_cost();
-
-            self.abit_pool = self.precompute_abits(target_number + SEC_MARGIN_SHARE_AUTH)?;
-
-            let file = std::fs::File::create(format!("{}.triples", self.id))
-                .map_err(|_| Error::OtherError)?;
-            let mut writer = std::io::BufWriter::new(file);
-            serde_json::to_writer(&mut writer, &(self.global_mac_key, &self.abit_pool))
-                .map_err(|_| Error::OtherError)?;
-            writer.flush().unwrap();
-        }
+        self.abit_pool = self.precompute_abits(target_number + SEC_MARGIN_SHARE_AUTH)?;
 
         self.function_independent(circuit).unwrap();
 
@@ -2147,7 +2120,7 @@ impl Party {
         &self,
         gate_index: usize,
         garble_index: u8,
-        and_share: AuthBit,
+        and_share: AuthBit<NUM_PARTIES>,
         output_label: [u8; 16],
         left_label: [u8; 16],
         right_label: [u8; 16],
@@ -2175,7 +2148,7 @@ impl Party {
         garbled_and: &[u8],
         left_label: [u8; 16],
         right_label: [u8; 16],
-    ) -> Result<(bool, Vec<[u8; MAC_LENGTH]>, [u8; MAC_LENGTH]), Error> {
+    ) -> Result<(bool, [Mac; NUM_PARTIES], [u8; MAC_LENGTH]), Error> {
         let blinding: Vec<u8> = compute_blinding(
             garbled_and.len(),
             left_label,
@@ -2193,7 +2166,11 @@ impl Party {
     }
 
     /// Serialize an authenticated wire share for garbling AND gates.
-    fn garbling_serialize(&self, and_share: AuthBit, output_label: [u8; 16]) -> Vec<u8> {
+    fn garbling_serialize(
+        &self,
+        and_share: AuthBit<NUM_PARTIES>,
+        output_label: [u8; 16],
+    ) -> Vec<u8> {
         let mut result = and_share.serialize_bit_macs();
         let mut garbled_label = output_label;
         for key in and_share.mac_keys {
@@ -2211,7 +2188,7 @@ impl Party {
     fn garbling_deserialize(
         &self,
         serialization: &[u8],
-    ) -> Result<(bool, Vec<[u8; 16]>, [u8; 16]), Error> {
+    ) -> Result<(bool, [Mac; NUM_PARTIES], [u8; 16]), Error> {
         let (bit_mac_bytes, label) = serialization.split_at(1 + MAC_LENGTH * self.num_parties);
         let (bit_value, macs) = AuthBit::deserialize_bit_macs(bit_mac_bytes)?;
         Ok((bit_value, macs, label.try_into().unwrap()))
