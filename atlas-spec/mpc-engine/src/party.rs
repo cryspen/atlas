@@ -27,14 +27,6 @@ const SEC_MARGIN_BIT_AUTH: usize = 2 * STATISTICAL_SECURITY * 8;
 pub(crate) const SEC_MARGIN_SHARE_AUTH: usize = STATISTICAL_SECURITY * 8;
 
 const EVALUATOR_ID: usize = 0;
-#[derive(Debug)]
-/// A type for tracking the current protocol phase.
-pub enum ProtocolPhase {
-    /// Before the protocol has begun
-    PreInit,
-    /// Function-independent pre-processing
-    Init,
-}
 
 /// Collects all party communication channels.
 ///
@@ -78,18 +70,12 @@ pub struct Party {
     channels: ChannelConfig,
     /// The global MAC key for authenticating wire value shares
     global_mac_key: MacKey,
-    /// The circuit to be evaluated
-    circuit: Circuit,
-    /// The party's input to the circuit
-    input_values: Vec<bool>,
     /// A local source of random bits and bytes
     entropy: Randomness,
     /// Pool of pre-computed authenticated bits
     abit_pool: Vec<AuthBit>,
     /// Pool of pre-computed authenticated shares
     ashare_pool: Vec<AuthBit>,
-    /// Tracks the current phase of protocol execution
-    current_phase: ProtocolPhase,
     /// Whether to log events
     enable_logging: bool,
     /// Incremental counter for ordering logs
@@ -100,7 +86,6 @@ pub struct Party {
     garbled_ands: Option<Vec<(usize, usize, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)>>,
 }
 
-#[allow(dead_code)] // TODO: Remove this later.
 impl Party {
     /// Initialize an MPC party.
     ///
@@ -109,33 +94,19 @@ impl Party {
     pub fn new(
         channels: ChannelConfig,
         circuit: &Circuit,
-        input: &[bool],
         logging: bool,
         mut entropy: Randomness,
     ) -> Self {
-        // Validate the circuit
-        circuit
-            .validate_circuit_specification()
-            .map_err(Error::Circuit)
-            .unwrap();
-
-        if circuit.input_widths[channels.id] != input.len() {
-            panic!("Invalid input provided to party {}", channels.id)
-        }
-
         Self {
             bit_counter: 0,
             id: channels.id,
             num_parties: channels.parties.len(),
             channels,
             global_mac_key: generate_mac_key(&mut entropy),
-            circuit: circuit.clone(),
             entropy,
             abit_pool: Vec::new(),
             ashare_pool: Vec::new(),
-            current_phase: ProtocolPhase::PreInit,
             log_counter: 0,
-            input_values: input.to_owned(),
             enable_logging: logging,
             wire_shares: vec![None; circuit.num_gates()],
             garbled_ands: None,
@@ -318,14 +289,6 @@ impl Party {
         self.id == EVALUATOR_ID
     }
 
-    /// Send a message to the evaluator.
-    fn send_to_evaluator(&mut self, message: Message) {
-        self.channels
-            .evaluator
-            .send(message)
-            .expect("evaluator should be online");
-    }
-
     /// Jointly compute `len` bit authentications.
     ///
     /// Internally generates `len +  SEC_MARGIN_BIT_AUTH` bit
@@ -355,7 +318,7 @@ impl Party {
         // 2. Obliviously get MACs on all local bits from every other party and obliviously provide MACs on
         //    their local bits.
         let mut authenticated_bits = Vec::new();
-        for (bit_index, bit) in bits.into_iter().enumerate() {
+        for (_bit_index, bit) in bits.into_iter().enumerate() {
             let mut computed_keys: Vec<BitKey> = Vec::new();
             let mut received_macs = Vec::new();
 
@@ -1037,9 +1000,13 @@ impl Party {
         Ok(())
     }
     /// Build oblivious AND triples by combining leaky AND triples.
-    fn random_and_shares(&mut self, len: usize) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
+    fn random_and_shares(
+        &mut self,
+        len: usize,
+        bucket_size: usize,
+    ) -> Result<Vec<(AuthBit, AuthBit, AuthBit)>, Error> {
         // get `len * BUCKET_SIZE` leaky ANDs
-        let leaky_ands = self.random_leaky_and(len * self.circuit.and_bucket_size())?;
+        let leaky_ands = self.random_leaky_and(len * bucket_size)?;
 
         // Shuffle the list.
         // Using random u128 bit indices for shuffling should prevent collisions
@@ -1058,7 +1025,7 @@ impl Party {
 
         // combine all buckets to single ANDs
         let mut results = Vec::new();
-        for bucket in leaky_ands.chunks_exact(self.circuit.and_bucket_size()) {
+        for bucket in leaky_ands.chunks_exact(bucket_size) {
             let (mut x, y, mut z) = bucket[0].clone();
 
             for (next_x, next_y, next_z) in bucket[1..].iter() {
@@ -1079,7 +1046,7 @@ impl Party {
 
     /// Perform the active_security check for bit authentication
     fn bit_auth_check(&mut self, auth_bits: &[AuthBit]) -> Result<(), Error> {
-        for j in 0..SEC_MARGIN_BIT_AUTH {
+        for _j in 0..SEC_MARGIN_BIT_AUTH {
             // a) Sample `ell'` random bit.s
             let r = self.coin_flip(auth_bits.len())?;
 
@@ -1277,79 +1244,6 @@ impl Party {
         }
     }
 
-    /// Initiate an equality check with another party.
-    ///
-    /// The initiator has to provide its own input value to the check and will
-    /// learn whether that value is the same as the responders.
-    fn eq_initiate(&mut self, i: usize, my_value: &[u8]) -> Result<bool, Error> {
-        let (own_sender, own_receiver) = mpsc::channel::<SubMessage>();
-        let (their_sender, their_receiver) = mpsc::channel::<SubMessage>();
-
-        let channel_msg = Message {
-            from: self.id,
-            to: i,
-            payload: MessagePayload::SubChannel(own_sender, their_receiver),
-        };
-        self.channels.parties[i]
-            .send(channel_msg)
-            .expect("all parties should be online");
-
-        let dst = format!("EQ-{}-{}", self.id, i);
-        let (commitment, opening) = Commitment::new(my_value, dst.as_bytes(), &mut self.entropy);
-        their_sender
-            .send(SubMessage::EQCommit(commitment))
-            .expect("all parties should be online");
-
-        let responder_message = own_receiver.recv().expect("all parties should be online");
-        if let SubMessage::EQResponse(their_value) = responder_message {
-            let res = their_value == my_value;
-            their_sender
-                .send(SubMessage::EQOpening(opening))
-                .expect("all parties should be online");
-            Ok(res)
-        } else {
-            Err(Error::UnexpectedSubprotocolMessage(responder_message))
-        }
-    }
-
-    /// Listen for an equality check initiation.
-    ///
-    /// The responder has to provide its own input value to the check and will
-    /// learn whether that value is the same as the initators.
-    fn eq_respond(&mut self, my_value: &[u8]) -> Result<bool, Error> {
-        let channel_msg = self
-            .channels
-            .listen
-            .recv()
-            .expect("all parties should be online");
-
-        if let Message {
-            to,
-            from: _from,
-            payload: MessagePayload::SubChannel(their_channel, my_channel),
-        } = channel_msg
-        {
-            debug_assert_eq!(to, self.id);
-            let commit_message = my_channel.recv().expect("all parties should be online");
-            if let SubMessage::EQCommit(commitment) = commit_message {
-                their_channel
-                    .send(SubMessage::EQResponse(my_value.to_vec()))
-                    .expect("all parties should be online");
-                let opening_message = my_channel.recv().expect("all parties should be online");
-                if let SubMessage::EQOpening(opening) = opening_message {
-                    let their_value = commitment.open(&opening)?;
-                    Ok(my_value == their_value)
-                } else {
-                    Err(Error::UnexpectedSubprotocolMessage(opening_message))
-                }
-            } else {
-                Err(Error::UnexpectedSubprotocolMessage(commit_message))
-            }
-        } else {
-            Err(Error::UnexpectedMessage(channel_msg))
-        }
-    }
-
     /// Generate a fresh bit id, increasing the internal bit counter.
     fn fresh_bit_id(&mut self) -> BitID {
         let res = self.bit_counter;
@@ -1446,11 +1340,10 @@ impl Party {
     /// Run the function independent pre-processing phase of the protocol.
     ///
     /// This generates labeled wire shares for all input wires and AND-gate output wires.
-    fn function_independent(&mut self) -> Result<(), Error> {
-        self.ashare_pool =
-            self.random_authenticated_shares(self.circuit.share_authentication_cost())?;
+    fn function_independent(&mut self, circuit: &Circuit) -> Result<(), Error> {
+        self.ashare_pool = self.random_authenticated_shares(circuit.share_authentication_cost())?;
 
-        for (gate_index, gate) in self.circuit.gates.iter().enumerate() {
+        for (gate_index, gate) in circuit.gates.iter().enumerate() {
             match *gate {
                 crate::circuit::WiredGate::Input(_) | crate::circuit::WiredGate::And(_, _) => {
                     let share = self
@@ -1475,13 +1368,16 @@ impl Party {
     /// Run the function-dependent pre-processing phase of the protocol.
     fn function_dependent(
         &mut self,
+        circuit: &Circuit,
     ) -> Result<(Vec<GarbledAnd>, Vec<(usize, u8, AuthBit)>), Error> {
-        let num_and_triples = self.circuit.num_and_gates();
-        let mut and_shares = self.random_and_shares(num_and_triples).unwrap();
+        let num_and_triples = circuit.num_and_gates();
+        let mut and_shares = self
+            .random_and_shares(num_and_triples, circuit.and_bucket_size())
+            .unwrap();
 
         let mut garbled_ands = Vec::new();
         let mut local_ands = Vec::new();
-        for (gate_index, gate) in self.circuit.clone().gates.iter().enumerate() {
+        for (gate_index, gate) in circuit.gates.iter().enumerate() {
             match *gate {
                 crate::circuit::WiredGate::Xor(left, right) => {
                     let share_left = self.wire_shares[left]
@@ -1671,11 +1567,13 @@ impl Party {
     /// Run the input-processing phase of the protocol.
     pub fn input_processing(
         &mut self,
+        circuit: &Circuit,
+        input_values: &[bool],
     ) -> Result<(Vec<(usize, bool)>, Vec<(usize, usize, [u8; 16])>), Error> {
         let mut masked_wire_values = Vec::new();
         let mut wire_labels = Vec::new();
         let mut input_wire_offset = 0;
-        for (party, input_width) in self.circuit.clone().input_widths.iter().enumerate() {
+        for (party, input_width) in circuit.input_widths.iter().enumerate() {
             for input_index in 0..*input_width {
                 let input_wire_index = input_wire_offset + input_index;
                 let wire_share = &self.wire_shares[input_wire_index]
@@ -1683,7 +1581,7 @@ impl Party {
                     .expect("should have wire shares for all input wires");
                 let mut masked_wire_value = false;
                 if party == self.id {
-                    let input_value = self.input_values[input_index];
+                    let input_value = input_values[input_index];
                     // receive input wire shares from the other parties
                     let mut other_wire_mask_shares = Vec::new();
                     for j in 0..self.num_parties {
@@ -1698,6 +1596,7 @@ impl Party {
                             payload: MessagePayload::WireMac(r_j, mac_j),
                         } = mac_message
                         {
+                            debug_assert_eq!(to, self.id);
                             // verify mac
                             let my_key = wire_share
                                 .0
@@ -1707,7 +1606,7 @@ impl Party {
                                 .expect("should have keys for all other parties");
                             if !verify_mac(&r_j, &mac_j, &my_key.mac_key, &self.global_mac_key) {
                                 return Err(Error::CheckFailed(
-                                    "invalid nput wire MAC ".to_owned(),
+                                    "invalid input wire MAC ".to_owned(),
                                 ));
                             }
                             other_wire_mask_shares.push(r_j);
@@ -1853,6 +1752,7 @@ impl Party {
     /// Run the circuit evaluation phase of the protocol.
     fn evaluate_circuit(
         &mut self,
+        circuit: &Circuit,
         garbled_ands: Vec<GarbledAnd>,
         local_ands: Vec<(usize, u8, AuthBit)>,
         masked_input_wire_values: Vec<(usize, bool)>,
@@ -1860,7 +1760,7 @@ impl Party {
     ) -> Result<(Vec<(usize, bool)>, Vec<(usize, usize, [u8; 16])>), Error> {
         let mut masked_wire_values = masked_input_wire_values;
         let mut wire_labels = input_wire_labels;
-        for (gate_index, gate) in self.circuit.gates.iter().enumerate() {
+        for (gate_index, gate) in circuit.gates.iter().enumerate() {
             match *gate {
                 crate::circuit::WiredGate::Input(_) => continue,
                 crate::circuit::WiredGate::Xor(left, right) => {
@@ -2004,19 +1904,20 @@ impl Party {
     /// Run the output processing phase of the protocol
     pub fn output_processing(
         &mut self,
+        circuit: &Circuit,
         masked_wire_values: Vec<(usize, bool)>,
     ) -> Result<Vec<(usize, bool)>, Error> {
         let mut output_values = Vec::new();
         // receive output wire mask shares
-        for output_wire_index in self.circuit.clone().output_gates {
-            let output_wire_share = &self.wire_shares[output_wire_index]
+        for output_wire_index in circuit.output_gates.iter() {
+            let output_wire_share = &self.wire_shares[*output_wire_index]
                 .clone()
                 .expect("should have wire shares for all input wires")
                 .0;
             if self.is_evaluator() {
                 let mut output_wire_value = masked_wire_values
                     .iter()
-                    .find(|(wire_index, _)| *wire_index == output_wire_index)
+                    .find(|(wire_index, _)| *wire_index == *output_wire_index)
                     .expect("should have masked values for all output wires after evaluation")
                     .1;
                 for _j in 0..self.num_parties - 1 {
@@ -2048,7 +1949,7 @@ impl Party {
                     }
                 }
 
-                output_values.push((output_wire_index, output_wire_value));
+                output_values.push((*output_wire_index, output_wire_value));
 
                 // acknowledge received messages
                 for j in (0..self.num_parties).rev() {
@@ -2095,10 +1996,25 @@ impl Party {
     }
 
     /// Run the MPC protocol, returning the parties output, if any.
-    pub fn run(&mut self, read_stored_triples: bool) -> Result<Option<Vec<(usize, bool)>>, Error> {
+    pub fn run(
+        &mut self,
+        read_stored_triples: bool,
+        circuit: &Circuit,
+        input: &[bool],
+    ) -> Result<Option<Vec<(usize, bool)>>, Error> {
         use std::io::Write;
 
-        let num_auth_shares = self.circuit.share_authentication_cost() + SEC_MARGIN_SHARE_AUTH;
+        // Validate the circuit
+        circuit
+            .validate_circuit_specification()
+            .map_err(Error::Circuit)
+            .unwrap();
+
+        if circuit.input_widths[self.id] != input.len() {
+            panic!("Invalid input provided to party {}", self.id)
+        }
+
+        let num_auth_shares = circuit.share_authentication_cost() + SEC_MARGIN_SHARE_AUTH;
 
         if read_stored_triples {
             let file = std::fs::File::open(format!("{}.triples", self.id));
@@ -2123,7 +2039,7 @@ impl Party {
                 }
             }
         } else {
-            let target_number = self.circuit.share_authentication_cost();
+            let target_number = circuit.share_authentication_cost();
 
             self.abit_pool = self.precompute_abits(target_number + SEC_MARGIN_SHARE_AUTH)?;
 
@@ -2135,33 +2051,37 @@ impl Party {
             writer.flush().unwrap();
         }
 
-        self.function_independent().unwrap();
+        self.function_independent(circuit).unwrap();
 
-        let (garbled_ands, local_ands) = self.function_dependent().unwrap();
+        let (garbled_ands, local_ands) = self.function_dependent(circuit).unwrap();
         if self.is_evaluator() {
             debug_assert_eq!(
                 garbled_ands.len(),
-                self.circuit.num_and_gates() * (self.num_parties - 1)
+                circuit.num_and_gates() * (self.num_parties - 1)
             );
         }
 
-        let (masked_input_wire_values, input_wire_labels) = self.input_processing().unwrap();
+        let (masked_input_wire_values, input_wire_labels) =
+            self.input_processing(circuit, input).unwrap();
 
         let result = if self.is_evaluator() {
-            let (masked_wire_values, wire_labels) = self
+            let (masked_wire_values, _wire_labels) = self
                 .evaluate_circuit(
+                    circuit,
                     garbled_ands,
                     local_ands,
                     masked_input_wire_values,
                     input_wire_labels,
                 )
                 .unwrap();
-            let result = self.output_processing(masked_wire_values).unwrap();
+            let result = self.output_processing(circuit, masked_wire_values).unwrap();
 
             self.log(&format!("Got result {result:?}"));
             result
         } else {
-            let result = self.output_processing(masked_input_wire_values).unwrap();
+            let result = self
+                .output_processing(circuit, masked_input_wire_values)
+                .unwrap();
 
             result
         };
@@ -2236,6 +2156,7 @@ impl Party {
         }
     }
 
+    /// Compute an entry in a garbled AND-gate evaluation table.
     fn garble_and(
         &self,
         gate_index: usize,
@@ -2260,6 +2181,7 @@ impl Party {
         result
     }
 
+    /// Ungarble an AND-gate evaluation table entry.
     fn ungarble_and(
         &self,
         gate_index: usize,
@@ -2284,6 +2206,7 @@ impl Party {
         Ok(result)
     }
 
+    /// Serialize an authenticated wire share for garbling AND gates.
     fn garbling_serialize(&self, and_share: AuthBit, output_label: [u8; 16]) -> Vec<u8> {
         let mut result = and_share.serialize_bit_macs();
         let mut garbled_label = output_label;
@@ -2298,6 +2221,7 @@ impl Party {
         result
     }
 
+    /// Deserialize an authenticated wire share for garbled AND evaluation.
     fn garbling_deserialize(
         &self,
         serialization: &[u8],
