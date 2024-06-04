@@ -81,9 +81,7 @@ pub struct Party {
     /// Incremental counter for ordering logs
     log_counter: u128,
     /// Wire labels for every wire in the circuit
-    wire_shares: Vec<Option<(AuthBit, Option<WireLabel>)>>,
-    /// The evaluators list of received garbled AND gates (from, gate_index, g0, g1, g2, g3)
-    garbled_ands: Option<Vec<(usize, usize, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)>>,
+    wire_shares: Vec<Option<(AuthBit, Option<WireLabel>)>>
 }
 
 impl Party {
@@ -109,7 +107,6 @@ impl Party {
             log_counter: 0,
             enable_logging: logging,
             wire_shares: vec![None; circuit.num_gates()],
-            garbled_ands: None,
         }
     }
 
