@@ -59,7 +59,6 @@ struct GarbledAnd {
 }
 
 /// A struct defining protocol party state during a protocol execution.
-#[allow(dead_code)] // TODO: Remove this later.
 pub struct Party {
     bit_counter: usize,
     /// The party's numeric identifier
