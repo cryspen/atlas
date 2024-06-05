@@ -69,3 +69,51 @@ pub struct BitKey {
     pub(crate) bit_holder: usize,
     pub(crate) mac_key: MacKey,
 }
+
+#[test]
+fn serialization() {
+    let macs_1 = [
+        [1u8; MAC_LENGTH],
+        [2; MAC_LENGTH],
+        [3; MAC_LENGTH],
+        [4; MAC_LENGTH],
+    ];
+    let macs_2 = [
+        [11u8; MAC_LENGTH],
+        [22; MAC_LENGTH],
+        [33; MAC_LENGTH],
+        [44; MAC_LENGTH],
+    ];
+    let keys = [
+        [5u8; MAC_LENGTH],
+        [6; MAC_LENGTH],
+        [7; MAC_LENGTH],
+        [8; MAC_LENGTH],
+    ];
+    let test_bit_1 = AuthBit {
+        bit: Bit {
+            id: BitID(0),
+            value: true,
+        },
+        macs: macs_1,
+        mac_keys: keys,
+    };
+    let test_bit_2 = AuthBit {
+        bit: Bit {
+            id: BitID(1),
+            value: false,
+        },
+        macs: macs_2,
+        mac_keys: keys,
+    };
+
+    let (bit_1, deserialized_macs_1) =
+        AuthBit::<4>::deserialize_bit_macs(&test_bit_1.serialize_bit_macs()).unwrap();
+
+    let (bit_2, deserialized_macs_2) =
+        AuthBit::<4>::deserialize_bit_macs(&test_bit_2.serialize_bit_macs()).unwrap();
+    assert_eq!(bit_1, true);
+    assert_eq!(bit_2, false);
+    assert_eq!(deserialized_macs_1, macs_1);
+    assert_eq!(deserialized_macs_2, macs_2);
+}
