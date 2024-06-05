@@ -54,13 +54,11 @@ pub enum MessagePayload {
     /// A garbled AND gate, to be sent to the evaluator
     GarbledAnd(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>),
     /// A MAC on a wire mask share
-    WireMac(usize, bool, Mac),
+    WireMac(bool, Mac),
     /// Masked input wire value
     MaskedInput(bool),
     /// A wire label, to be sent to the evaluator
     WireLabel {
-        /// The originator of the label
-        from: usize,
         /// The wire the label belongs to
         wire: WireIndex,
         /// The wire label

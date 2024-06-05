@@ -52,11 +52,11 @@ pub fn hkdf_expand(prk: &[u8], info: &[u8], l: usize) -> Vec<u8> {
     let n = (l + HASH_LEN - 1) / HASH_LEN; // N = ceil(L/HashLen)
 
     let mut t = hmac(prk, &info.concat_byte(1u8));
-    for i in 1..n {
+    for i in 0..n {
         let round_input = t[i * HASH_LEN..(i + 1) * HASH_LEN]
             .to_vec()
             .concat(info)
-            .concat_byte((i - 1) as u8);
+            .concat_byte((i + 1) as u8);
         let t_i = hmac(prk, &round_input);
         t.extend_from_slice(&t_i);
     }
