@@ -60,7 +60,6 @@ struct GarbledAnd {
 }
 
 /// A struct defining protocol party state during a protocol execution.
-#[allow(dead_code)] // TODO: Remove this later.
 pub struct Party {
     bit_counter: usize,
     /// The party's numeric identifier
@@ -1943,7 +1942,6 @@ impl Party {
             }
         }
 
-        self.sync().expect("sync should always succeed");
         Ok(output_values)
     }
 
@@ -1977,9 +1975,12 @@ impl Party {
             );
         }
 
+        self.sync().unwrap();
+
         let (masked_input_wire_values, input_wire_labels) =
             self.input_processing(circuit, input).unwrap();
 
+        self.sync().unwrap();
         let result = if self.is_evaluator() {
             let (masked_wire_values, _wire_labels) = self
                 .evaluate_circuit(
@@ -1990,11 +1991,13 @@ impl Party {
                     input_wire_labels,
                 )
                 .unwrap();
+            self.sync().unwrap();
             let result = self.output_processing(circuit, masked_wire_values).unwrap();
 
             self.log(&format!("Got result {result:?}"));
             result
         } else {
+            self.sync().unwrap();
             let result = self
                 .output_processing(circuit, masked_input_wire_values)
                 .unwrap();
