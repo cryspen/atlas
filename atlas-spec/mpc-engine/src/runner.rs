@@ -12,7 +12,7 @@ pub struct Runner;
 impl Runner {
     /// Set up and run an MPC session of the given circuit with the provided
     /// inputs.
-    pub fn run(
+    pub fn run_mpc(
         circuit: &Circuit,
         inputs: &[&[bool]],
         logging: Vec<usize>,

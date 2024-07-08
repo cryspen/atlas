@@ -1,36 +1,26 @@
 //! This module defines the interface for share authentication.
-use serde::{Deserialize, Serialize};
+use crate::{
+    messages::{Message, MessagePayload},
+    party::Party,
+    primitives::mac::MAC_LENGTH,
+    Error,
+};
 
-use crate::{primitives::mac::MAC_LENGTH, Error};
-
-use super::mac::{self, Mac, MacKey};
-
-/// A bit held by a party with a given ID.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Bit {
-    pub(crate) id: BitID,
-    pub(crate) value: bool,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-/// A bit identifier.
-///
-/// This is unique per party, not globally, so if referring bits held by another
-/// party, their party ID is also required to disambiguate.
-pub struct BitID(pub(crate) usize);
+use super::mac::{self, verify_mac, Mac, MacKey};
 
 #[derive(Debug, Clone)]
 /// A bit authenticated between two parties.
 pub struct AuthBit<const NUM_PARTIES: usize> {
-    pub(crate) bit: Bit,
+    pub(crate) bit: bool,
     pub(crate) macs: [Mac; NUM_PARTIES],
-    pub(crate) mac_keys: [MacKey; NUM_PARTIES],
+    pub(crate) keys: [MacKey; NUM_PARTIES],
 }
 
 impl<const NUM_PARTIES: usize> AuthBit<NUM_PARTIES> {
     /// Serialize the bit value and all MACs on the bit.
     pub fn serialize_bit_macs(&self) -> Vec<u8> {
         let mut result = vec![0u8; NUM_PARTIES * MAC_LENGTH + 1];
-        result[0] = self.bit.value as u8;
+        result[0] = self.bit as u8;
         for (key_holder, mac) in self.macs.iter().enumerate() {
             result[1 + key_holder * MAC_LENGTH..1 + (key_holder + 1) * MAC_LENGTH]
                 .copy_from_slice(mac);
@@ -62,12 +52,40 @@ impl<const NUM_PARTIES: usize> AuthBit<NUM_PARTIES> {
     }
 }
 
-/// The key to authenticate a two-party authenticated bit.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BitKey {
-    pub(crate) holder_bit_id: BitID,
-    pub(crate) bit_holder: usize,
-    pub(crate) mac_key: MacKey,
+/// Locally compute the XOR of two authenticated bits, which will itself be
+/// authenticated already.
+pub fn xor<const NUM_PARTIES: usize>(
+    a: &AuthBit<NUM_PARTIES>,
+    b: &AuthBit<NUM_PARTIES>,
+) -> AuthBit<NUM_PARTIES> {
+    let mut macs = [mac::zero_mac(); NUM_PARTIES];
+
+    for (maccing_party, mac) in a.macs.iter().enumerate() {
+        let mut xored_mac = [0u8; MAC_LENGTH];
+        let other_mac = b.macs[maccing_party];
+
+        for byte in 0..MAC_LENGTH {
+            xored_mac[byte] = mac[byte] ^ other_mac[byte];
+        }
+        macs[maccing_party] = xored_mac;
+    }
+
+    let mut mac_keys = [mac::zero_key(); NUM_PARTIES];
+    for (bit_holder, key) in a.keys.iter().enumerate() {
+        let mut xored_key = [0u8; MAC_LENGTH];
+        let other_key = b.keys[bit_holder];
+
+        for byte in 0..MAC_LENGTH {
+            xored_key[byte] = key[byte] ^ other_key[byte];
+        }
+        mac_keys[bit_holder] = xored_key;
+    }
+
+    AuthBit {
+        bit: a.bit ^ b.bit,
+        macs,
+        keys: mac_keys,
+    }
 }
 
 #[test]
@@ -91,20 +109,14 @@ fn serialization() {
         [8; MAC_LENGTH],
     ];
     let test_bit_1 = AuthBit {
-        bit: Bit {
-            id: BitID(0),
-            value: true,
-        },
+        bit: true,
         macs: macs_1,
-        mac_keys: keys,
+        keys,
     };
     let test_bit_2 = AuthBit {
-        bit: Bit {
-            id: BitID(1),
-            value: false,
-        },
+        bit: false,
         macs: macs_2,
-        mac_keys: keys,
+        keys,
     };
 
     let (bit_1, deserialized_macs_1) =
