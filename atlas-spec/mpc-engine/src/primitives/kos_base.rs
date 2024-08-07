@@ -14,7 +14,7 @@ use super::mac::MAC_LENGTH;
 type BaseOTSeed = [u8; COMPUTATIONAL_SECURITY];
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     ReceiverAbort,
     SenderCheatDetected,
 }
@@ -65,23 +65,59 @@ fn FRO4<const L: usize>(
 pub(crate) struct BaseOTReceiver<const L: usize> {
     sid: Vec<u8>,
     T: P256Point,
-    bits: [bool; L],
+    pub selection_bits: [bool; L],
     alphas: [P256Scalar; L],
 }
 
 pub(crate) struct BaseOTSender<const L: usize> {
     sid: Vec<u8>,
     r: P256Scalar,
+    pub inputs: [([u8; 16], [u8; 16]); L],
+    expected_answer: [u8; 16],
     negTr: P256Point,
     chall_hashes: [[u8; COMPUTATIONAL_SECURITY]; L],
 }
 
+#[derive(Debug)]
+pub(crate) struct ReceiverChoose<const L: usize> {
+    seed: BaseOTSeed,
+    messages: [P256Point; L],
+}
+
+#[derive(Debug)]
+pub(crate) struct ReceiverResponse {
+    response: [u8; 16],
+}
+
+#[derive(Debug)]
+pub(crate) struct SenderTransfer<const L: usize> {
+    seed: P256Point,
+    challenge: [[u8; 16]; L],
+    gamma: [u8; 16],
+}
+
 impl<const L: usize> BaseOTReceiver<L> {
-    pub(crate) fn init(entropy: &mut Randomness, sid: &[u8]) -> (Self, BaseOTSeed) {
+    pub(crate) fn choose(entropy: &mut Randomness, sid: &[u8]) -> (Self, ReceiverChoose<L>) {
+        let (mut receiver, seed) = Self::parameters(entropy, sid);
+        let (bits, messages) = receiver.messages(entropy);
+        receiver.selection_bits = bits;
+        (receiver, ReceiverChoose { seed, messages })
+    }
+
+    pub(crate) fn response(
+        &self,
+        transfer: SenderTransfer<L>,
+    ) -> Result<([[u8; 16]; L], ReceiverResponse), Error> {
+        let messages = self.decrypt(transfer.seed);
+        let response = self.responses(&self.selection_bits, &messages, &transfer.challenge);
+        self.challenge_verification(&response, &transfer.gamma)?;
+        Ok((messages, ReceiverResponse { response }))
+    }
+
+    fn parameters(entropy: &mut Randomness, sid: &[u8]) -> (Self, BaseOTSeed) {
         let mut seed_array = [0u8; COMPUTATIONAL_SECURITY];
         let seed = entropy.bytes(COMPUTATIONAL_SECURITY).unwrap().to_owned();
         seed_array.copy_from_slice(&seed);
-        let bits = [false; L];
         let alphas = [P256Scalar::zero(); L];
 
         let T = FRO1(&seed_array, sid);
@@ -89,24 +125,24 @@ impl<const L: usize> BaseOTReceiver<L> {
             Self {
                 sid: sid.to_owned(),
                 T,
-                bits,
+                selection_bits: [false; L],
                 alphas,
             },
             seed_array,
         )
     }
 
-    pub(crate) fn messages(&mut self, entropy: &mut Randomness) -> [P256Point; L] {
+    fn messages(&mut self, entropy: &mut Randomness) -> ([bool; L], [P256Point; L]) {
         let mut messages = [P256Point::AtInfinity; L];
+        let bits: [bool; L] = std::array::from_fn(|_| entropy.bit().unwrap());
         for i in 0..L {
-            self.bits[i] = entropy.bit().unwrap();
             self.alphas[i] = random_scalar(entropy, &self.sid).unwrap();
             messages[i] = p256::p256_point_mul_base(self.alphas[i]).unwrap();
-            if self.bits[i] {
+            if bits[i] {
                 messages[i] = p256::point_add(messages[i], self.T).unwrap();
             }
         }
-        messages
+        (bits, messages)
     }
 
     fn decrypt(&self, z: P256Point) -> [[u8; COMPUTATIONAL_SECURITY]; L] {
@@ -120,13 +156,14 @@ impl<const L: usize> BaseOTReceiver<L> {
 
     fn responses(
         &self,
+        bits: &[bool; L],
         messages: &[[u8; MAC_LENGTH]; L],
         challenges: &[[u8; COMPUTATIONAL_SECURITY]; L],
     ) -> [u8; COMPUTATIONAL_SECURITY] {
         let mut responses = [[0u8; COMPUTATIONAL_SECURITY]; L];
         for i in 0..L {
             responses[i] = FRO3(&messages[i], &self.sid);
-            if self.bits[i] {
+            if bits[i] {
                 responses[i] = xor_arrays(&responses[i], &challenges[i]);
             }
         }
@@ -147,7 +184,36 @@ impl<const L: usize> BaseOTReceiver<L> {
 }
 
 impl<const L: usize> BaseOTSender<L> {
-    pub(crate) fn init(
+    pub(crate) fn transfer(
+        entropy: &mut Randomness,
+        sid: &[u8],
+        choice: ReceiverChoose<L>,
+    ) -> (Self, SenderTransfer<L>) {
+        let (mut sender, seed) = Self::parameters(entropy, sid, &choice.seed);
+        let inputs = sender.generate_inputs(choice.messages);
+        let challenge = sender.challenges(&inputs);
+        sender.inputs = inputs;
+        let (expected_answer, gamma) = sender.proof();
+        sender.expected_answer = expected_answer;
+        (
+            sender,
+            SenderTransfer {
+                seed,
+                challenge,
+                gamma,
+            },
+        )
+    }
+
+    pub(crate) fn verify(&self, response: ReceiverResponse) -> Result<(), Error> {
+        if response.response != self.expected_answer {
+            Err(Error::SenderCheatDetected)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn parameters(
         entropy: &mut Randomness,
         sid: &[u8],
         seed: &BaseOTSeed,
@@ -163,12 +229,14 @@ impl<const L: usize> BaseOTSender<L> {
                 chall_hashes,
                 r,
                 negTr,
+                inputs: [([0u8; 16], [0u8; 16]); L],
+                expected_answer: [0u8; 16],
             },
             z,
         )
     }
 
-    pub(crate) fn messages(
+    fn generate_inputs(
         &self,
         receiver_messages: [P256Point; L],
     ) -> [([u8; MAC_LENGTH], [u8; MAC_LENGTH]); L] {
@@ -199,9 +267,9 @@ impl<const L: usize> BaseOTSender<L> {
     }
 
     fn proof(&self) -> ([u8; COMPUTATIONAL_SECURITY], [u8; COMPUTATIONAL_SECURITY]) {
-        let Ans = FRO4(&self.chall_hashes, &self.sid);
-        let gamma = FRO3(&Ans, &self.sid);
-        (Ans, gamma)
+        let expected_answer = FRO4(&self.chall_hashes, &self.sid);
+        let gamma = FRO3(&expected_answer, &self.sid);
+        (expected_answer, gamma)
     }
 }
 
@@ -215,24 +283,31 @@ fn xor_arrays<const L: usize>(a: &[u8; L], b: &[u8; L]) -> [u8; L] {
 
 #[test]
 fn simple() {
+    // pre-requisites
     use rand::{thread_rng, RngCore};
     let sid = b"test";
     let mut rng = thread_rng();
     let mut entropy = [0u8; 100000];
     rng.fill_bytes(&mut entropy);
     let mut entropy = Randomness::new(entropy.to_vec());
-    let (mut receiver, seed) = BaseOTReceiver::<5>::init(&mut entropy, sid);
-    let receiver_messages = receiver.messages(&mut entropy);
 
-    let (mut sender, sender_parameter) = BaseOTSender::<5>::init(&mut entropy, sid, &seed);
-    let sender_messages = sender.messages(receiver_messages);
-    let challenges = sender.challenges(&sender_messages);
-    let (Ans_sender, gamma) = sender.proof();
+    let (mut receiver, choice_message) = BaseOTReceiver::<5>::choose(&mut entropy, sid);
 
-    let decryptions = receiver.decrypt(sender_parameter);
-    let Ans_receiver = receiver.responses(&decryptions, &challenges);
-    receiver
-        .challenge_verification(&Ans_receiver, &gamma)
-        .unwrap();
-    assert_eq!(Ans_receiver, Ans_sender)
+    let (mut sender, transfer_message) =
+        BaseOTSender::<5>::transfer(&mut entropy, sid, choice_message);
+
+    let (receiver_outputs, response) = receiver.response(transfer_message).unwrap();
+
+    sender.verify(response).unwrap();
+
+    for (i, selection_bit) in receiver.selection_bits.iter().enumerate() {
+        assert_eq!(
+            receiver_outputs[i],
+            if *selection_bit {
+                sender.inputs[i].1
+            } else {
+                sender.inputs[i].0
+            }
+        )
+    }
 }

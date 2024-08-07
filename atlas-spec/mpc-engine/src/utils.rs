@@ -40,3 +40,34 @@ pub(crate) fn ith_bit(i: usize, bytes: &[u8]) -> bool {
     let bit_index = 7 - i % 8;
     ((bytes[byte_index] >> bit_index) & 1u8) == 1u8
 }
+
+/// Pack slice of `bool`s into a byte vector.
+///
+/// We assume that `bits.len()` is a multiple of 8.
+pub(crate) fn pack_bits(bits: &[bool]) -> Vec<u8> {
+    
+    let mut result = Vec::new();
+    let full_blocks = bits.len() / 8;
+    let remainder = bits.len() % 8;
+
+    debug_assert_eq!(remainder, 0);
+    
+    for i in 0..full_blocks {
+        let mut current_byte = 0u8;
+        for bit in 0..8 {
+            current_byte += (bits[i * 8 + bit] as u8) << (7 - bit);
+        }
+        result.push(current_byte);
+    }
+
+    result
+}
+
+pub(crate) fn xor_slices(left: &[u8], right: &[u8]) -> Vec<u8> {
+    debug_assert_eq!(left.len(), right.len());
+    let mut result = Vec::with_capacity(left.len());
+    for i in 0..left.len() {
+        result.push(left[i] ^ right[i])
+    }
+    result
+}

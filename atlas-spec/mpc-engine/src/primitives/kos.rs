@@ -1,18 +1,271 @@
 //! The KOS OT extension
+//!
+//! Computational security parameter is fixed to 128.
 
+#![allow(non_snake_case)]
 use std::sync::mpsc::{Receiver, Sender};
 
 use hacspec_lib::Randomness;
+use hmac::{hkdf_expand, hkdf_extract};
 
-use crate::messages::SubMessage;
+use crate::{
+    messages::SubMessage,
+    primitives::kos_base,
+    utils::{ith_bit, pack_bits},
+};
 
-use super::mac::Mac;
+use super::{
+    kos_base::{BaseOTReceiver, BaseOTSender, ReceiverChoose, ReceiverResponse, SenderTransfer},
+    mac::{xor_mac_width, Mac},
+};
 
 #[derive(Debug)]
 /// An Error in the KOS OT extension
-pub enum Error {}
+pub enum Error {
+    /// An Error that occurred in the BaseOT.
+    BaseOTError,
+    /// A consistency check has failed.
+    Consistency,
+}
 
-#[allow(unreachable_code)]
+impl From<crate::primitives::kos_base::Error> for Error {
+    fn from(_value: crate::primitives::kos_base::Error) -> Self {
+        Self::BaseOTError
+    }
+}
+
+fn CRF(sid: &[u8], input: &Mac, tweak: usize) -> Mac {
+    todo!()
+}
+
+fn PRG(sid: &[u8], k: &[u8], len: usize) -> Vec<u8> {
+    todo!()
+}
+
+fn FRO2(sid: &[u8], matrix: &[Vec<u8>; 128]) -> Vec<u128> {
+    let mut ikm = sid.to_vec();
+    let out_len = matrix[0].len();
+    debug_assert_eq!(out_len % 16, 0);
+    for column in matrix {
+        ikm.extend_from_slice(column)
+    }
+    let prk = hkdf_extract(b"", &ikm);
+    let result_bytes = hkdf_expand(&prk, sid, out_len);
+    let result = result_bytes
+        .chunks_exact(16)
+        .map(|chunk| {
+            u128::from_be_bytes(
+                chunk
+                    .try_into()
+                    .expect("should be given exactly 16 byte chunks"),
+            )
+        })
+        .collect();
+    result
+}
+
+fn challenge_selection(challenge: &[u128], selection_matrix: &[Vec<u8>; 128]) -> u128 {
+    todo!()
+}
+
+fn packed_row(matrix: &[Vec<u8>; 128], index: usize) -> u128 {
+    let mut result = 0u128;
+    for i in 0..128 {
+        let b = ith_bit(index, &matrix[i]);
+        if b {
+            result += 1 << (i as u128);
+        }
+    }
+    result
+}
+
+fn kos_dst(sender_id: usize, receiver_id: usize) -> String {
+    format!("KOS-Base-OT-{}-{}", sender_id, receiver_id)
+}
+
+/// The message sent by the KOS15 Receiver in phase I of the protocol.
+#[derive(Debug)]
+pub struct KOSReceiverPhaseI {
+    base_ot_transfer: SenderTransfer<128>,
+    D: [Vec<u8>; 128],
+    u: u128,
+    v: u128,
+}
+
+/// The KOS Receiver state.
+pub struct KOSReceiver {
+    selection_bits: Vec<bool>,
+    base_sender: BaseOTSender<128>,
+    M_columns: [Vec<u8>; 128],
+    sid: Vec<u8>,
+}
+
+impl KOSReceiver {
+    pub(crate) fn phase_i(
+        selection: &[bool],
+        sender_phase_i: KOSSenderPhaseI,
+        sid: &[u8],
+        entropy: &mut Randomness,
+    ) -> (Self, KOSReceiverPhaseI) {
+        let (base_sender, base_sender_transfer) =
+            kos_base::BaseOTSender::<128>::transfer(entropy, &sid, sender_phase_i.base_ot_choice);
+
+        let tau = entropy.bytes(128 / 8).unwrap();
+        let mut r_prime = crate::utils::pack_bits(selection);
+        r_prime.extend_from_slice(&tau);
+        let M_columns: [Vec<u8>; 128] =
+            std::array::from_fn(|i| PRG(&sid, &base_sender.inputs[i].0, 16 + selection.len() / 8));
+        let R_columns: [Vec<u8>; 128] = std::array::from_fn(|_i| r_prime.clone());
+        let D_columns: [Vec<u8>; 128] = std::array::from_fn(|i| {
+            let prg_result = PRG(&sid, &base_sender.inputs[i].1, 16 + selection.len() / 8);
+            let temp_result = crate::utils::xor_slices(&M_columns[i], &prg_result);
+            crate::utils::xor_slices(&temp_result, &R_columns[i])
+        });
+
+        let Chi = FRO2(&sid, &D_columns);
+
+        let u = challenge_selection(&Chi, &M_columns);
+        let v = challenge_selection(&Chi, &R_columns);
+
+        (
+            Self {
+                selection_bits: selection.to_owned(),
+                base_sender,
+                M_columns,
+                sid: sid.to_owned(),
+            },
+            KOSReceiverPhaseI {
+                base_ot_transfer: base_sender_transfer,
+                D: D_columns,
+                u,
+                v,
+            },
+        )
+    }
+
+    fn phase_ii(self, sender_phase_ii: KOSSenderPhaseII) -> Result<Vec<[u8; 16]>, Error> {
+        let mut results = Vec::new();
+        self.base_sender.verify(sender_phase_ii.base_ot_response)?;
+        for (index, selection_bit) in self.selection_bits.iter().enumerate() {
+            let crf = CRF(
+                &self.sid,
+                &packed_row(&self.M_columns, index).to_be_bytes(),
+                index,
+            );
+            let y = if *selection_bit {
+                sender_phase_ii.ys[index].1
+            } else {
+                sender_phase_ii.ys[index].0
+            };
+            let a = xor_mac_width(&y, &crf);
+            results.push(a)
+        }
+        Ok(results)
+    }
+}
+
+
+pub(crate) struct KOSSender {
+    base_receiver: BaseOTReceiver<128>,
+    sid: Vec<u8>,
+}
+
+/// The message sent by the KOS15 Sender in phase I of the protocol.
+#[derive(Debug)]
+pub struct KOSSenderPhaseI {
+    base_ot_choice: ReceiverChoose<128>,
+}
+
+/// The message sent by the KOS15 Sender in phase II of the protocol.
+#[derive(Debug)]
+pub struct KOSSenderPhaseII {
+    ys: Vec<(Mac, Mac)>,
+    base_ot_response: ReceiverResponse,
+}
+
+impl KOSSender {
+    pub(crate) fn phase_i(sid: &[u8], entropy: &mut Randomness) -> (Self, KOSSenderPhaseI) {
+        let (base_receiver, base_ot_choice) =
+            crate::primitives::kos_base::BaseOTReceiver::<128>::choose(entropy, &sid);
+
+        (
+            Self {
+                sid: sid.to_owned(),
+                base_receiver,
+            },
+            KOSSenderPhaseI { base_ot_choice },
+        )
+    }
+    fn check_uvw(u: u128, v: u128, w: u128, s: u128) -> Result<(), Error> {
+        if w == u ^ (s * v) {
+            Ok(())
+        } else {
+            Err(Error::Consistency)
+        }
+    }
+
+    fn phase_ii(
+        &mut self,
+        inputs: &[(Mac, Mac)],
+        receiver_phase_i: KOSReceiverPhaseI,
+    ) -> Result<KOSSenderPhaseII, Error> {
+        let (base_receiver_output, base_ot_response) = self
+            .base_receiver
+            .response(receiver_phase_i.base_ot_transfer)?;
+
+        let Q_columns: [Vec<u8>; 128] = std::array::from_fn(|i| {
+            let mut result = PRG(&self.sid, &base_receiver_output[i], 16 + inputs.len() / 8);
+            // the following is obviously secret-dependent timing
+            if self.base_receiver.selection_bits[i] {
+                result = crate::utils::xor_slices(&result, &receiver_phase_i.D[i]);
+            }
+            result
+        });
+
+        let Chi = FRO2(&self.sid, &receiver_phase_i.D);
+
+        let w = challenge_selection(&Chi, &Q_columns);
+        let s = pack_bits(&self.base_receiver.selection_bits);
+        let mut s_array = [0u8; 16];
+        s_array.copy_from_slice(&s[..16]);
+
+        Self::check_uvw(
+            receiver_phase_i.u,
+            receiver_phase_i.v,
+            w,
+            u128::from_be_bytes(s_array),
+        )?;
+
+        let mut ys = Vec::new();
+        for (index, (a_0, a_1)) in inputs.iter().enumerate() {
+            let crf_0 = CRF(
+                &self.sid,
+                &packed_row(&Q_columns, index).to_be_bytes(),
+                index,
+            );
+            let crf_1 = CRF(
+                &self.sid,
+                &xor_mac_width(&packed_row(&Q_columns, index).to_be_bytes(), &s_array),
+                index,
+            );
+            let y_0 = xor_mac_width(a_0, &crf_0);
+            let y_1 = xor_mac_width(a_1, &crf_1);
+            ys.push((y_0, y_1))
+        }
+
+        Ok(KOSSenderPhaseII {
+            ys,
+            base_ot_response,
+        })
+    }
+}
+
+/// Run the KOS15 protocol in the role of the receiver.
+///
+/// Uses the given Channels to communicate the KOS messages from the
+/// perspective of the receiver. The input `selection` determines
+/// which of the senders inputs get obliviously transfered to the
+/// receiver.
 pub(crate) fn kos_receive(
     selection: &[bool],
     sender_address: Sender<SubMessage>,
@@ -20,21 +273,65 @@ pub(crate) fn kos_receive(
     receiver_id: usize,
     sender_id: usize,
     entropy: &mut Randomness,
-) -> Result<Vec<Mac>, Error> {
-    todo!()
+) -> Result<Vec<Mac>, crate::Error> {
+    let sid = kos_dst(sender_id, receiver_id).as_bytes().to_owned();
+
+    let sender_phase_i_msg = my_inbox.recv().unwrap();
+    if let SubMessage::KOSSenderPhaseI(sender_phase_i) = sender_phase_i_msg {
+        let (receiver, phase_i) = KOSReceiver::phase_i(selection, sender_phase_i, &sid, entropy);
+        sender_address
+            .send(SubMessage::KOSReceiverPhaseI(phase_i))
+            .unwrap();
+        let sender_phase_ii_msg = my_inbox.recv().unwrap();
+        if let SubMessage::KOSSenderPhaseII(sender_phase_ii) = sender_phase_ii_msg {
+            let outputs = receiver
+                .phase_ii(sender_phase_ii)
+                .map_err(|_| crate::Error::SubprotocolError)?;
+            Ok(outputs)
+        } else {
+            Err(crate::Error::UnexpectedSubprotocolMessage(
+                sender_phase_ii_msg,
+            ))
+        }
+    } else {
+        Err(crate::Error::UnexpectedSubprotocolMessage(
+            sender_phase_i_msg,
+        ))
+    }
 }
 
-fn kos_dst(sender_id: usize, receiver_id: usize) -> String {
-    format!("KOS-Base-OT-{}-{}", sender_id, receiver_id)
-}
-
+/// Run the KOS15 protocol in the role of the sender.
+///
+/// Uses the given Channels to communicate the KOS messages from the
+/// perspective of the sender. The receiver's input `selection`
+/// determines which of the senders inputs get obliviously transfered
+/// to the receiver.
 pub(crate) fn kos_send(
+    inputs: &[(Mac, Mac)],
     receiver_address: Sender<SubMessage>,
     my_inbox: Receiver<SubMessage>,
     receiver_id: usize,
     sender_id: usize,
-    inputs: &[(Mac, Mac)],
     entropy: &mut Randomness,
-) -> Result<(), Error> {
-    todo!()
+) -> Result<(), crate::Error> {
+    let sid = kos_dst(sender_id, receiver_id).as_bytes().to_owned();
+
+    let (mut kos_sender, phase_i) = KOSSender::phase_i(&sid, entropy);
+    receiver_address
+        .send(SubMessage::KOSSenderPhaseI(phase_i))
+        .unwrap();
+    let receiver_phase_i_message = my_inbox.recv().unwrap();
+    if let SubMessage::KOSReceiverPhaseI(receiver_phase_i) = receiver_phase_i_message {
+        let phase_ii = kos_sender
+            .phase_ii(inputs, receiver_phase_i)
+            .map_err(|_| crate::Error::SubprotocolError)?;
+        receiver_address
+            .send(SubMessage::KOSSenderPhaseII(phase_ii))
+            .unwrap();
+        Ok(())
+    } else {
+        Err(crate::Error::UnexpectedSubprotocolMessage(
+            receiver_phase_i_message,
+        ))
+    }
 }

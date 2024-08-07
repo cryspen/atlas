@@ -5,6 +5,7 @@ use crate::{
     circuit::WireIndex,
     primitives::{
         commitment::{Commitment, Opening},
+        kos::{KOSReceiverPhaseI, KOSSenderPhaseI, KOSSenderPhaseII},
         mac::Mac,
         ot::{OTReceiverSelect, OTSenderInit, OTSenderSend},
     },
@@ -78,4 +79,10 @@ pub enum SubMessage {
     EQResponse(Vec<u8>),
     /// An EQ initiator opening
     EQOpening(Opening),
+    /// A KOS OT extension sender message in Phase I
+    KOSSenderPhaseI(KOSSenderPhaseI),
+    /// A KOS OT extension sender message in Phase I
+    KOSReceiverPhaseI(KOSReceiverPhaseI),
+    /// A KOS OT extension sender message in Phase I
+    KOSSenderPhaseII(KOSSenderPhaseII),
 }
