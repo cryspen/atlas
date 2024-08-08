@@ -292,7 +292,7 @@ impl Circuit {
 
         for gate in &self.gates {
             let output_bit = match gate {
-                WiredGate::Input(x) => wire_evaluations[*x],
+                WiredGate::Input(x) => continue,
                 WiredGate::Xor(x, y) => wire_evaluations[*x] ^ wire_evaluations[*y],
                 WiredGate::And(x, y) => wire_evaluations[*x] & wire_evaluations[*y],
                 WiredGate::Not(x) => !wire_evaluations[*x],
