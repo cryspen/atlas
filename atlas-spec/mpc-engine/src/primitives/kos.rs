@@ -16,7 +16,7 @@ use crate::{
 
 use super::{
     kos_base::{BaseOTReceiver, BaseOTSender, ReceiverChoose, ReceiverResponse, SenderTransfer},
-    mac::{xor_mac_width, Mac},
+    mac::{xor_mac_width, Mac, MAC_LENGTH},
 };
 
 #[derive(Debug)]
@@ -34,12 +34,31 @@ impl From<crate::primitives::kos_base::Error> for Error {
     }
 }
 
+/// Implements a tweakable correlation robust hash function.
+///
+/// Note: This could also be implemented as
+///
+///   H(sid|tweak|input) = pi(pi(sid|input) xor tweak) xor pi(sid|input)
+///
+/// where pi is an ideal permutation, fixed-key AES in practice.
 fn CRF(sid: &[u8], input: &Mac, tweak: usize) -> Mac {
-    todo!()
+    let mut ikm = sid.to_vec();
+    ikm.extend_from_slice(&[tweak as u8]);
+    ikm.extend_from_slice(input);
+    let prk = hkdf_extract(b"", &ikm);
+    let result = hkdf_expand(&prk, sid, MAC_LENGTH)
+        .try_into()
+        .expect("should have received exactly `MAC_LENGHT` bytes");
+    result
 }
 
 fn PRG(sid: &[u8], k: &[u8], len: usize) -> Vec<u8> {
-    todo!()
+    let mut ikm = sid.to_vec();
+    ikm.extend_from_slice(k);
+    let prk = hkdf_extract(b"", &ikm);
+    let result = hkdf_expand(&prk, sid, len);
+
+    result
 }
 
 fn FRO2(sid: &[u8], matrix: &[Vec<u8>; 128]) -> Vec<u128> {
@@ -64,8 +83,13 @@ fn FRO2(sid: &[u8], matrix: &[Vec<u8>; 128]) -> Vec<u128> {
     result
 }
 
+/// This implements Xor_{j in [m+k]} (Chi_j * M_j).
 fn challenge_selection(challenge: &[u128], selection_matrix: &[Vec<u8>; 128]) -> u128 {
-    todo!()
+    let mut result = 0u128;
+    for i in 0..challenge.len() {
+        result ^= challenge[i] * packed_row(selection_matrix, i);
+    }
+    result
 }
 
 fn packed_row(matrix: &[Vec<u8>; 128], index: usize) -> u128 {
@@ -79,8 +103,10 @@ fn packed_row(matrix: &[Vec<u8>; 128], index: usize) -> u128 {
     result
 }
 
-fn kos_dst(sender_id: usize, receiver_id: usize) -> String {
+fn kos_dst(sender_id: usize, receiver_id: usize) -> Vec<u8> {
     format!("KOS-Base-OT-{}-{}", sender_id, receiver_id)
+        .as_bytes()
+        .to_vec()
 }
 
 /// The message sent by the KOS15 Receiver in phase I of the protocol.
@@ -163,7 +189,6 @@ impl KOSReceiver {
         Ok(results)
     }
 }
-
 
 pub(crate) struct KOSSender {
     base_receiver: BaseOTReceiver<128>,
@@ -274,7 +299,7 @@ pub(crate) fn kos_receive(
     sender_id: usize,
     entropy: &mut Randomness,
 ) -> Result<Vec<Mac>, crate::Error> {
-    let sid = kos_dst(sender_id, receiver_id).as_bytes().to_owned();
+    let sid = kos_dst(sender_id, receiver_id);
 
     let sender_phase_i_msg = my_inbox.recv().unwrap();
     if let SubMessage::KOSSenderPhaseI(sender_phase_i) = sender_phase_i_msg {
@@ -314,7 +339,7 @@ pub(crate) fn kos_send(
     sender_id: usize,
     entropy: &mut Randomness,
 ) -> Result<(), crate::Error> {
-    let sid = kos_dst(sender_id, receiver_id).as_bytes().to_owned();
+    let sid = kos_dst(sender_id, receiver_id);
 
     let (mut kos_sender, phase_i) = KOSSender::phase_i(&sid, entropy);
     receiver_address

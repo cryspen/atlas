@@ -1284,11 +1284,11 @@ impl Party {
             // Initiate an OT session with the bit holder giving the two MACs as
             // sender inputs.
             kos_send(
+                &kos_inputs,
                 their_address,
                 my_inbox,
                 from,
                 self.id,
-                &kos_inputs,
                 &mut self.entropy,
             )
             .unwrap_or_default();
@@ -2029,8 +2029,8 @@ impl Party {
 
         let target_number = circuit.share_authentication_cost();
 
-        self.abit_pool = self.precompute_abits(target_number + SEC_MARGIN_SHARE_AUTH)?;
-
+        // self.abit_pool = self.precompute_abits(target_number + SEC_MARGIN_SHARE_AUTH)?;
+        self.abit_pool = self.batch_precompute_abits(target_number + SEC_MARGIN_SHARE_AUTH)?;
         self.function_independent(circuit).unwrap();
 
         let (garbled_ands, local_ands) = self.function_dependent(circuit).unwrap();
