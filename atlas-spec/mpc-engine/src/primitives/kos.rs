@@ -19,6 +19,9 @@ use super::{
     mac::{xor_mac_width, Mac, MAC_LENGTH},
 };
 
+// For light testing
+const BASE_OT_LEN: usize = 128;
+
 #[derive(Debug)]
 /// An Error in the KOS OT extension
 pub enum Error {
@@ -48,7 +51,7 @@ fn CRF(sid: &[u8], input: &Mac, tweak: usize) -> Mac {
     let prk = hkdf_extract(b"", &ikm);
     let result = hkdf_expand(&prk, sid, MAC_LENGTH)
         .try_into()
-        .expect("should have received exactly `MAC_LENGHT` bytes");
+        .expect("should have received exactly `MAC_LENGTH` bytes");
     result
 }
 
@@ -64,12 +67,11 @@ fn PRG(sid: &[u8], k: &[u8], len: usize) -> Vec<u8> {
 fn FRO2(sid: &[u8], matrix: &[Vec<u8>; 128]) -> Vec<u128> {
     let mut ikm = sid.to_vec();
     let out_len = matrix[0].len();
-    debug_assert_eq!(out_len % 16, 0);
     for column in matrix {
         ikm.extend_from_slice(column)
     }
     let prk = hkdf_extract(b"", &ikm);
-    let result_bytes = hkdf_expand(&prk, sid, out_len);
+    let result_bytes = hkdf_expand(&prk, sid, out_len * 8 * 16);
     let result = result_bytes
         .chunks_exact(16)
         .map(|chunk| {
@@ -87,7 +89,7 @@ fn FRO2(sid: &[u8], matrix: &[Vec<u8>; 128]) -> Vec<u128> {
 fn challenge_selection(challenge: &[u128], selection_matrix: &[Vec<u8>; 128]) -> u128 {
     let mut result = 0u128;
     for i in 0..challenge.len() {
-        result ^= challenge[i] * packed_row(selection_matrix, i);
+        result = result.wrapping_add(challenge[i].wrapping_mul(packed_row(selection_matrix, i)))
     }
     result
 }
@@ -112,7 +114,7 @@ fn kos_dst(sender_id: usize, receiver_id: usize) -> Vec<u8> {
 /// The message sent by the KOS15 Receiver in phase I of the protocol.
 #[derive(Debug)]
 pub struct KOSReceiverPhaseI {
-    base_ot_transfer: SenderTransfer<128>,
+    base_ot_transfer: SenderTransfer<BASE_OT_LEN>,
     D: [Vec<u8>; 128],
     u: u128,
     v: u128,
@@ -121,20 +123,24 @@ pub struct KOSReceiverPhaseI {
 /// The KOS Receiver state.
 pub struct KOSReceiver {
     selection_bits: Vec<bool>,
-    base_sender: BaseOTSender<128>,
+    base_sender: BaseOTSender<BASE_OT_LEN>,
     M_columns: [Vec<u8>; 128],
     sid: Vec<u8>,
 }
 
 impl KOSReceiver {
+    /// `selection.len` must  be a multiple of 8
     pub(crate) fn phase_i(
         selection: &[bool],
         sender_phase_i: KOSSenderPhaseI,
         sid: &[u8],
         entropy: &mut Randomness,
     ) -> (Self, KOSReceiverPhaseI) {
-        let (base_sender, base_sender_transfer) =
-            kos_base::BaseOTSender::<128>::transfer(entropy, &sid, sender_phase_i.base_ot_choice);
+        let (base_sender, base_sender_transfer) = kos_base::BaseOTSender::<BASE_OT_LEN>::transfer(
+            entropy,
+            &sid,
+            sender_phase_i.base_ot_choice,
+        );
 
         let tau = entropy.bytes(128 / 8).unwrap();
         let mut r_prime = crate::utils::pack_bits(selection);
@@ -147,6 +153,9 @@ impl KOSReceiver {
             let temp_result = crate::utils::xor_slices(&M_columns[i], &prg_result);
             crate::utils::xor_slices(&temp_result, &R_columns[i])
         });
+
+        debug_assert_eq!(M_columns[0].len(), R_columns[0].len());
+        debug_assert_eq!(D_columns[0].len(), R_columns[0].len());
 
         let Chi = FRO2(&sid, &D_columns);
 
@@ -191,14 +200,14 @@ impl KOSReceiver {
 }
 
 pub(crate) struct KOSSender {
-    base_receiver: BaseOTReceiver<128>,
+    base_receiver: BaseOTReceiver<BASE_OT_LEN>,
     sid: Vec<u8>,
 }
 
 /// The message sent by the KOS15 Sender in phase I of the protocol.
 #[derive(Debug)]
 pub struct KOSSenderPhaseI {
-    base_ot_choice: ReceiverChoose<128>,
+    base_ot_choice: ReceiverChoose<BASE_OT_LEN>,
 }
 
 /// The message sent by the KOS15 Sender in phase II of the protocol.
@@ -211,7 +220,7 @@ pub struct KOSSenderPhaseII {
 impl KOSSender {
     pub(crate) fn phase_i(sid: &[u8], entropy: &mut Randomness) -> (Self, KOSSenderPhaseI) {
         let (base_receiver, base_ot_choice) =
-            crate::primitives::kos_base::BaseOTReceiver::<128>::choose(entropy, &sid);
+            crate::primitives::kos_base::BaseOTReceiver::<BASE_OT_LEN>::choose(entropy, &sid);
 
         (
             Self {
@@ -222,13 +231,14 @@ impl KOSSender {
         )
     }
     fn check_uvw(u: u128, v: u128, w: u128, s: u128) -> Result<(), Error> {
-        if w == u ^ (s * v) {
+        if w == u.wrapping_add(s.wrapping_mul(v)) {
             Ok(())
         } else {
             Err(Error::Consistency)
         }
     }
 
+    /// `inputs.len()` must be a multiple of 8.
     fn phase_ii(
         &mut self,
         inputs: &[(Mac, Mac)],
@@ -359,4 +369,49 @@ pub(crate) fn kos_send(
             receiver_phase_i_message,
         ))
     }
+}
+
+#[test]
+fn kos_simple() {
+    // pre-requisites
+    use rand::{thread_rng, RngCore};
+    let sid = b"test";
+    let mut rng = thread_rng();
+    let mut entropy = [0u8; 100000];
+    rng.fill_bytes(&mut entropy);
+    let mut entropy = Randomness::new(entropy.to_vec());
+
+    let selection = [true, false, true, false, true, false, true, false];
+    let inputs = [
+        ([0u8; 16], [1u8; 16]),
+        ([0u8; 16], [1u8; 16]),
+        ([0u8; 16], [1u8; 16]),
+        ([0u8; 16], [1u8; 16]),
+        ([0u8; 16], [1u8; 16]),
+        ([0u8; 16], [1u8; 16]),
+        ([0u8; 16], [1u8; 16]),
+        ([0u8; 16], [1u8; 16]),
+    ];
+
+    let (mut sender, sender_phase_i) = KOSSender::phase_i(sid, &mut entropy);
+    eprintln!("Sender Phase I");
+
+    let (receiver, receiver_phase_i) =
+        KOSReceiver::phase_i(&selection, sender_phase_i, sid, &mut entropy);
+    eprintln!("Receiver Phase I");
+
+    let sender_phase_ii = sender.phase_ii(&inputs, receiver_phase_i).unwrap();
+    eprintln!("Sender Phase II");
+
+    let receiver_outputs = receiver.phase_ii(sender_phase_ii).unwrap();
+    eprintln!("Receiver Phase II");
+
+    assert_eq!(receiver_outputs[0], [1u8; 16]);
+    assert_eq!(receiver_outputs[1], [0u8; 16]);
+    assert_eq!(receiver_outputs[2], [1u8; 16]);
+    assert_eq!(receiver_outputs[3], [0u8; 16]);
+    assert_eq!(receiver_outputs[4], [1u8; 16]);
+    assert_eq!(receiver_outputs[5], [0u8; 16]);
+    assert_eq!(receiver_outputs[6], [1u8; 16]);
+    assert_eq!(receiver_outputs[7], [0u8; 16]);
 }

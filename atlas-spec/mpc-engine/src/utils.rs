@@ -45,13 +45,12 @@ pub(crate) fn ith_bit(i: usize, bytes: &[u8]) -> bool {
 ///
 /// We assume that `bits.len()` is a multiple of 8.
 pub(crate) fn pack_bits(bits: &[bool]) -> Vec<u8> {
-    
     let mut result = Vec::new();
     let full_blocks = bits.len() / 8;
     let remainder = bits.len() % 8;
 
     debug_assert_eq!(remainder, 0);
-    
+
     for i in 0..full_blocks {
         let mut current_byte = 0u8;
         for bit in 0..8 {

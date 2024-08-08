@@ -213,11 +213,7 @@ impl<const L: usize> BaseOTSender<L> {
         }
     }
 
-    fn parameters(
-        entropy: &mut Randomness,
-        sid: &[u8],
-        seed: &BaseOTSeed,
-    ) -> (Self, P256Point) {
+    fn parameters(entropy: &mut Randomness, sid: &[u8], seed: &BaseOTSeed) -> (Self, P256Point) {
         let T = FRO1(seed, sid);
         let r = random_scalar(entropy, sid).unwrap();
         let negTr = p256::p256_point_mul(r, T).unwrap().neg();
