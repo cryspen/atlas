@@ -197,6 +197,7 @@
 //! PRP.eval(k, PRP.inverse(k, x)) = PRP.inverse(k, PRP.eval(k, x)) = x
 //! ```
 
+#[cfg(feature = "double-hpke")]
 use libcrux::hpke::{aead::AEAD, kdf::KDF, kem::KEM, HPKECiphertext, HPKEConfig, Mode};
 
 /// Security parameter in bytes
@@ -204,6 +205,7 @@ const SECPAR_BYTES: usize = 16;
 
 /// The HPKE Configuration used in the implementation of double HPKE
 /// encryption using the HPKE single-shot API.
+#[cfg(feature = "double-hpke")]
 const HPKE_CONF: HPKEConfig = HPKEConfig(
     Mode::mode_base,
     KEM::DHKEM_P256_HKDF_SHA256,
@@ -213,12 +215,14 @@ const HPKE_CONF: HPKEConfig = HPKEConfig(
 
 /// A wrapper type to facilitate (de-)serialization of HPKE
 /// ciphertexts to (and from) linear byte vectors.
+#[cfg(feature = "double-hpke")]
 pub struct SerializedHPKE {
     len_kem_output: u32,
     len_ciphertext: u32,
     bytes: Vec<u8>,
 }
 
+#[cfg(feature = "double-hpke")]
 impl SerializedHPKE {
     /// Prepare an HPKE ciphertext for serialization by wrapping it in
     /// a `SerializedHPKE`.
