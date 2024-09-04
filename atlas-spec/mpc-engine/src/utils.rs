@@ -70,3 +70,39 @@ pub(crate) fn xor_slices(left: &[u8], right: &[u8]) -> Vec<u8> {
     }
     result
 }
+
+#[test]
+fn bit_packing() {
+    let bits1 = [false, false, false, false, false, false, false, true];
+    let bits255 = [true, true, true, true, true, true, true, true];
+    let bits1255 = [
+        false, false, false, false, false, false, false, true, true, true, true, true, true, true,
+        true, true,
+    ];
+    let bits2551 = [
+        true, true, true, true, true, true, true, true, false, false, false, false, false, false,
+        false, true,
+    ];
+    assert_eq!(pack_bits(&bits1), vec![1]);
+    assert_eq!(pack_bits(&bits255), vec![255]);
+    assert_eq!(pack_bits(&bits1255), vec![1, 255]);
+    assert_eq!(pack_bits(&bits2551), vec![255, 1]);
+}
+
+#[test]
+fn select_bits() {
+    assert_eq!(ith_bit(0, &[255, 1]), true);
+    assert_eq!(ith_bit(1, &[255, 1]), true);
+    assert_eq!(ith_bit(15, &[255, 1]), true);
+    assert_eq!(ith_bit(14, &[255, 1]), false);
+    assert_eq!(ith_bit(14, &[1, 1, 1, 1]), false);
+    assert_eq!(ith_bit(16, &[1, 1, 1, 1]), false);
+    assert_eq!(ith_bit(7, &[1, 1, 1, 1]), true);
+    assert_eq!(ith_bit(15, &[1, 1, 1, 1]), true);
+    assert_eq!(ith_bit(23, &[1, 1, 1, 1]), true);
+    assert_eq!(ith_bit(31, &[1, 1, 1, 1]), true);
+    assert_eq!(ith_bit(8, &[1, 255, 1, 1]), true);
+    assert_eq!(ith_bit(10, &[1, 255, 1, 1]), true);
+    assert_eq!(ith_bit(12, &[1, 255, 1, 1]), true);
+    assert_eq!(ith_bit(14, &[1, 255, 1, 1]), true);
+}
