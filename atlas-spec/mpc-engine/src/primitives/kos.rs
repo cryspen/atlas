@@ -159,7 +159,7 @@ impl KOSReceiver {
                     PRG(&sid, &base_sender_inputs[i].0, 16 + selection.len() / 8)
                 });
 
-                               let R_columns: [Vec<u8>; 128] = std::array::from_fn(|_i| r_prime.clone());
+                let R_columns: [Vec<u8>; 128] = std::array::from_fn(|_i| r_prime.clone());
                 let D_columns: [Vec<u8>; 128] = std::array::from_fn(|i| {
                     let prg_result = PRG(&sid, &base_sender_inputs[i].1, 16 + selection.len() / 8);
                     let temp_result = crate::utils::xor_slices(&M_columns[i], &prg_result);
@@ -268,12 +268,11 @@ impl KOSSender {
         let mut inputs_padded = vec![(zero_mac(), zero_mac()); padded_len(inputs.len())];
         inputs_padded[0..inputs.len()].copy_from_slice(inputs);
         let inputs = inputs_padded.as_slice();
-        
+
         let (base_receiver_output, base_ot_response) = self
             .base_receiver
             .response(receiver_phase_i.base_ot_transfer)
             .unwrap();
-
 
         match self.base_receiver.selection_bits {
             Some(base_selection_bits) => {
@@ -442,5 +441,4 @@ fn kos_simple() {
     assert_eq!(receiver_outputs[4], [1u8; 16]);
     assert_eq!(receiver_outputs[5], [2u8; 16]);
     assert_eq!(receiver_outputs[6], [1u8; 16]);
-
 }
