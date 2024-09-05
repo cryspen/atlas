@@ -52,14 +52,14 @@ pub fn blind_identifiable_datum(
     )?);
 
     // Encrypt data value towards receiver.
-    let encrypted_data_value = data_encryption::encrypt_data_value(&datum.data_value, ek, randomness)?;
+    let encrypted_data_value =
+        data_encryption::encrypt_data_value(&datum.data_value, ek, randomness)?;
 
     Ok(BlindedIdentifiableData {
         blinded_handle,
         encrypted_data_value,
     })
 }
-
 
 /// Blind a pseudonymous datum as a first step in pseudonym
 /// conversion.
@@ -91,7 +91,8 @@ pub fn blind_pseudonymized_datum(
     )?);
 
     // Encrypt data value towards receiver.
-    let encrypted_data_value = data_encryption::encrypt_data_value(&datum.data_value, ek, randomness)?;
+    let encrypted_data_value =
+        data_encryption::encrypt_data_value(&datum.data_value, ek, randomness)?;
 
     Ok(BlindedPseudonymizedData {
         blinded_handle,
@@ -133,7 +134,8 @@ pub fn pseudonymize_blinded_datum(
     )?);
 
     // Rerandomize encrypted data value towards receiver.
-    let encrypted_data_value = data_encryption::rerandomize_encryption(&datum.encrypted_data_value, ek, randomness)?;
+    let encrypted_data_value =
+        data_encryption::rerandomize_encryption(&datum.encrypted_data_value, ek, randomness)?;
 
     Ok(BlindedPseudonymizedData {
         blinded_handle,
@@ -181,7 +183,8 @@ pub fn convert_blinded_datum(
     )?);
 
     // Rerandomize encrypted data value towards receiver.
-    let encrypted_data_value = data_encryption::rerandomize_encryption(&datum.encrypted_data_value, ek, randomness)?;
+    let encrypted_data_value =
+        data_encryption::rerandomize_encryption(&datum.encrypted_data_value, ek, randomness)?;
 
     Ok(BlindedPseudonymizedData {
         blinded_handle,
@@ -210,8 +213,8 @@ pub fn finalize_blinded_datum(
     let handle = store_context.finalize_pseudonym(datum.blinded_handle)?;
 
     // Decrypt data value for storage.
-    let data_value = data_encryption::decrypt_data_value(&datum.encrypted_data_value, store_context)?;
+    let data_value =
+        data_encryption::decrypt_data_value(&datum.encrypted_data_value, store_context)?;
 
     Ok(PseudonymizedData { handle, data_value })
 }
-

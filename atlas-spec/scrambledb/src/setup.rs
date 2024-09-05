@@ -10,7 +10,6 @@ use oprf::coprf::{
     coprf_setup::{BlindingPublicKey, CoPRFEvaluatorContext, CoPRFReceiverContext},
 };
 
-
 use p256::P256Point;
 
 use crate::{
