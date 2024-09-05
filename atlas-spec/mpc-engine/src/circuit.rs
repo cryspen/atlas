@@ -350,8 +350,6 @@ impl Circuit {
 
 #[cfg(test)]
 mod tests {
-    use std::arch::x86_64::{_CMP_FALSE_OQ, _CMP_TRUE_UQ};
-
     use crate::utils::ith_bit;
 
     use super::*;
