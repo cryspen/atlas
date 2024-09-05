@@ -1,5 +1,6 @@
 //! # Setup
 use hacspec_lib::Randomness;
+#[cfg(feature = "double-hpke")]
 use libcrux::hpke::{
     kem::{GenerateKeyPair, Nsk},
     HPKEConfig,
@@ -8,6 +9,7 @@ use oprf::coprf::{
     coprf_online,
     coprf_setup::{BlindingPublicKey, CoPRFEvaluatorContext, CoPRFReceiverContext},
 };
+
 use p256::P256Point;
 
 use crate::{
@@ -20,11 +22,22 @@ pub struct ConverterContext {
 }
 
 /// A data store's private decryption key.
+#[cfg(feature = "double-hpke")]
 pub struct StoreDecryptionKey(pub(crate) Vec<u8>);
+
+/// A data store's private decryption key.
+#[cfg(not(feature = "double-hpke"))]
+pub struct StoreDecryptionKey(pub(crate) p256::P256Scalar);
 
 /// A data store's public encryption key.
 #[derive(Clone)]
+#[cfg(feature = "double-hpke")]
 pub struct StoreEncryptionKey(pub(crate) Vec<u8>);
+
+/// A data store's public encryption key.
+#[derive(Clone)]
+#[cfg(not(feature = "double-hpke"))]
+pub struct StoreEncryptionKey(pub(crate) p256::P256Point);
 
 pub struct StoreContext {
     coprf_receiver_context: CoPRFReceiverContext,
@@ -169,10 +182,20 @@ impl StoreContext {
     }
 }
 
+#[cfg(feature = "double-hpke")]
 fn generate_store_keys(
     randomness: &mut Randomness,
 ) -> Result<(StoreDecryptionKey, StoreEncryptionKey), Error> {
     let HPKEConfig(_, kem, _, _) = crate::HPKE_CONF;
     let (hpke_sk, hpke_pk) = GenerateKeyPair(kem, randomness.bytes(Nsk(kem)).unwrap().to_vec())?;
     Ok((StoreDecryptionKey(hpke_sk), StoreEncryptionKey(hpke_pk)))
+}
+
+#[cfg(not(feature = "double-hpke"))]
+fn generate_store_keys(
+    randomness: &mut Randomness,
+) -> Result<(StoreDecryptionKey, StoreEncryptionKey), Error> {
+    let (dk, ek) = elgamal::generate_keys(randomness)?;
+
+    Ok((StoreDecryptionKey(dk), StoreEncryptionKey(ek)))
 }
