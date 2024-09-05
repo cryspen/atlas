@@ -41,6 +41,8 @@ pub enum Error {
     AEADError,
     /// Miscellaneous error.
     OtherError,
+    /// Subprotocol error
+    SubprotocolError,
 }
 
 impl From<p256::Error> for Error {
@@ -71,4 +73,5 @@ pub mod circuit;
 pub mod messages;
 pub mod party;
 pub mod primitives;
+pub mod runner;
 pub mod utils;

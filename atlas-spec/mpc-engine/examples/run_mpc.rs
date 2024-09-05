@@ -45,7 +45,7 @@ fn main() {
             let input = rng.bit().unwrap();
             eprintln!("Starting party {} with input: {}", channel_config.id, input);
             let mut p = mpc_engine::party::Party::new(channel_config, &c, log_enabled, rng);
-            let _ = p.run(false, &c, &vec![input]);
+            let _ = p.run(&c, &vec![input]);
         });
         party_join_handles.push(party_join_handle);
     }
