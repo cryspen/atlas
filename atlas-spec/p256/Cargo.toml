@@ -1,0 +1,20 @@
+[package]
+name = "p256"
+version = "0.1.0"
+authors = ["Franziskus Kiefer <franziskuskiefer@gmail.com>"]
+edition = "2021"
+
+[lib]
+path = "src/p256.rs"
+
+[dependencies]
+natmod.workspace = true
+hacspec_lib.workspace = true
+hmac.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+serde.workspace = true
+criterion = "0.4"
+rand = "0.8"
+hex = "0.4.3"

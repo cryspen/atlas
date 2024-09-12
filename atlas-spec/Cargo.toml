@@ -1,0 +1,29 @@
+[workspace]
+members = [
+    "scrambledb",
+    "elgamal",
+    "hash-to-curve",
+    "p256",
+    "oprf",
+    "hacspec_lib",
+    "prp",
+    "sha256",
+    "hmac",
+    "mpc-engine",
+    "hacspec-chacha20poly1305",
+]
+resolver = "2"
+
+[workspace.dependencies]
+hacspec_lib = { path = "./hacspec_lib" }
+elgamal = { path = "./elgamal" }
+hash-to-curve = { path = "./hash-to-curve" }
+p256 = { path = "./p256" }
+oprf = { path = "./oprf" }
+prp = { path = "./prp" }
+sha256 = { path = "./sha256" }
+hmac = { path = "./hmac" }
+natmod = { path = "./natmod" }
+hacspec-chacha20poly1305 = { path = "./hacspec-chacha20poly1305" }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
