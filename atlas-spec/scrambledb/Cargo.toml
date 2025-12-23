@@ -21,7 +21,7 @@ rand = { version = "0.8.5", optional = true }
 getrandom = { version = "0.2.10", features = ["js"], optional = true }
 hex = { version = "0.4.3", optional = true }
 
-libcrux = { git = "https://github.com/cryspen/libcrux.git" }
+libcrux = { git = "https://github.com/cryspen/libcrux.git", optional = true }
 
 gloo-utils = { version = "0.1", features = ["serde"] }
 serde_json.workspace = true
@@ -42,6 +42,7 @@ features = [
 
 [features]
 wasm = ["wasm-bindgen", "getrandom", "web-sys", "rand", "hex"]
+double-hpke = ["dep:libcrux"]
 
 [dev-dependencies]
 scrambledb = { path = ".", features = ["rand"] }

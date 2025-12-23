@@ -18,6 +18,7 @@ impl From<oprf::Error> for Error {
     }
 }
 
+#[cfg(feature = "double-hpke")]
 impl From<libcrux::hpke::errors::HpkeError> for Error {
     fn from(_value: libcrux::hpke::errors::HpkeError) -> Self {
         Self::CorruptedData

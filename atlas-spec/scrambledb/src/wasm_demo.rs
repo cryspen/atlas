@@ -341,6 +341,10 @@ impl Display for DataValue {
 
 impl Display for EncryptedDataValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ENC({}...)", hex::encode(&self.value[0..5]),)
+        write!(
+            f,
+            "ENC({}...)",
+            hex::encode(&self.value[0].0.raw_bytes()[0..5]),
+        )
     }
 }

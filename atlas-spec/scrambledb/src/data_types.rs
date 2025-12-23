@@ -7,6 +7,8 @@
 //! name of the attribute they belong to in plain text.
 
 use oprf::coprf::coprf_online::{BlindInput, BlindOutput};
+#[cfg(not(feature = "double-hpke"))]
+use p256::P256Point;
 
 /// A type for finalized pseudonyms, i.e. those which have been hardened for
 /// storage by applying a PRP.
@@ -28,7 +30,9 @@ pub struct DataValue {
     /// The name of the attribute the value belongs to.
     pub(crate) attribute_name: String,
 }
+
 /// An encrypted data value.
+#[cfg(feature = "double-hpke")]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EncryptedDataValue {
     /// A byte string encoding the encrypted data value.
@@ -37,6 +41,16 @@ pub struct EncryptedDataValue {
     pub(crate) attribute_name: String,
     /// The encryption level, as understood in terms of [crate::data_transformations::double_hpke].
     pub(crate) encryption_level: u8,
+}
+
+/// An encrypted data value.
+#[cfg(not(feature = "double-hpke"))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EncryptedDataValue {
+    /// A vector of ElGamal ciphertexts encoding the encrypted data value.
+    pub(crate) value: Vec<(P256Point, P256Point)>,
+    /// The name of the attribute the value belongs to.
+    pub(crate) attribute_name: String,
 }
 
 /// An identifiable piece of data.
