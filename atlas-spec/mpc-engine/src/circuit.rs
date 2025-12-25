@@ -292,7 +292,7 @@ impl Circuit {
 
         for gate in &self.gates {
             let output_bit = match gate {
-                WiredGate::Input(x) => wire_evaluations[*x],
+                WiredGate::Input(x) => continue,
                 WiredGate::Xor(x, y) => wire_evaluations[*x] ^ wire_evaluations[*y],
                 WiredGate::And(x, y) => wire_evaluations[*x] & wire_evaluations[*y],
                 WiredGate::Not(x) => !wire_evaluations[*x],
@@ -345,5 +345,120 @@ impl Circuit {
         result += num_and_gates * 3 * self.and_bucket_size();
 
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::utils::ith_bit;
+
+    use super::*;
+
+    fn gen_inputs() -> Vec<[Vec<bool>; 4]> {
+        let mut results = Vec::new();
+        for i in 0..16 {
+            let mut current_input = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+            for j in 0..4 {
+                current_input[j] = vec![ith_bit(j + 4, &[i as u8])];
+            }
+            results.push(current_input);
+        }
+        results
+    }
+
+    fn parity(input: &[Vec<bool>; 4]) -> bool {
+        let sum = input[0][0] as u8 + input[1][0] as u8 + input[2][0] as u8 + input[3][0] as u8;
+        !(sum % 2 == 0)
+    }
+
+    #[test]
+    fn eval_and_2() {
+        let and = Circuit {
+            input_widths: vec![1, 1],
+            gates: vec![
+                WiredGate::Input(0),  // Gate 0
+                WiredGate::Input(1),  // Gate 1
+                WiredGate::And(0, 1), // Gate 2
+            ],
+            output_gates: vec![2],
+        };
+
+        assert_eq!(and.eval(&[vec![true], vec![true]]).unwrap()[0], true,);
+        assert_eq!(and.eval(&[vec![true], vec![false]]).unwrap()[0], false,);
+        assert_eq!(and.eval(&[vec![false], vec![true]]).unwrap()[0], false,);
+        assert_eq!(and.eval(&[vec![false], vec![false]]).unwrap()[0], false,);
+    }
+
+    #[test]
+    fn eval_xor_2() {
+        let and = Circuit {
+            input_widths: vec![1, 1],
+            gates: vec![
+                WiredGate::Input(0),  // Gate 0
+                WiredGate::Input(1),  // Gate 1
+                WiredGate::Xor(0, 1), // Gate 2
+            ],
+            output_gates: vec![2],
+        };
+
+        assert_eq!(and.eval(&[vec![true], vec![true]]).unwrap()[0], false,);
+        assert_eq!(and.eval(&[vec![true], vec![false]]).unwrap()[0], true,);
+        assert_eq!(and.eval(&[vec![false], vec![true]]).unwrap()[0], true,);
+        assert_eq!(and.eval(&[vec![false], vec![false]]).unwrap()[0], false,);
+    }
+
+    #[test]
+    fn eval_and_4() {
+        let and = Circuit {
+            input_widths: vec![1, 1, 1, 1],
+            gates: vec![
+                WiredGate::Input(0),  // Gate 0
+                WiredGate::Input(1),  // Gate 1
+                WiredGate::Input(2),  // Gate 2
+                WiredGate::Input(3),  // Gate 3
+                WiredGate::And(0, 1), // Gate 4
+                WiredGate::And(2, 3), // Gate 5
+                WiredGate::And(4, 5), // Gate 6
+            ],
+            output_gates: vec![6],
+        };
+
+        for input in gen_inputs() {
+            if input[0][0] && input[1][0] && input[2][0] && input[3][0] {
+                continue;
+            }
+            assert_eq!(and.eval(&input).unwrap()[0], false, "on input: {:?}", input);
+        }
+        assert_eq!(
+            and.eval(&[vec![true], vec![true], vec![true], vec![true]])
+                .unwrap()[0],
+            true,
+        );
+    }
+
+    #[test]
+    fn eval_xor_4() {
+        let xor = Circuit {
+            input_widths: vec![1, 1, 1, 1],
+            gates: vec![
+                WiredGate::Input(0),  // Gate 0
+                WiredGate::Input(1),  // Gate 1
+                WiredGate::Input(2),  // Gate 2
+                WiredGate::Input(3),  // Gate 3
+                WiredGate::Xor(0, 1), // Gate 4
+                WiredGate::Xor(2, 3), // Gate 5
+                WiredGate::Xor(4, 5), // Gate 6
+            ],
+            output_gates: vec![6],
+        };
+
+        for input in gen_inputs() {
+            assert_eq!(
+                xor.eval(&input).unwrap()[0],
+                parity(&input),
+                "on input: {:?}",
+                input
+            );
+        }
     }
 }

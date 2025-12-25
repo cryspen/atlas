@@ -4,8 +4,8 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::{
     circuit::WireIndex,
     primitives::{
-        auth_share::BitID,
         commitment::{Commitment, Opening},
+        kos::{KOSReceiverPhaseI, KOSSenderPhaseI, KOSSenderPhaseII},
         mac::Mac,
         ot::{OTReceiverSelect, OTSenderInit, OTSenderSend},
     },
@@ -34,9 +34,7 @@ pub enum MessagePayload {
     /// A round synchronization message
     Sync,
     /// Request a number of bit authentications from another party.
-    RequestBitAuth(BitID, Sender<SubMessage>, Receiver<SubMessage>),
-    /// A response to a bit authentication request.
-    BitAuth(BitID, Mac),
+    RequestBitAuth(Sender<SubMessage>, Receiver<SubMessage>),
     /// A commitment on a broadcast value.
     BroadcastCommitment(Commitment),
     /// The opening to a broadcast value.
@@ -81,4 +79,10 @@ pub enum SubMessage {
     EQResponse(Vec<u8>),
     /// An EQ initiator opening
     EQOpening(Opening),
+    /// A KOS OT extension sender message in Phase I
+    KOSSenderPhaseI(KOSSenderPhaseI),
+    /// A KOS OT extension sender message in Phase I
+    KOSReceiverPhaseI(KOSReceiverPhaseI),
+    /// A KOS OT extension sender message in Phase I
+    KOSSenderPhaseII(KOSSenderPhaseII),
 }

@@ -13,6 +13,16 @@ pub type Mac = [u8; MAC_LENGTH];
 /// A MAC key for authenticating a bit to another party.
 pub type MacKey = [u8; MAC_LENGTH];
 
+/// Returns an all-zero byte array of MAC width.
+pub fn zero_mac() -> Mac {
+    [0u8; MAC_LENGTH]
+}
+
+/// Returns an all-zero byte array of MAC key width.
+pub fn zero_key() -> MacKey {
+    [0u8; MAC_LENGTH]
+}
+
 /// Hash the given input to the width of a MAC.
 ///
 /// Instantiates a Random Oracle.
